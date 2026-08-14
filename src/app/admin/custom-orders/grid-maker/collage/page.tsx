@@ -117,7 +117,7 @@ export default function CollagePage() {
   const [activeCellId, setActiveCellId] = useState<string | null>(null);
   const [gap, setGap] = useState(6);
   const [borderColor, setBorderColor] = useState("#ffffff");
-  const [bgColor, setBgColor] = useState("#1a1a2e");
+  const [bgColor, setBgColor] = useState("#ffffff");
   const [paperRatio, setPaperRatio] = useState<"1:1" | "4:3" | "3:4" | "16:9" | "9:16" | "A4">("1:1");
   const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<"layout" | "style" | "adjust">("layout");

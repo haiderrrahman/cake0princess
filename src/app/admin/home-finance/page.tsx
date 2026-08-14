@@ -2579,6 +2579,93 @@ export default function HomeFinanceDashboard() {
                       )}
                     </div>
                   </div>
+
+                  {/* ══════════════════════════════════════════
+                      COMPREHENSIVE FINANCIAL STUDY SECTION
+                  ══════════════════════════════════════════ */}
+                  {(() => {
+                    const grandInstallments = installments.reduce((s: any, i: any) => s + (Number(i.remainingAmount) || 0), 0);
+                    const grandDebts = debts.filter((d: any) => d.type === "دين علي").reduce((s: any, d: any) => s + (Math.max(0, Number(d.amount) - d.payments.reduce((ps: any, p: any) => ps + Number(p.amount), 0))), 0);
+                    const grandShortages = 
+                      shoppingList.reduce((s: any, i: any) => s + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0) +
+                      familyNeeds.filter((n: any) => n.status === "pending" && n.type !== "duty").reduce((s: any, n: any) => s + (Number(n.estimatedPrice) || 0), 0) +
+                      carInventory.filter((i: any) => (i.neededQuantity||0) > 0).reduce((s: any, i: any) => s + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0) +
+                      travelInventory.filter((i: any) => (i.neededQuantity||0) > 0).reduce((s: any, i: any) => s + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0) +
+                      futurePlans.filter((p: any) => !p.completed).reduce((s: any, p: any) => s + Math.max(0, Number(p.targetAmount) - Number(p.currentAmount)), 0);
+                      
+                    const grandTotalNeeded = grandInstallments + grandDebts + grandShortages;
+                    const monthlySurplus = remaining;
+                    const monthsToClear = monthlySurplus > 0 ? Math.ceil(grandTotalNeeded / monthlySurplus) : -1;
+
+                    return (
+                      <div className="mt-6 space-y-3">
+                        <div className="flex items-center justify-between px-1">
+                          <h2 className="font-black text-gray-800 dark:text-white flex items-center gap-2 text-sm">
+                            <span className="text-lg">🧭</span>
+                            دراسة الوضع المالي الشامل
+                          </h2>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-indigo-950/90 to-zinc-900 border border-indigo-500/30 rounded-3xl p-5 shadow-xl relative overflow-hidden">
+                          <div className="absolute -top-10 -left-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl" />
+                          
+                          <div className="grid grid-cols-1 gap-4 relative z-10">
+                            {/* Breakdown */}
+                            <div className="space-y-3 border-b border-indigo-500/20 pb-4">
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="font-bold text-indigo-300 flex items-center gap-2"><CreditCard className="w-4 h-4"/> إجمالي الأقساط والسلف</span>
+                                <span className="font-black text-white">{fmt(grandInstallments)} <span className="text-[10px] text-indigo-400">د.ع</span></span>
+                              </div>
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="font-bold text-cyan-300 flex items-center gap-2"><Banknote className="w-4 h-4"/> إجمالي الديون المطلوبة</span>
+                                <span className="font-black text-white">{fmt(grandDebts)} <span className="text-[10px] text-cyan-400">د.ع</span></span>
+                              </div>
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="font-bold text-orange-300 flex items-center gap-2"><ShoppingCart className="w-4 h-4"/> النواقص، السفر، والخطط</span>
+                                <span className="font-black text-white">{fmt(grandShortages)} <span className="text-[10px] text-orange-400">د.ع</span></span>
+                              </div>
+                            </div>
+
+                            {/* Grand Total */}
+                            <div className="bg-indigo-500/10 rounded-2xl p-4 border border-indigo-500/20 flex justify-between items-center shadow-inner">
+                              <div className="font-black text-white text-sm">المبلغ الإجمالي المطلوب</div>
+                              <div className="text-xl md:text-2xl font-black text-indigo-400 drop-shadow-md">
+                                {fmt(grandTotalNeeded)} <span className="text-xs">د.ع</span>
+                              </div>
+                            </div>
+
+                            {/* Study / Advice */}
+                            <div className="bg-black/30 rounded-2xl p-4 border border-white/5 mt-2">
+                              <h3 className="font-black text-emerald-400 text-sm mb-2 flex items-center gap-1.5"><TrendingUp className="w-4 h-4"/> خطة التصفية المقترحة:</h3>
+                              {grandTotalNeeded === 0 ? (
+                                <p className="text-xs text-gray-300 leading-relaxed font-bold text-justify">
+                                  ممتاز! لا توجد عليك أي التزامات أو ديون حالياً. أنت في وضع مالي سليم جداً. استمر في ادخار الفائض في الخطط المستقبلية.
+                                </p>
+                              ) : monthlySurplus > 0 ? (
+                                <p className="text-xs text-gray-300 leading-relaxed font-bold text-justify">
+                                  لديك فائض شهري يبلغ <span className="text-emerald-400 font-black">{fmt(monthlySurplus)} د.ع</span>. 
+                                  إذا قمت بتخصيص هذا الفائض بالكامل لسداد هذه الالتزامات والنواقص بالتدريج، 
+                                  فإنك ستحتاج إلى <span className="text-white font-black bg-emerald-500/20 px-2 py-0.5 rounded-md mx-1">{monthsToClear} شهراً</span> تقريباً لتصفيرها بالكامل.
+                                  <br/><br/>
+                                  <span className="text-amber-400">نصيحة (كرة الثلج):</span> ابدأ بسداد أصغر دين أو قسط أولاً لتشعر بالإنجاز بسرعة، ثم وجه المبالغ المحررة لسداد الأكبر.
+                                </p>
+                              ) : (
+                                <p className="text-xs text-rose-300 leading-relaxed font-bold text-justify">
+                                  تنبيه: الميزانية الشهرية الحالية لا تحتوي على فائض للأسف (لديك عجز أو رصيد صفري). 
+                                  لتتمكن من تصفية هذه الالتزامات، يجب عليك: 
+                                  <br/><br/>
+                                  1. زيادة مصادر الدخل بأي طريقة.
+                                  <br/>2. إيقاف شراء النواقص غير الضرورية فوراً.
+                                  <br/>3. تقليل المصاريف المنزلية الثابتة.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                 </div>
               );
             })()}
