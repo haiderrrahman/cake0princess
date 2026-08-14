@@ -171,29 +171,29 @@ import React from "react";
 
 export default function PhotoEditorHub() {
   return (
-    <div className="min-h-screen bg-[#0d0d1a] p-4 pt-16 md:p-6 md:pt-20 pb-24" dir="rtl">
+    <div className="min-h-screen bg-[#0d0d1a] p-4 md:p-6" dir="rtl">
 
       {/* Premium Dark Header */}
       <header className="mb-8 bg-gradient-to-l from-[#1e1450] to-[#2d1c6d] rounded-[28px] p-6 shadow-2xl relative overflow-hidden flex items-center justify-between border border-white/10">
         <div className="absolute top-0 right-0 w-72 h-72 bg-purple-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-pink-600/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/4 pointer-events-none" />
 
-        <div className="flex flex-col z-10">
+        <div className="flex flex-col z-10 flex-1 pr-2">
           <div className="flex items-center gap-2 mb-1">
             <Sparkles className="w-5 h-5 text-violet-400" />
-            <span className="text-xs font-bold text-violet-400 uppercase tracking-widest">استوديو كيك الأميرة</span>
+            <span className="text-[10px] sm:text-xs font-bold text-violet-400 uppercase tracking-widest break-words">استوديو كيك الأميرة</span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-black text-white mb-1.5">أدوات تعديل الصور</h1>
-          <p className="text-white/50 text-sm font-medium">
+          <h1 className="text-xl md:text-3xl font-black text-white mb-1.5 break-words">أدوات تعديل الصور</h1>
+          <p className="text-white/50 text-xs sm:text-sm font-medium">
             {TOOLS.length} أداة احترافية • تعمل بالكامل بدون انترنت ✈️
           </p>
         </div>
 
         <Link
           href="/admin/custom-orders"
-          className="z-10 w-12 h-12 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full flex shrink-0 items-center justify-center transition-all border border-white/20"
+          className="z-10 w-10 h-10 sm:w-12 sm:h-12 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full flex shrink-0 items-center justify-center transition-all border border-white/20 ml-2"
         >
-          <ChevronRight className="w-6 h-6 text-white" />
+          <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
         </Link>
       </header>
 
