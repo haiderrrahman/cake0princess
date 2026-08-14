@@ -171,7 +171,7 @@ import React from "react";
 
 export default function PhotoEditorHub() {
   return (
-    <div className="min-h-screen bg-[#0d0d1a] p-4 md:p-6" dir="rtl">
+    <div className="min-h-screen bg-[#0d0d1a] p-4 pt-16 md:p-6 md:pt-20 pb-24" dir="rtl">
 
       {/* Premium Dark Header */}
       <header className="mb-8 bg-gradient-to-l from-[#1e1450] to-[#2d1c6d] rounded-[28px] p-6 shadow-2xl relative overflow-hidden flex items-center justify-between border border-white/10">
