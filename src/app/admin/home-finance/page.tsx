@@ -2163,13 +2163,15 @@ export default function HomeFinanceDashboard() {
                   </span>
                   
                   {/* Badge */}
-                  {hasBadge && (
-                    <span className={`absolute -top-2 -right-2 min-w-[22px] h-[22px] rounded-full text-[11px] font-black flex items-center justify-center px-1.5 shadow-sm border-[1.5px] transition-all duration-300 ${
+                  {( (t.badge || 0) > 0 || (t.amount !== undefined && t.amount > 0) ) && (
+                    <span className={`absolute -top-2 -right-2 min-w-[22px] h-[22px] rounded-full text-[9px] sm:text-[10px] font-black flex items-center justify-center px-1.5 shadow-sm border-[1.5px] transition-all duration-300 ${
                       isActive 
                         ? "bg-white text-gray-900 border-transparent dark:bg-zinc-900 dark:text-white dark:border-zinc-700" 
                         : "bg-red-500 text-white border-white dark:border-zinc-900"
                     }`}>
-                      {t.badge! > 99 ? '99+' : t.badge}
+                      {t.amount !== undefined 
+                        ? (t.amount >= 1000000 ? (t.amount / 1000000).toFixed(1) + 'M' : t.amount >= 1000 ? (t.amount / 1000).toFixed(0) + 'K' : t.amount)
+                        : (t.badge! > 99 ? '99+' : t.badge)}
                     </span>
                   )}
                 </div>
@@ -2181,11 +2183,6 @@ export default function HomeFinanceDashboard() {
                     : "font-bold text-gray-500 dark:text-gray-400"
                 }`}>
                   <span>{t.label}</span>
-                  {'amount' in t && (
-                    <span className="text-[8px] sm:text-[9px] opacity-80 whitespace-nowrap bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded-md" dir="ltr">
-                      {fmt((t as any).amount)}
-                    </span>
-                  )}
                 </span>
               </button>
             );
