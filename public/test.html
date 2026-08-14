@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Firebase Test</title>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA4l36usNaltDW4PAKr7lM4l8IOp2QJDRo",
+      authDomain: "cake-publisher-app.firebaseapp.com",
+      projectId: "cake-publisher-app",
+      storageBucket: "cake-publisher-app.firebasestorage.app",
+      messagingSenderId: "112876760850",
+      appId: "1:112876760850:web:d5144e5abf764372408dcb"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    async function check() {
+      try {
+        const d = await getDoc(doc(db, "home_finance", "familyNeeds"));
+        document.body.innerHTML += `<p>home_finance/familyNeeds exists? ${d.exists()}</p>`;
+      } catch (e) {
+        document.body.innerHTML += `<p>Error: ${e.message}</p>`;
+      }
+    }
+    check();
+  </script>
+</head>
+<body>
+  <h1>Firebase Test</h1>
+</body>
+</html>
