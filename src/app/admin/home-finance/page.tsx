@@ -2653,7 +2653,7 @@ export default function HomeFinanceDashboard() {
               const overviewFamilyNeeds = familyNeeds.filter(n => n.status === "pending").reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
               const overviewCarNeeds = carInventory.filter(i => (i.neededQuantity || 0) > 0).reduce((s, i) => s + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0);
               const overviewTravelNeeds = travelInventory.filter(i => (i.neededQuantity || 0) > 0).reduce((s, i) => s + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0);
-              const overviewFuturePlans = futurePlans.filter(p => !p.completed).reduce((s, p) => s + Math.max(0, (Number(p.targetAmount) || 0) - (Number(p.savedAmount) || 0)), 0);
+              const overviewFuturePlans = futurePlans.filter(p => (p.savedAmount || 0) < (p.targetAmount || 0)).reduce((s, p) => s + Math.max(0, (Number(p.targetAmount) || 0) - (Number(p.savedAmount) || 0)), 0);
               const overviewShopping = shoppingList.reduce((s, i) => s + (i.estimatedPrice || 0), 0);
               
               const totalShortagesAndPlans = overviewFamilyNeeds + overviewCarNeeds + overviewTravelNeeds + overviewFuturePlans + overviewShopping;
