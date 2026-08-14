@@ -316,6 +316,7 @@ export default function HomeFinanceDashboard() {
   ]);
 
   const [mounted, setMounted] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Smart Modals
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -477,6 +478,7 @@ export default function HomeFinanceDashboard() {
       settings: setSettings,
     };
 
+    let loadedCount = 0;
     const unsubscribers = keys.map(k => {
       return onSnapshot(doc(db, "home_finance", k), (snap) => {
         if (snap.exists() && snap.data().data) {
@@ -484,8 +486,16 @@ export default function HomeFinanceDashboard() {
         } else {
           setters[k]([]);
         }
+        loadedCount++;
+        if (loadedCount >= keys.length) {
+          setDataLoading(false);
+        }
       }, (error) => {
         console.error(`Snapshot error for ${k}:`, error);
+        loadedCount++;
+        if (loadedCount >= keys.length) {
+          setDataLoading(false);
+        }
       });
     });
 

@@ -1,5 +1,5 @@
 const { initializeApp } = require("firebase/app");
-const { getFirestore, doc, getDoc } = require("firebase/firestore");
+const { getFirestore, collection, getDocs } = require("firebase/firestore");
 const firebaseConfig = {
   apiKey: "AIzaSyA4l36usNaltDW4PAKr7lM4l8IOp2QJDRo",
   authDomain: "cake-publisher-app.firebaseapp.com",
@@ -12,10 +12,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 async function check() {
-  const d = await getDoc(doc(db, "home_finance", "expenses"));
-  console.log("home_finance/expenses:", d.exists() ? d.data().data.length : "Not Found");
-  
-  const d2 = await getDoc(doc(db, "finances", "expenses"));
-  console.log("finances/expenses:", d2.exists() ? d2.data().data.length : "Not Found");
+  const snap = await getDocs(collection(db, "expenses"));
+  console.log("expenses collection size:", snap.size);
 }
 check();
