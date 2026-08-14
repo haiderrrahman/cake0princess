@@ -615,8 +615,14 @@ export default function HomeFinanceDashboard() {
 
   const isInCycle = (dateString: string) => {
     if (!dateString) return false;
-    const d = new Date(dateString);
-    return d >= selectedCycle.start && d <= selectedCycle.end;
+    const dStr = dateString.split("T")[0];
+    
+    const startD = selectedCycle.start;
+    const endD = selectedCycle.end;
+    const startStr = `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`;
+    const endStr = `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, '0')}-${String(endD.getDate()).padStart(2, '0')}`;
+    
+    return dStr >= startStr && dStr <= endStr;
   };
 
   // ──────────────────────────────────────────
