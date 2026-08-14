@@ -205,13 +205,13 @@ export default function PhotoEditorHub() {
       </div>
 
       {/* Tools Grid */}
-      <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2 md:gap-3">
+      <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 md:gap-4">
         {TOOLS.map((tool, i) => (
           <Link
             key={i}
             href={tool.href}
             className={`
-              relative group overflow-hidden rounded-2xl p-3 flex flex-col items-center justify-center gap-2
+              relative group overflow-hidden rounded-2xl p-4 flex flex-col items-center justify-center gap-3
               ${tool.bg} shadow-lg hover:shadow-xl ${tool.shadow}
               active:scale-95 hover:-translate-y-1 transition-all duration-200
               aspect-square

@@ -276,7 +276,6 @@ export default function HomeFinanceDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "expenses" | "income" | "installments" | "needs" | "bills" | "debts" | "inventory" | "car" | "travel" | "familyNeeds" | "futurePlans">("overview");
 
   // Data state
-  const [debugErrors, setDebugErrors] = useState<string[]>([]);
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -481,23 +480,12 @@ export default function HomeFinanceDashboard() {
 
     let loadedCount = 0;
     
-    // Explicit debug test with getDoc
-    import("firebase/firestore").then(({ getDoc, doc }) => {
-      getDoc(doc(db, "home_finance", "familyNeeds")).then(d => {
-        setDebugErrors(prev => [...prev, `getDoc test: exists=${d.exists()}, size=${d.exists() ? d.data()?.data?.length : 0}`]);
-      }).catch(e => {
-        setDebugErrors(prev => [...prev, `getDoc error: ${e.message}`]);
-      });
-    });
-
     const unsubscribers = keys.map(k => {
       return onSnapshot(doc(db, "home_finance", k), (snap) => {
         if (snap.exists() && snap.data().data) {
           setters[k](snap.data().data);
         } else {
           setters[k]([]);
-          // Capture empty state reason for debugging
-          setDebugErrors(prev => [...prev, `${k}: exists=${snap.exists()}`]);
         }
         loadedCount++;
         if (loadedCount >= keys.length) {
@@ -505,7 +493,6 @@ export default function HomeFinanceDashboard() {
         }
       }, (error) => {
         console.error(`Snapshot error for ${k}:`, error);
-        setDebugErrors(prev => [...prev, `${k} error: ${error.message}`]);
         loadedCount++;
         if (loadedCount >= keys.length) {
           setDataLoading(false);
@@ -1837,15 +1824,6 @@ export default function HomeFinanceDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#0D0A1A] pb-28 font-sans text-right" dir="rtl">
 
-      {debugErrors.length > 0 && (
-        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-2xl m-4 text-sm border border-red-200 dark:border-red-800">
-          <strong>معلومات تصحيح الأخطاء (Debug):</strong>
-          <ul className="list-disc pr-5 mt-2">
-            {debugErrors.map((err, i) => <li key={i}>{err}</li>)}
-          </ul>
-          <p className="mt-2 text-xs">FamilyNeeds length in state: {familyNeeds.length}</p>
-        </div>
-      )}
       {/* ═══════════════ SMART MODALS ═══════════════ */}
       {confirmConfig?.isOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -2633,6 +2611,96 @@ export default function HomeFinanceDashboard() {
                 </div>
               );
             })()}
+
+            {/* ══════════════════════════════════════════
+                COMPREHENSIVE FINANCIAL STUDY (دراسة الوضع المالي)
+            ══════════════════════════════════════════ */}
+            {(() => {
+              // 1. Total Installments remaining
+              const totalInstallmentsOwed = installments.reduce((sum, i) => sum + (Number(i.remainingAmount) || 0), 0);
+              
+              // 2. Total Debts owed
+              const totalDebtsOwed = debts.filter(d => d.type === "دين علي").reduce((sum, d) => {
+                const totalPaid = d.payments?.reduce((ps, p) => ps + p.amount, 0) || 0;
+                return sum + Math.max(0, d.amount - totalPaid);
+              }, 0);
+
+              // 3. Total Shortages
+              const familyNeedsCost = familyNeeds.filter(n => n.status === "pending" && n.type !== "duty").reduce((sum, n) => sum + (Number(n.estimatedPrice) || 0), 0);
+              const carNeedsCost = carInventory.filter(i => (i.neededQuantity || 0) > 0).reduce((sum, i) => sum + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0);
+              const travelNeedsCost = travelInventory.filter(i => (i.neededQuantity || 0) > 0).reduce((sum, i) => sum + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0);
+              const homeNeedsCost = inventory.filter(i => (i.neededQuantity || 0) > 0).reduce((sum, i) => sum + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0);
+              
+              // 4. Future Plans
+              const futurePlansCost = futurePlans.filter(p => p.savedAmount < p.targetAmount).reduce((sum, p) => sum + (Number(p.targetAmount) - Number(p.savedAmount)), 0);
+
+              const totalNeedsCost = familyNeedsCost + carNeedsCost + travelNeedsCost + homeNeedsCost + futurePlansCost;
+              const grandTotalNeeded = totalInstallmentsOwed + totalDebtsOwed + totalNeedsCost;
+
+              // Current budget metrics
+              const homeExpenses = totalExpensesAmt;
+              const debtRepayment = debts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.payments?.filter(p => isInCycle(p.date)).reduce((ps, p) => ps + p.amount, 0) || 0), 0);
+              const monthlyInstTotal = installments.filter(i => i.remainingAmount > 0).reduce((s, i) => s + i.monthlyInstallment, 0);
+              const totalOutgoing = homeExpenses + debtRepayment + monthlyInstTotal + totalBillsAmt;
+              const monthlySavings = Math.max(0, totalIncome - totalOutgoing);
+              
+              const monthsToPayOff = monthlySavings > 0 ? Math.ceil(grandTotalNeeded / monthlySavings) : 0;
+              const yearsToPayOff = (monthsToPayOff / 12).toFixed(1);
+
+              return (
+                <div className="bg-gradient-to-b from-[#1a1333] to-[#0d0a1a] rounded-3xl p-5 border border-purple-500/20 shadow-2xl relative overflow-hidden mt-6 mb-6">
+                  {/* Decorative */}
+                  <div className="absolute top-0 right-0 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+                  
+                  <div className="relative z-10">
+                    <h2 className="font-black text-white text-lg mb-4 flex items-center gap-2">
+                      <Target className="w-5 h-5 text-purple-400" />
+                      الدراسة المالية الشاملة
+                    </h2>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                        <div className="text-[10px] text-gray-400 font-bold mb-1">الديون والسلف المتبقية</div>
+                        <div className="text-sm font-black text-rose-400">{fmt(totalDebtsOwed)}</div>
+                      </div>
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                        <div className="text-[10px] text-gray-400 font-bold mb-1">الأقساط المتبقية</div>
+                        <div className="text-sm font-black text-orange-400">{fmt(totalInstallmentsOwed)}</div>
+                      </div>
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                        <div className="text-[10px] text-gray-400 font-bold mb-1">إجمالي تكلفة النواقص</div>
+                        <div className="text-sm font-black text-amber-400">{fmt(totalNeedsCost)}</div>
+                      </div>
+                      <div className="bg-purple-500/20 rounded-2xl p-3 border border-purple-500/30">
+                        <div className="text-[10px] text-purple-200 font-bold mb-1">الاحتياج الكلي</div>
+                        <div className="text-lg font-black text-white drop-shadow-md">{fmt(grandTotalNeeded)}</div>
+                      </div>
+                    </div>
+
+                    <div className="bg-black/40 rounded-2xl p-4 border border-white/5">
+                      <h3 className="text-sm font-black text-white mb-2 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-emerald-400" />
+                        خطة السداد والتسوية
+                      </h3>
+                      <p className="text-xs text-gray-300 leading-relaxed font-medium">
+                        بناءً على الفائض المالي الحالي في هذه الدورة والذي يبلغ <strong className="text-emerald-400">{fmt(monthlySavings)} د.ع</strong>، 
+                        {monthlySavings > 0 ? (
+                          <>
+                            ستحتاج تقريباً إلى <strong className="text-white">{monthsToPayOff} شهر</strong> (حوالي {yearsToPayOff} سنة) 
+                            لتسديد كافة الديون والأقساط وتوفير جميع النواقص والخطط المستقبلية بالكامل.
+                          </>
+                        ) : (
+                          <span className="text-rose-400">
+                            لا يوجد فائض في ميزانية هذه الدورة لتسديد الديون المتراكمة أو شراء النواقص. يجب تقليل المصاريف لزيادة الفائض.
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
 
             {/* Spending Progress vs Income */}
             {totalIncome > 0 && (
