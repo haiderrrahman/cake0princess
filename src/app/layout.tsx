@@ -11,7 +11,7 @@ const cairo = Cairo({
 });
 
 export const metadata: Metadata = {
-  title: "Cake Princess | كيك الأميرة",
+  title: "كيك الأميرة | Cake Princess",
   description: "اطلب أفضل أنواع الكيك وتعلم فنون التزيين بخطوة بخطوة",
   manifest: "/manifest.json",
   icons: {
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Cake Princess",
+    title: "كيك الأميرة",
   },
 };
 
