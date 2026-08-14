@@ -15,9 +15,9 @@ export const metadata: Metadata = {
   description: "اطلب أفضل أنواع الكيك وتعلم فنون التزيين بخطوة بخطوة",
   manifest: "/manifest.json",
   icons: {
-    icon: "/cp-logo.png?v=2",
-    apple: "/cp-logo.png?v=2",
-    shortcut: "/cp-logo.png?v=2",
+    icon: "/icon.png",
+    apple: "/apple-touch-icon.png",
+    shortcut: "/icon.png",
   },
   appleWebApp: {
     capable: true,
