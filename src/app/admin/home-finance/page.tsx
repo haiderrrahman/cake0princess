@@ -158,7 +158,7 @@ interface FuturePlan {
 // HELPERS
 // ══════════════════════════════════════════════
 
-const fmt = (n: number) => n.toLocaleString("ar-IQ");
+const fmt = (n: number) => n.toLocaleString("en-US");
 const today = () => new Date().toISOString().split("T")[0];
 
 const EXPENSE_CATEGORIES = [
@@ -1938,21 +1938,33 @@ export default function HomeFinanceDashboard() {
             </select>
           </div>
           
-          {/* Export button moved to Smart Report tab */}
-          
-          <button 
+          <button
             onClick={() => {
-              showConfirm("إنهاء الدورة", () => {
-                const newManualStarts = [...(settings.manualCycleStarts || []), new Date().toISOString()];
-                syncToFirebase("settings", { ...settings, manualCycleStarts: newManualStarts });
-                toast.success("تم بدء دورة جديدة يدوياً!");
-              }, true, "هل أنت متأكد من إنهاء الدورة الحالية وبدء دورة جديدة الآن؟");
+              if (!confirm("هل أنت متأكد من إنهاء الدورة المالية الحالية يدوياً وبدء دورة جديدة؟ هذا سيؤدي إلى نقل الميزانية المتبقية إلى الدورة الجديدة.")) return;
+              
+              const newCycleStarts = [...(settings?.manualCycleStarts || []), today()];
+              setSettings({ ...settings, manualCycleStarts: newCycleStarts });
+              syncToFirebase("settings", { ...settings, manualCycleStarts: newCycleStarts });
             }}
             className="w-full md:w-auto bg-blue-600/50 hover:bg-blue-600 border border-blue-400/50 text-white rounded-xl px-4 py-2 text-xs font-bold transition flex items-center justify-center gap-2"
           >
             إنهاء الدورة يدوياً
           </button>
         </div>
+        
+        {/* Helper Alert if user is confused about missing data on new cycle */}
+        {(expenses.length > 0 || incomes.length > 0) && totalExpensesAmt === 0 && totalIncome === 0 && selectedCycleId === cycles[0]?.id && (
+          <div className="relative z-10 bg-indigo-500/20 backdrop-blur-md border border-indigo-400/50 rounded-2xl p-4 text-center mb-5 shadow-lg shadow-indigo-500/20 animate-pulse">
+            <div className="flex justify-center items-center gap-2 mb-1">
+              <span className="text-indigo-100 font-black text-sm">مرحباً! لقد بدأت دورة مالية جديدة فارغة 🗓️</span>
+            </div>
+            <p className="text-indigo-200/80 font-bold text-xs mt-1">
+              أنت الآن في دورة شهرية جديدة. لرؤية مصاريفك وإدخالاتك السابقة، قم بتغيير الدورة المالية من القائمة المنسدلة في الأعلى (اختر الدورة السابقة).
+            </p>
+          </div>
+        )}
+
+        {/* Professional Summary Cards */}
 
         {/* Professional Summary Cards */}
         <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-3">
