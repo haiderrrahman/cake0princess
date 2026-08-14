@@ -1,0 +1,35 @@
+--- src/app/admin/inventory/page.tsx
++++ src/app/admin/inventory/page.tsx
+@@ -244,6 +244,14 @@
+     }
+   };
+ 
++  const handleUpdateNeedQuantity = async (needId: string, delta: number) => {
++    const need = needs.find(n => n.id === needId);
++    if (!need) return;
++    const newQty = Math.max(1, (need.quantity || 1) + delta);
++    if (newQty === need.quantity) return;
++    await updateDoc(doc(db, "cake_needs", needId), { quantity: newQty, updatedAt: serverTimestamp() });
++    fetchItems();
++  };
++
+   const lowStockItems = items.filter(i => Number(i.quantity) <= Number(i.minAlert));
+   const totalInventoryValue = items.reduce((s, i) => s + (Number(i.price || 0) * Number(i.quantity || 0)), 0);
+ 
+@@ -302,8 +310,13 @@
+                 return (
+                   <div key={i.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 bg-white dark:bg-zinc-900/60 rounded-2xl border border-orange-100 dark:border-orange-800/30 gap-3">
+                     <div>
+                       <span className="font-black text-sm text-gray-800 dark:text-gray-200 block">{i.name}</span>
+-                      <span className="text-[10px] text-gray-500 font-bold">الكمية المطلوبة: {i.quantity} {i.unit} | السعر: {(i.estimatedPrice || 0).toLocaleString()}</span>
++                      <div className="flex items-center gap-2 mt-1">
++                        <span className="text-[10px] text-gray-500 font-bold">تحتاج:</span>
++                        <div className="flex items-center bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5">
++                          <button onClick={() => handleUpdateNeedQuantity(i.id, -1)} className="w-6 h-6 flex items-center justify-center text-gray-600 hover:bg-white rounded shadow-sm text-sm font-black">-</button>
++                          <span className="w-6 text-center text-xs font-black">{i.quantity}</span>
++                          <button onClick={() => handleUpdateNeedQuantity(i.id, 1)} className="w-6 h-6 flex items-center justify-center text-gray-600 hover:bg-white rounded shadow-sm text-sm font-black">+</button>
++                        </div>
++                        <span className="text-[10px] text-gray-500 font-bold ml-1">{i.unit} | السعر: {(i.estimatedPrice || 0).toLocaleString()}</span>
++                      </div>
+                     </div>
+                     <button onClick={() => handlePurchaseNeed(i)} className="bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-black px-4 py-2 rounded-xl transition flex items-center gap-1 shadow-sm shrink-0">

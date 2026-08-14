@@ -1,0 +1,15 @@
+--- src/app/admin/inventory/page.tsx
++++ src/app/admin/inventory/page.tsx
+@@ -522,7 +522,11 @@
+                                       }
+                                     }} className="w-8 h-8 rounded-full text-orange-500 flex items-center justify-center hover:bg-white dark:hover:bg-zinc-700 shadow-sm transition" title="إضافة إلى النواقص"><ShoppingCart className="w-4 h-4" /></button>
+                                     <button onClick={() => setShowEditInventory(item)} className="w-8 h-8 rounded-full text-blue-500 flex items-center justify-center hover:bg-white dark:hover:bg-zinc-700 shadow-sm transition"><Edit3 className="w-4 h-4" /></button>
+-                                    
++                                    <button onClick={async () => {
++                                      if (!confirm("هل أنت متأكد من الحذف؟")) return;
++                                      await deleteDoc(doc(db, "cake_inventory", item.id));
++                                      fetchItems();
++                                    }} className="w-8 h-8 rounded-full text-red-500 flex items-center justify-center hover:bg-white dark:hover:bg-zinc-700 shadow-sm transition"><Trash2 className="w-4 h-4" /></button>
+                                     {/* Stepper */}
+                                     <div className="flex items-center gap-3 bg-gray-50 dark:bg-zinc-800/50 rounded-full px-1.5 py-1 border border-gray-100 dark:border-zinc-700 ml-2">
+                                       <button onClick={() => updateInventoryQuantity(item.id, Number(item.quantity), -1)} className="w-6 h-6 rounded-full text-red-500 font-black text-lg flex items-center justify-center hover:bg-white dark:hover:bg-zinc-700 shadow-sm transition leading-none pb-0.5">-</button>

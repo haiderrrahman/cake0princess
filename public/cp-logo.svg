@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 480" width="400" height="480">
+  <!-- Background white -->
+  <rect width="400" height="480" fill="white"/>
+  
+  <!-- Decorative arc/swirl top right -->
+  <g stroke="#D4AF37" stroke-width="2" fill="none" opacity="0.85">
+    <path d="M230,30 Q340,20 360,130 Q370,200 320,240" stroke-width="1.5"/>
+    <path d="M240,25 Q350,15 370,135 Q382,205 330,248" stroke-width="1"/>
+    <!-- Small star decorations -->
+    <polygon points="345,25 348,35 358,35 350,41 353,51 345,45 337,51 340,41 332,35 342,35" fill="#D4AF37" stroke="none" transform="scale(0.5) translate(350,30)"/>
+    <circle cx="370" cy="165" r="3" fill="#D4AF37" stroke="none"/>
+    <!-- Flourish details -->
+    <path d="M260,38 Q290,30 300,55" stroke-width="1.2"/>
+    <path d="M340,180 Q370,190 365,220" stroke-width="1.2"/>
+  </g>
+  
+  <!-- Princess silhouette (left side) - purple -->
+  <g fill="#3D1A78">
+    <!-- Head with hijab -->
+    <ellipse cx="115" cy="70" rx="22" ry="25" fill="#D4AF37"/>
+    <ellipse cx="115" cy="65" rx="24" ry="22" fill="#3D1A78"/>
+    <ellipse cx="115" cy="78" rx="18" ry="15" fill="#D4AF37"/>
+    <!-- Face -->
+    <ellipse cx="115" cy="75" rx="14" ry="16" fill="#C9975B"/>
+    <!-- Hijab covering -->
+    <ellipse cx="115" cy="65" rx="24" ry="22" fill="#3D1A78"/>
+    <ellipse cx="115" cy="80" rx="28" ry="18" fill="#3D1A78"/>
+    <!-- Body/dress -->
+    <path d="M95,95 Q85,110 80,140 Q75,160 73,185 Q70,210 68,240 Q66,265 65,290 Q64,315 95,320 Q115,322 135,320 Q155,318 165,300 Q170,285 168,265 Q165,240 160,215 Q157,195 155,175 Q152,155 148,135 Q144,115 135,100 Q125,92 115,92 Z" fill="#3D1A78"/>
+    <!-- Dress skirt flowing -->
+    <path d="M65,290 Q55,320 58,350 Q60,370 80,380 Q100,388 120,385 Q140,382 155,370 Q168,358 165,335 Q163,310 155,300 Q140,318 115,320 Q90,322 65,290 Z" fill="#3D1A78"/>
+    <!-- Dress train -->
+    <path d="M58,350 Q45,380 50,410 Q55,435 85,440 Q110,443 125,438 Q145,432 155,415 Q162,398 158,375 Q155,360 150,348 Q140,365 120,370 Q95,373 70,360 Z" fill="#3D1A78"/>
+    <!-- Gold trim on dress -->
+    <path d="M97,97 Q87,112 82,142" stroke="#D4AF37" stroke-width="1.5" fill="none"/>
+    <path d="M133,100 Q143,116 147,137" stroke="#D4AF37" stroke-width="1.5" fill="none"/>
+    <path d="M68,245 Q66,268 65,292" stroke="#D4AF37" stroke-width="1.5" fill="none"/>
+    <path d="M162,248 Q165,268 165,290" stroke="#D4AF37" stroke-width="1.5" fill="none"/>
+    <!-- Crown on head -->
+    <path d="M100,52 L103,42 L108,50 L115,38 L122,50 L127,42 L130,52 Z" fill="#D4AF37"/>
+    <rect x="100" y="52" width="30" height="6" rx="2" fill="#D4AF37"/>
+  </g>
+  
+  <!-- 3-tier cake (right side) -->
+  <g>
+    <!-- Cake stand/base -->
+    <ellipse cx="280" cy="295" rx="40" ry="8" fill="#D4AF37"/>
+    <rect x="265" y="270" width="30" height="28" rx="4" fill="#D4AF37"/>
+    <ellipse cx="280" cy="270" rx="18" ry="5" fill="#C9975B"/>
+    
+    <!-- Bottom tier -->
+    <rect x="230" y="218" width="100" height="55" rx="5" fill="#3D1A78"/>
+    <ellipse cx="280" cy="218" rx="50" ry="10" fill="#4A2090"/>
+    <ellipse cx="280" cy="273" rx="50" ry="10" fill="#2D1060"/>
+    <!-- Gold flourish bottom tier -->
+    <text x="280" y="250" text-anchor="middle" font-size="28" fill="#D4AF37" font-family="serif">❧</text>
+    
+    <!-- Middle tier -->
+    <rect x="245" y="163" width="70" height="58" rx="5" fill="#3D1A78"/>
+    <ellipse cx="280" cy="163" rx="35" ry="8" fill="#4A2090"/>
+    <ellipse cx="280" cy="221" rx="35" ry="8" fill="#2D1060"/>
+    <!-- Gold flourish middle tier -->
+    <text x="280" y="197" text-anchor="middle" font-size="22" fill="#D4AF37" font-family="serif">❧</text>
+    
+    <!-- Top tier -->
+    <rect x="258" y="118" width="44" height="48" rx="5" fill="#3D1A78"/>
+    <ellipse cx="280" cy="118" rx="22" ry="6" fill="#4A2090"/>
+    <ellipse cx="280" cy="166" rx="22" ry="6" fill="#2D1060"/>
+    <!-- Gold flourish top tier -->
+    <text x="280" y="147" text-anchor="middle" font-size="18" fill="#D4AF37" font-family="serif">✦</text>
+    
+    <!-- Crown on top of cake -->
+    <path d="M262,108 L265,96 L271,106 L280,90 L289,106 L295,96 L298,108 Z" fill="#D4AF37"/>
+    <rect x="262" y="107" width="36" height="8" rx="2" fill="#D4AF37"/>
+    <circle cx="280" cy="90" r="4" fill="#FFD700"/>
+    
+    <!-- Bottom flourish scroll decoration -->
+    <path d="M230,275 Q215,285 210,300 Q208,312 220,315 Q230,318 235,310" stroke="#D4AF37" stroke-width="2" fill="none"/>
+    <path d="M330,275 Q345,285 350,300 Q352,312 340,315 Q330,318 325,310" stroke="#D4AF37" stroke-width="2" fill="none"/>
+  </g>
+  
+  <!-- Text: Cake Princess -->
+  <text x="200" y="345" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="34" font-style="italic" font-weight="bold" fill="#3D1A78">Cake Princess</text>
+  
+  <!-- Arabic text: كيك الأميرة -->
+  <text x="200" y="390" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="28" font-weight="bold" fill="#D4AF37">كيك الأميرة</text>
+</svg>

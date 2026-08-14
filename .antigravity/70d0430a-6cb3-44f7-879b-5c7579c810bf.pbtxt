@@ -1,0 +1,2624 @@
+steps {
+  type: CORTEX_STEP_TYPE_USER_INPUT
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201411
+      nanos: 204899000
+    }
+    source: CORTEX_STEP_SOURCE_SYSTEM
+    completed_at {
+      seconds: 1779201411
+      nanos: 204899000
+    }
+  }
+  user_input {
+    user_response: "Here is the full initial file tree for the application:\n/.env.example\n/.gitignore\n/index.html\n/metadata.json\n/package.json\n/src/App.tsx\n/src/index.css\n/src/main.tsx\n/tsconfig.json\n/vite.config.ts\n\nThe following dependencies are installed:\n@google/genai: ^1.29.0\n@tailwindcss/vite: ^4.1.14\n@vitejs/plugin-react: ^5.0.4\ndotenv: ^17.2.3\nexpress: ^4.21.2\nlucide-react: ^0.546.0\nmotion: ^12.23.24\nreact: ^19.0.1\nreact-dom: ^19.0.1\nvite: ^6.2.3\n\nThe following devDependencies are installed:\n@types/express: ^4.17.21\n@types/node: ^22.14.0\nautoprefixer: ^10.4.21\nesbuild: ^0.25.0\ntailwindcss: ^4.1.14\ntsx: ^4.21.0\ntypescript: ~5.8.2\nvite: ^6.2.3\n\nKey file contents:\n\n--- /.env.example ---\n```\n# GEMINI_API_KEY: Required for Gemini AI API calls.\n# AI Studio automatically injects this at runtime from user secrets.\n# Users configure this via the Secrets panel in the AI Studio UI.\nGEMINI_API_KEY=\"MY_GEMINI_API_KEY\"\n\n# APP_URL: The URL where this applet is hosted.\n# AI Studio automatically injects this at runtime with the Cloud Run service URL.\n# Used for self-referential links, OAuth callbacks, and API endpoints.\nAPP_URL=\"MY_APP_URL\"\n\n```\n\n--- /index.html ---\n```html\n<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>My Google AI Studio App</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.tsx\"></script>\n  </body>\n</html>\n\n\n```\n\n--- /metadata.json ---\n```json\n{\n  \"name\": \"\",\n  \"description\": \"\",\n  \"requestFramePermissions\": [],\n  \"majorCapabilities\": [\"MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API\"]\n}\n\n```\n\n--- /src/App.tsx ---\n```typescript\n/**\n * @license\n * SPDX-License-Identifier: Apache-2.0\n */\n\nexport default function App() {\n  return <div></div>;\n}\n\n```\n\n--- /src/index.css ---\n```css\n@import \"tailwindcss\";\n\n```\n\n--- /src/main.tsx ---\n```typescript\nimport {StrictMode} from \'react\';\nimport {createRoot} from \'react-dom/client\';\nimport App from \'./App.tsx\';\nimport \'./index.css\';\n\ncreateRoot(document.getElementById(\'root\')!).render(\n  <StrictMode>\n    <App />\n  </StrictMode>,\n);\n\n```\n\n--- /tsconfig.json ---\n```json\n{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"experimentalDecorators\": true,\n    \"useDefineForClassFields\": false,\n    \"module\": \"ESNext\",\n    \"lib\": [\n      \"ES2022\",\n      \"DOM\",\n      \"DOM.Iterable\"\n    ],\n    \"skipLibCheck\": true,\n    \"moduleResolution\": \"bundler\",\n    \"isolatedModules\": true,\n    \"moduleDetection\": \"force\",\n    \"allowJs\": true,\n    \"jsx\": \"react-jsx\",\n    \"paths\": {\n      \"@/*\": [\n        \"./*\"\n      ]\n    },\n    \"allowImportingTsExtensions\": true,\n    \"noEmit\": true\n  }\n}\n\n```\n\n--- /vite.config.ts ---\n```typescript\nimport tailwindcss from \'@tailwindcss/vite\';\nimport react from \'@vitejs/plugin-react\';\nimport path from \'path\';\nimport {defineConfig} from \'vite\';\n\nexport default defineConfig(() => {\n  return {\n    plugins: [react(), tailwindcss()],\n    resolve: {\n      alias: {\n        \'@\': path.resolve(__dirname, \'.\'),\n      },\n    },\n    server: {\n      // HMR is disabled in AI Studio via DISABLE_HMR env var.\n      // Do not modify\303\242\302\200\302\224file watching is disabled to prevent flickering during agent edits.\n      hmr: process.env.DISABLE_HMR !== \'true\',\n      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.\n      watch: process.env.DISABLE_HMR === \'true\' ? null : {},\n    },\n  };\n});\n\n```"
+    items {
+      text: "Here is the full initial file tree for the application:\n/.env.example\n/.gitignore\n/index.html\n/metadata.json\n/package.json\n/src/App.tsx\n/src/index.css\n/src/main.tsx\n/tsconfig.json\n/vite.config.ts\n\nThe following dependencies are installed:\n@google/genai: ^1.29.0\n@tailwindcss/vite: ^4.1.14\n@vitejs/plugin-react: ^5.0.4\ndotenv: ^17.2.3\nexpress: ^4.21.2\nlucide-react: ^0.546.0\nmotion: ^12.23.24\nreact: ^19.0.1\nreact-dom: ^19.0.1\nvite: ^6.2.3\n\nThe following devDependencies are installed:\n@types/express: ^4.17.21\n@types/node: ^22.14.0\nautoprefixer: ^10.4.21\nesbuild: ^0.25.0\ntailwindcss: ^4.1.14\ntsx: ^4.21.0\ntypescript: ~5.8.2\nvite: ^6.2.3\n\nKey file contents:\n\n--- /.env.example ---\n```\n# GEMINI_API_KEY: Required for Gemini AI API calls.\n# AI Studio automatically injects this at runtime from user secrets.\n# Users configure this via the Secrets panel in the AI Studio UI.\nGEMINI_API_KEY=\"MY_GEMINI_API_KEY\"\n\n# APP_URL: The URL where this applet is hosted.\n# AI Studio automatically injects this at runtime with the Cloud Run service URL.\n# Used for self-referential links, OAuth callbacks, and API endpoints.\nAPP_URL=\"MY_APP_URL\"\n\n```\n\n--- /index.html ---\n```html\n<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>My Google AI Studio App</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.tsx\"></script>\n  </body>\n</html>\n\n\n```\n\n--- /metadata.json ---\n```json\n{\n  \"name\": \"\",\n  \"description\": \"\",\n  \"requestFramePermissions\": [],\n  \"majorCapabilities\": [\"MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API\"]\n}\n\n```\n\n--- /src/App.tsx ---\n```typescript\n/**\n * @license\n * SPDX-License-Identifier: Apache-2.0\n */\n\nexport default function App() {\n  return <div></div>;\n}\n\n```\n\n--- /src/index.css ---\n```css\n@import \"tailwindcss\";\n\n```\n\n--- /src/main.tsx ---\n```typescript\nimport {StrictMode} from \'react\';\nimport {createRoot} from \'react-dom/client\';\nimport App from \'./App.tsx\';\nimport \'./index.css\';\n\ncreateRoot(document.getElementById(\'root\')!).render(\n  <StrictMode>\n    <App />\n  </StrictMode>,\n);\n\n```\n\n--- /tsconfig.json ---\n```json\n{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"experimentalDecorators\": true,\n    \"useDefineForClassFields\": false,\n    \"module\": \"ESNext\",\n    \"lib\": [\n      \"ES2022\",\n      \"DOM\",\n      \"DOM.Iterable\"\n    ],\n    \"skipLibCheck\": true,\n    \"moduleResolution\": \"bundler\",\n    \"isolatedModules\": true,\n    \"moduleDetection\": \"force\",\n    \"allowJs\": true,\n    \"jsx\": \"react-jsx\",\n    \"paths\": {\n      \"@/*\": [\n        \"./*\"\n      ]\n    },\n    \"allowImportingTsExtensions\": true,\n    \"noEmit\": true\n  }\n}\n\n```\n\n--- /vite.config.ts ---\n```typescript\nimport tailwindcss from \'@tailwindcss/vite\';\nimport react from \'@vitejs/plugin-react\';\nimport path from \'path\';\nimport {defineConfig} from \'vite\';\n\nexport default defineConfig(() => {\n  return {\n    plugins: [react(), tailwindcss()],\n    resolve: {\n      alias: {\n        \'@\': path.resolve(__dirname, \'.\'),\n      },\n    },\n    server: {\n      // HMR is disabled in AI Studio via DISABLE_HMR env var.\n      // Do not modify\303\242\302\200\302\224file watching is disabled to prevent flickering during agent edits.\n      hmr: process.env.DISABLE_HMR !== \'true\',\n      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.\n      watch: process.env.DISABLE_HMR === \'true\' ? null : {},\n    },\n  };\n});\n\n```"
+    }
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_USER_INPUT
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201413
+      nanos: 578792560
+    }
+    source: CORTEX_STEP_SOURCE_USER_EXPLICIT
+  }
+  user_input {
+    user_response: "\"use client\";\nimport { useState } from \"react\";\n\nexport default function CakePublisher() {\n  const [caption, setCaption] = useState(\"\");\n  const [imageFile, setImageFile] = useState(null);\n  const [preview, setPreview] = useState(null);\n\n  // \330\257\330\247\331\204\330\251 \330\247\330\256\330\252\331\212\330\247\330\261 \330\247\331\204\330\265\331\210\330\261\330\251\n  const handleImageChange = (e) => {\n    const file = e.target.files[0];\n    if (file) {\n      setImageFile(file);\n      setPreview(URL.createObjectURL(file));\n    }\n  };\n\n  // \330\257\330\247\331\204\330\251 \330\247\331\204\331\206\330\264\330\261 (\331\206\330\263\330\256 \330\247\331\204\331\206\330\265 + \331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\265\331\210\330\261\330\251)\n  const handleShare = async () => {\n    if (!imageFile) {\n      alert(\"\342\232\240\357\270\217 \331\212\330\261\330\254\331\211 \330\247\330\256\330\252\331\212\330\247\330\261 \330\265\331\210\330\261\330\251 \330\247\331\204\331\203\331\212\331\203\330\251 \330\243\331\210\331\204\330\247\331\213!\");\n      return;\n    }\n\n    // 1. \331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \330\245\331\204\331\211 \330\247\331\204\330\255\330\247\331\201\330\270\330\251 (Clipboard)\n    if (caption) {\n      try {\n        await navigator.clipboard.writeText(caption);\n        console.log(\"\330\252\331\205 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \330\250\331\206\330\254\330\247\330\255\");\n      } catch (err) {\n        console.error(\"\331\201\330\264\331\204 \331\201\331\212 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265:\", err);\n      }\n    }\n\n    // 2. \330\247\331\204\330\252\330\255\331\202\331\202 \331\205\331\206 \330\257\330\271\331\205 \330\247\331\204\331\205\330\252\330\265\331\201\330\255 \331\204\331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\331\205\331\204\331\201\330\247\330\252\n    if (navigator.canShare && navigator.canShare({ files: [imageFile] })) {\n      try {\n        // \331\201\330\252\330\255 \331\202\330\247\330\246\331\205\330\251 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\243\330\265\331\204\331\212\330\251 \331\201\331\212 \330\247\331\204\330\243\331\212\331\201\331\210\331\206\n        await navigator.share({\n          files: [imageFile],\n          title: \"\331\205\331\206\330\264\331\210\330\261 \330\247\331\204\331\203\331\212\331\203\",\n        });\n        // \330\250\330\271\330\257 \331\205\330\247 \331\212\330\256\330\252\330\247\330\261 \330\247\331\204\331\205\330\263\330\252\330\256\330\257\331\205 \330\247\331\204\330\247\331\206\330\263\330\252\330\247 \330\247\331\210 \330\247\331\204\330\252\331\212\331\203 \330\252\331\210\331\203\330\214 \330\250\330\263 \331\212\330\263\331\210\331\212 \331\204\330\265\331\202 \331\204\331\204\331\206\330\265!\n      } catch (error) {\n        console.error(\"\330\252\331\205 \330\247\331\204\330\245\331\204\330\272\330\247\330\241 \330\243\331\210 \331\201\330\264\331\204 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251:\", error);\n      }\n    } else {\n      alert(\"\331\205\330\252\330\265\331\201\330\255\331\203 \331\204\330\247 \331\212\330\257\330\271\331\205 \331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\265\331\210\330\261 \331\205\330\250\330\247\330\264\330\261\330\251 (\330\247\330\263\330\252\330\256\330\257\331\205 Safari \330\250\330\247\331\204\330\247\331\212\331\201\331\210\331\206).\");\n    }\n  };\n\n  return (\n    <div style={{ padding: \"20px\", maxWidth: \"400px\", margin: \"0 auto\", fontFamily: \"sans-serif\" }}>\n      <h2 style={{ textAlign: \"center\", color: \"#d23f57\" }}>\360\237\215\260 \331\206\330\270\330\247\331\205 \331\206\330\264\330\261 \330\247\331\204\331\203\331\212\331\203 \330\247\331\204\331\205\331\210\330\255\330\257</h2>\n      \n      <div style={{ marginBottom: \"15px\" }}>\n        <label style={{ display: \"block\", marginBottom: \"5px\", fontWeight: \"bold\" }}>\n          \331\210\330\265\331\201 \330\247\331\204\331\205\331\206\330\264\331\210\330\261 \331\210\330\247\331\204\331\207\330\247\330\264\330\252\330\247\331\203\330\247\330\252:\n        </label>\n        <textarea\n          rows=\"5\"\n          style={{ width: \"100%\", padding: \"10px\", borderRadius: \"8px\", border: \"1px solid #ccc\" }}\n          placeholder=\"\331\205\330\253\330\247\331\204: \331\203\331\212\331\203\330\251 \330\264\331\210\331\203\331\210\331\204\330\247\330\252\330\251 \330\254\330\247\331\207\330\262\330\251 \331\204\331\204\330\252\331\210\330\265\331\212\331\204... #\331\203\331\212\331\203 #\330\250\330\272\330\257\330\247\330\257\"\n          value={caption}\n          onChange={(e) => setCaption(e.target.value)}\n        />\n      </div>\n\n      <div style={{ marginBottom: \"15px\" }}>\n        <label style={{ display: \"block\", marginBottom: \"5px\", fontWeight: \"bold\" }}>\n          \330\265\331\210\330\261\330\251 \330\247\331\204\331\203\331\212\331\203\330\251:\n        </label>\n        <input \n          type=\"file\" \n          accept=\"image/*\" \n          onChange={handleImageChange} \n          style={{ display: \"block\", marginBottom: \"10px\" }}\n        />\n        {preview && (\n          <img \n            src={preview} \n            alt=\"\331\205\330\271\330\247\331\212\331\206\330\251\" \n            style={{ width: \"100%\", borderRadius: \"8px\", border: \"1px solid #eee\" }} \n          />\n        )}\n      </div>\n\n      <button\n        onClick={handleShare}\n        style={{\n          width: \"100%\",\n          padding: \"15px\",\n          backgroundColor: \"#d23f57\",\n          color: \"white\",\n          border: \"none\",\n          borderRadius: \"8px\",\n          fontSize: \"16px\",\n          fontWeight: \"bold\",\n          cursor: \"pointer\"\n        }}\n      >\n        \360\237\232\200 \330\247\331\206\330\264\330\261 \330\247\331\204\330\242\331\206 (\331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \331\210\331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\265\331\210\330\261\330\251)\n      </button>\n\n      <p style={{ fontSize: \"12px\", color: \"#666\", textAlign: \"center\", marginTop: \"15px\" }}>\n        * \331\205\331\206 \330\252\330\266\330\272\330\267 \330\271\331\204\331\211 \330\247\331\204\330\262\330\261\330\214 \330\261\330\247\330\255 \331\212\331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \330\252\331\204\331\202\330\247\330\246\331\212\330\247\331\213 \331\210\331\212\331\201\330\252\330\255\331\204\331\203 \331\202\330\247\330\246\331\205\330\251 \330\247\331\204\330\247\331\212\331\201\331\210\331\206 \330\255\330\252\331\211 \330\252\330\256\330\252\330\247\330\261 (\330\247\331\206\330\263\330\252\330\247/\331\201\331\212\330\263/\330\252\331\212\331\203 \330\252\331\210\331\203)\330\214 \331\210\330\250\330\271\330\257\331\207\330\247 \330\250\330\263 \330\247\331\206\330\267\331\212 \"\331\204\330\265\331\202\".\n      </p>\n    </div>\n  );\n}"
+    items {
+      text: "\"use client\";\nimport { useState } from \"react\";\n\nexport default function CakePublisher() {\n  const [caption, setCaption] = useState(\"\");\n  const [imageFile, setImageFile] = useState(null);\n  const [preview, setPreview] = useState(null);\n\n  // \330\257\330\247\331\204\330\251 \330\247\330\256\330\252\331\212\330\247\330\261 \330\247\331\204\330\265\331\210\330\261\330\251\n  const handleImageChange = (e) => {\n    const file = e.target.files[0];\n    if (file) {\n      setImageFile(file);\n      setPreview(URL.createObjectURL(file));\n    }\n  };\n\n  // \330\257\330\247\331\204\330\251 \330\247\331\204\331\206\330\264\330\261 (\331\206\330\263\330\256 \330\247\331\204\331\206\330\265 + \331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\265\331\210\330\261\330\251)\n  const handleShare = async () => {\n    if (!imageFile) {\n      alert(\"\342\232\240\357\270\217 \331\212\330\261\330\254\331\211 \330\247\330\256\330\252\331\212\330\247\330\261 \330\265\331\210\330\261\330\251 \330\247\331\204\331\203\331\212\331\203\330\251 \330\243\331\210\331\204\330\247\331\213!\");\n      return;\n    }\n\n    // 1. \331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \330\245\331\204\331\211 \330\247\331\204\330\255\330\247\331\201\330\270\330\251 (Clipboard)\n    if (caption) {\n      try {\n        await navigator.clipboard.writeText(caption);\n        console.log(\"\330\252\331\205 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \330\250\331\206\330\254\330\247\330\255\");\n      } catch (err) {\n        console.error(\"\331\201\330\264\331\204 \331\201\331\212 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265:\", err);\n      }\n    }\n\n    // 2. \330\247\331\204\330\252\330\255\331\202\331\202 \331\205\331\206 \330\257\330\271\331\205 \330\247\331\204\331\205\330\252\330\265\331\201\330\255 \331\204\331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\331\205\331\204\331\201\330\247\330\252\n    if (navigator.canShare && navigator.canShare({ files: [imageFile] })) {\n      try {\n        // \331\201\330\252\330\255 \331\202\330\247\330\246\331\205\330\251 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\243\330\265\331\204\331\212\330\251 \331\201\331\212 \330\247\331\204\330\243\331\212\331\201\331\210\331\206\n        await navigator.share({\n          files: [imageFile],\n          title: \"\331\205\331\206\330\264\331\210\330\261 \330\247\331\204\331\203\331\212\331\203\",\n        });\n        // \330\250\330\271\330\257 \331\205\330\247 \331\212\330\256\330\252\330\247\330\261 \330\247\331\204\331\205\330\263\330\252\330\256\330\257\331\205 \330\247\331\204\330\247\331\206\330\263\330\252\330\247 \330\247\331\210 \330\247\331\204\330\252\331\212\331\203 \330\252\331\210\331\203\330\214 \330\250\330\263 \331\212\330\263\331\210\331\212 \331\204\330\265\331\202 \331\204\331\204\331\206\330\265!\n      } catch (error) {\n        console.error(\"\330\252\331\205 \330\247\331\204\330\245\331\204\330\272\330\247\330\241 \330\243\331\210 \331\201\330\264\331\204 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251:\", error);\n      }\n    } else {\n      alert(\"\331\205\330\252\330\265\331\201\330\255\331\203 \331\204\330\247 \331\212\330\257\330\271\331\205 \331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\265\331\210\330\261 \331\205\330\250\330\247\330\264\330\261\330\251 (\330\247\330\263\330\252\330\256\330\257\331\205 Safari \330\250\330\247\331\204\330\247\331\212\331\201\331\210\331\206).\");\n    }\n  };\n\n  return (\n    <div style={{ padding: \"20px\", maxWidth: \"400px\", margin: \"0 auto\", fontFamily: \"sans-serif\" }}>\n      <h2 style={{ textAlign: \"center\", color: \"#d23f57\" }}>\360\237\215\260 \331\206\330\270\330\247\331\205 \331\206\330\264\330\261 \330\247\331\204\331\203\331\212\331\203 \330\247\331\204\331\205\331\210\330\255\330\257</h2>\n      \n      <div style={{ marginBottom: \"15px\" }}>\n        <label style={{ display: \"block\", marginBottom: \"5px\", fontWeight: \"bold\" }}>\n          \331\210\330\265\331\201 \330\247\331\204\331\205\331\206\330\264\331\210\330\261 \331\210\330\247\331\204\331\207\330\247\330\264\330\252\330\247\331\203\330\247\330\252:\n        </label>\n        <textarea\n          rows=\"5\"\n          style={{ width: \"100%\", padding: \"10px\", borderRadius: \"8px\", border: \"1px solid #ccc\" }}\n          placeholder=\"\331\205\330\253\330\247\331\204: \331\203\331\212\331\203\330\251 \330\264\331\210\331\203\331\210\331\204\330\247\330\252\330\251 \330\254\330\247\331\207\330\262\330\251 \331\204\331\204\330\252\331\210\330\265\331\212\331\204... #\331\203\331\212\331\203 #\330\250\330\272\330\257\330\247\330\257\"\n          value={caption}\n          onChange={(e) => setCaption(e.target.value)}\n        />\n      </div>\n\n      <div style={{ marginBottom: \"15px\" }}>\n        <label style={{ display: \"block\", marginBottom: \"5px\", fontWeight: \"bold\" }}>\n          \330\265\331\210\330\261\330\251 \330\247\331\204\331\203\331\212\331\203\330\251:\n        </label>\n        <input \n          type=\"file\" \n          accept=\"image/*\" \n          onChange={handleImageChange} \n          style={{ display: \"block\", marginBottom: \"10px\" }}\n        />\n        {preview && (\n          <img \n            src={preview} \n            alt=\"\331\205\330\271\330\247\331\212\331\206\330\251\" \n            style={{ width: \"100%\", borderRadius: \"8px\", border: \"1px solid #eee\" }} \n          />\n        )}\n      </div>\n\n      <button\n        onClick={handleShare}\n        style={{\n          width: \"100%\",\n          padding: \"15px\",\n          backgroundColor: \"#d23f57\",\n          color: \"white\",\n          border: \"none\",\n          borderRadius: \"8px\",\n          fontSize: \"16px\",\n          fontWeight: \"bold\",\n          cursor: \"pointer\"\n        }}\n      >\n        \360\237\232\200 \330\247\331\206\330\264\330\261 \330\247\331\204\330\242\331\206 (\331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \331\210\331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\265\331\210\330\261\330\251)\n      </button>\n\n      <p style={{ fontSize: \"12px\", color: \"#666\", textAlign: \"center\", marginTop: \"15px\" }}>\n        * \331\205\331\206 \330\252\330\266\330\272\330\267 \330\271\331\204\331\211 \330\247\331\204\330\262\330\261\330\214 \330\261\330\247\330\255 \331\212\331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \330\252\331\204\331\202\330\247\330\246\331\212\330\247\331\213 \331\210\331\212\331\201\330\252\330\255\331\204\331\203 \331\202\330\247\330\246\331\205\330\251 \330\247\331\204\330\247\331\212\331\201\331\210\331\206 \330\255\330\252\331\211 \330\252\330\256\330\252\330\247\330\261 (\330\247\331\206\330\263\330\252\330\247/\331\201\331\212\330\263/\330\252\331\212\331\203 \330\252\331\210\331\203)\330\214 \331\210\330\250\330\271\330\257\331\207\330\247 \330\250\330\263 \330\247\331\206\330\267\331\212 \"\331\204\330\265\331\202\".\n      </p>\n    </div>\n  );\n}"
+    }
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_PLANNER_RESPONSE
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201413
+      nanos: 579590931
+    }
+    source: CORTEX_STEP_SOURCE_MODEL
+    viewable_at {
+      seconds: 1779201449
+      nanos: 307443509
+    }
+    finished_generating_at {
+      seconds: 1779201449
+      nanos: 317232498
+    }
+    completed_at {
+      seconds: 1779201449
+      nanos: 317232498
+    }
+    model_usage {
+      input_tokens: 23520
+      output_tokens: 353
+      message_id: "hnUMaoSKA9_qnsEP25uiiQU"
+      thinking_output_tokens: 316
+      response_output_tokens: 37
+      response_id: "hnUMaoSKA9_qnsEP25uiiQU"
+    }
+    generator_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    source_trajectory_step_info {
+      trajectory_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+      step_index: 2
+      cascade_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    }
+    step_generation_version: 1
+    model_info {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    started_at {
+      seconds: 1779201449
+      nanos: 317232498
+    }
+  }
+  planner_response {
+    stop_reason: STOP_REASON_STOP_PATTERN
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_VIEW_FILE
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201449
+      nanos: 307523519
+    }
+    source: CORTEX_STEP_SOURCE_MODEL
+    arguments_order: "AbsolutePath"
+    arguments_order: "toolAction"
+    arguments_order: "toolSummary"
+    viewable_at {
+      seconds: 1779201449
+      nanos: 317122008
+    }
+    finished_generating_at {
+      seconds: 1779201449
+      nanos: 317120938
+    }
+    completed_at {
+      seconds: 1779201450
+      nanos: 417148098
+    }
+    generator_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    source_trajectory_step_info {
+      trajectory_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+      step_index: 3
+      cascade_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    }
+    step_generation_version: 1
+    last_completed_chunk_at {
+      seconds: 1779201449
+      nanos: 317108818
+    }
+    tool_call_output_tokens: 25
+    model_info {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    tool_summary: "Read metadata"
+    tool_action: "Viewing metadata.json"
+    started_at {
+      seconds: 1779201449
+      nanos: 317722088
+    }
+  }
+  view_file {
+    absolute_path_uri: "file:///metadata.json"
+    end_line: 6
+    num_lines: 7
+    num_bytes: 139
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_CHECKPOINT
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201450
+      nanos: 417293778
+    }
+    source: CORTEX_STEP_SOURCE_SYSTEM
+    completed_at {
+      seconds: 1779201456
+      nanos: 731475078
+    }
+    model_usage {
+      input_tokens: 2913
+      output_tokens: 104
+      message_id: "qnUMasDkOfv1xN8Ph9nwqQc"
+      response_output_tokens: 104
+      response_id: "qnUMasDkOfv1xN8Ph9nwqQc"
+    }
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    retry_infos {
+      usage {
+        input_tokens: 2913
+        output_tokens: 104
+        message_id: "qnUMasDkOfv1xN8Ph9nwqQc"
+        response_output_tokens: 104
+        response_id: "qnUMasDkOfv1xN8Ph9nwqQc"
+      }
+    }
+    started_at {
+      seconds: 1779201450
+      nanos: 417490278
+    }
+  }
+  checkpoint {
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_PLANNER_RESPONSE
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201450
+      nanos: 421081647
+    }
+    source: CORTEX_STEP_SOURCE_MODEL
+    viewable_at {
+      seconds: 1779201461
+      nanos: 477369735
+    }
+    finished_generating_at {
+      seconds: 1779201479
+      nanos: 113067127
+    }
+    completed_at {
+      seconds: 1779201479
+      nanos: 113067127
+    }
+    model_usage {
+      input_tokens: 3786
+      output_tokens: 2298
+      cache_read_tokens: 20308
+      message_id: "qnUMaoiLOOKivdIP4bzSyQI"
+      thinking_output_tokens: 77
+      response_output_tokens: 2221
+      response_id: "qnUMaoiLOOKivdIP4bzSyQI"
+    }
+    generator_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    source_trajectory_step_info {
+      trajectory_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+      step_index: 5
+      metadata_index: 1
+      cascade_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    }
+    step_generation_version: 1
+    model_info {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    started_at {
+      seconds: 1779201479
+      nanos: 113067127
+    }
+  }
+  planner_response {
+    thinking: "**Defining the New Component**\n\nI\'ve decided to rename `metadata.json` to reflect the \"Cake Publisher\" aspect. Also, I\'m leaning towards developing the `CakePublisher` component as a dedicated file: `src/components/CakePublisher.tsx`. I\'ll import and use this within `src/App.tsx`, and this will be implemented first.\n\n\n"
+    thinking_duration {
+      seconds: 16
+      nanos: 895541494
+    }
+    stop_reason: STOP_REASON_STOP_PATTERN
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_FILE_CHANGE
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201461
+      nanos: 953519376
+    }
+    source: CORTEX_STEP_SOURCE_MODEL
+    arguments_order: "Instruction"
+    arguments_order: "ReplacementContent"
+    arguments_order: "TargetContent"
+    arguments_order: "TargetFile"
+    arguments_order: "toolAction"
+    arguments_order: "toolSummary"
+    viewable_at {
+      seconds: 1779201478
+      nanos: 361128800
+    }
+    finished_generating_at {
+      seconds: 1779201478
+      nanos: 361127931
+    }
+    completed_at {
+      seconds: 1779201483
+      nanos: 35469549
+    }
+    generator_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    source_trajectory_step_info {
+      trajectory_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+      step_index: 6
+      metadata_index: 1
+      cascade_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    }
+    step_generation_version: 1
+    last_completed_chunk_at {
+      seconds: 1779201478
+      nanos: 361101960
+    }
+    tool_call_output_tokens: 149
+    model_info {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    tool_summary: "Update metadata"
+    tool_action: "Updating metadata.json"
+    started_at {
+      seconds: 1779201478
+      nanos: 361376540
+    }
+  }
+  file_change {
+    absolute_path_uri: "file:///metadata.json"
+    file_change_type: FILE_CHANGE_TYPE_EDIT
+    replacement_chunks {
+      target_content: "{\n  \"name\": \"\",\n  \"description\": \"\",\n  \"requestFramePermissions\": [],\n  \"majorCapabilities\": [\"MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API\"]\n}"
+      replacement_content: "{\n  \"name\": \"Cake Publisher\",\n  \"description\": \"A cake publishing tool that copies text and shares images using the Web Share API.\",\n  \"requestFramePermissions\": [],\n  \"majorCapabilities\": [\"MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API\"]\n}"
+    }
+    diff {
+      end_line: 6
+      unified_diff {
+        lines {
+          text: "{"
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          text: "  \"name\": \"\","
+          type: UNIFIED_DIFF_LINE_TYPE_DELETE
+        }
+        lines {
+          text: "  \"description\": \"\","
+          type: UNIFIED_DIFF_LINE_TYPE_DELETE
+        }
+        lines {
+          text: "  \"name\": \"Cake Publisher\","
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  \"description\": \"A cake publishing tool that copies text and shares images using the Web Share API.\","
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  \"requestFramePermissions\": [],"
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          text: "  \"majorCapabilities\": [\"MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API\"]"
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          text: "}"
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+      }
+    }
+    instruction: "Update name and description"
+    replacement_infos {
+      original_chunk {
+        target_content: "{\n  \"name\": \"\",\n  \"description\": \"\",\n  \"requestFramePermissions\": [],\n  \"majorCapabilities\": [\"MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API\"]\n}"
+        replacement_content: "{\n  \"name\": \"Cake Publisher\",\n  \"description\": \"A cake publishing tool that copies text and shares images using the Web Share API.\",\n  \"requestFramePermissions\": [],\n  \"majorCapabilities\": [\"MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API\"]\n}"
+      }
+      num_matches: 1
+    }
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_FILE_CHANGE
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201478
+      nanos: 361309990
+    }
+    source: CORTEX_STEP_SOURCE_MODEL
+    arguments_order: "Content"
+    arguments_order: "Overwrite"
+    arguments_order: "TargetFile"
+    arguments_order: "toolAction"
+    arguments_order: "toolSummary"
+    viewable_at {
+      seconds: 1779201479
+      nanos: 112919458
+    }
+    finished_generating_at {
+      seconds: 1779201479
+      nanos: 112918467
+    }
+    completed_at {
+      seconds: 1779201487
+      nanos: 27309927
+    }
+    generator_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    source_trajectory_step_info {
+      trajectory_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+      step_index: 7
+      metadata_index: 1
+      cascade_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    }
+    step_generation_version: 1
+    last_completed_chunk_at {
+      seconds: 1779201479
+      nanos: 112812318
+    }
+    tool_call_output_tokens: 1997
+    model_info {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    tool_summary: "Create CakePublisher"
+    tool_action: "Creating CakePublisher component"
+    started_at {
+      seconds: 1779201483
+      nanos: 35754319
+    }
+  }
+  file_change {
+    absolute_path_uri: "file:///src/components/CakePublisher.tsx"
+    file_change_type: FILE_CHANGE_TYPE_CREATE
+    replacement_chunks {
+      replacement_content: "import React, { useState } from \"react\";\nimport { Share2, Image as ImageIcon, Copy, AlertCircle, CheckCircle2 } from \"lucide-react\";\n\nexport default function CakePublisher() {\n  const [caption, setCaption] = useState(\"\");\n  const [imageFile, setImageFile] = useState<File | null>(null);\n  const [preview, setPreview] = useState<string | null>(null);\n  const [status, setStatus] = useState<{ type: \'success\' | \'error\' | null, message: string }>({ type: null, message: \"\" });\n\n  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {\n    const file = e.target.files?.[0];\n    if (file) {\n      setImageFile(file);\n      setPreview(URL.createObjectURL(file));\n      setStatus({ type: null, message: \"\" });\n    }\n  };\n\n  const handleShare = async () => {\n    if (!imageFile) {\n      setStatus({ type: \'error\', message: \"\342\232\240\357\270\217 \331\212\330\261\330\254\331\211 \330\247\330\256\330\252\331\212\330\247\330\261 \330\265\331\210\330\261\330\251 \330\247\331\204\331\203\331\212\331\203\330\251 \330\243\331\210\331\204\330\247\331\213!\" });\n      return;\n    }\n\n    setStatus({ type: null, message: \"\" });\n    \n    let textCopied = false;\n\n    // 1. Copy text to clipboard\n    if (caption) {\n      try {\n        await navigator.clipboard.writeText(caption);\n        console.log(\"\330\252\331\205 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \330\250\331\206\330\254\330\247\330\255\");\n        textCopied = true;\n      } catch (err) {\n        console.error(\"\331\201\330\264\331\204 \331\201\331\212 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265:\", err);\n        setStatus({ type: \'error\', message: \"\331\201\330\264\331\204 \331\201\331\212 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265\330\214 \331\212\330\261\330\254\331\211 \330\247\331\204\331\206\330\263\330\256 \331\212\330\257\331\210\331\212\330\247\331\213.\" });\n        return; // Early return on copy fail if we want to be strict, but maybe proceed to share anyway? \n        // Let\'s proceed even if copy fails, maybe they just want to share the image.\n      }\n    }\n\n    // 2. Share using Web Share API\n    const shareData = {\n      title: \"\331\205\331\206\330\264\331\210\330\261 \330\247\331\204\331\203\331\212\331\203\",\n      files: [imageFile],\n    };\n\n    if (navigator.canShare && navigator.canShare(shareData)) {\n      try {\n        await navigator.share(shareData);\n        setStatus({ \n          type: \'success\', \n          message: textCopied \n            ? \"\330\252\331\205 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \331\210\331\201\330\252\330\255 \331\202\330\247\330\246\331\205\330\251 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251 \330\250\331\206\330\254\330\247\330\255! \330\247\331\204\330\265\331\202 \330\247\331\204\331\206\330\265 \331\201\331\212 \330\247\331\204\330\252\330\267\330\250\331\212\331\202.\" \n            : \"\330\252\331\205 \331\201\330\252\330\255 \331\202\330\247\330\246\331\205\330\251 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251 \330\250\331\206\330\254\330\247\330\255!\" \n        });\n      } catch (error) {\n        console.error(\"\330\252\331\205 \330\247\331\204\330\245\331\204\330\272\330\247\330\241 \330\243\331\210 \331\201\330\264\331\204 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251:\", error);\n        // User cancelled or generic error\n      }\n    } else {\n      setStatus({ type: \'error\', message: \"\331\205\330\252\330\265\331\201\330\255\331\203 \331\204\330\247 \331\212\330\257\330\271\331\205 \331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\265\331\210\330\261 \331\205\330\250\330\247\330\264\330\261\330\251. \331\212\330\261\330\254\331\211 \330\247\330\263\330\252\330\256\330\257\330\247\331\205 \331\205\330\252\330\265\331\201\330\255 \331\205\330\257\330\271\331\210\331\205 (\331\205\330\253\331\204 Safari \330\250\330\247\331\204\330\247\331\212\331\201\331\210\331\206).\" });\n    }\n  };\n\n  return (\n    <div className=\"min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-right\" dir=\"rtl\">\n      <div className=\"w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden\">\n        \n        {/* Header */}\n        <div className=\"bg-rose-500 p-6 text-white text-center\">\n          <h2 className=\"text-2xl font-bold flex items-center justify-center gap-2\">\n            <span>\360\237\215\260</span> \331\206\330\270\330\247\331\205 \331\206\330\264\330\261 \330\247\331\204\331\203\331\212\331\203 \330\247\331\204\331\205\331\210\330\255\330\257\n          </h2>\n          <p className=\"text-rose-100 text-sm mt-2\">\n            \330\264\330\247\330\261\331\203 \330\245\330\250\330\257\330\247\330\271\330\247\330\252\331\203 \330\250\330\263\331\207\331\210\331\204\330\251 \330\271\331\204\331\211 \331\203\331\204 \330\247\331\204\331\205\331\206\330\265\330\247\330\252\n          </p>\n        </div>\n\n        <div className=\"p-6 space-y-6\">\n          \n          {/* Status Message */}\n          {status.message && (\n            <div className={`p-4 rounded-lg flex items-start gap-3 ${status.type === \'error\' ? \'bg-red-50 text-red-700 border border-red-200\' : \'bg-green-50 text-green-700 border border-green-200\'}`}>\n              {status.type === \'error\' ? <AlertCircle className=\"w-5 h-5 flex-shrink-0 mt-0.5\" /> : <CheckCircle2 className=\"w-5 h-5 flex-shrink-0 mt-0.5\" />}\n              <p className=\"text-sm font-medium\">{status.message}</p>\n            </div>\n          )}\n\n          {/* Caption Input */}\n          <div className=\"space-y-2\">\n            <label className=\"block text-sm font-semibold text-gray-700\">\n              \331\210\330\265\331\201 \330\247\331\204\331\205\331\206\330\264\331\210\330\261 \331\210\330\247\331\204\331\207\330\247\330\264\330\252\330\247\331\203\330\247\330\252:\n            </label>\n            <textarea\n              rows={4}\n              className=\"w-full p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-shadow resize-none\"\n              placeholder=\"\331\205\330\253\330\247\331\204: \331\203\331\212\331\203\330\251 \330\264\331\210\331\203\331\210\331\204\330\247\330\252\330\251 \330\254\330\247\331\207\330\262\330\251 \331\204\331\204\330\252\331\210\330\265\331\212\331\204... #\331\203\331\212\331\203 #\330\250\330\272\330\257\330\247\330\257\"\n              value={caption}\n              onChange={(e) => setCaption(e.target.value)}\n            />\n          </div>\n\n          {/* Image Input */}\n          <div className=\"space-y-2\">\n            <label className=\"block text-sm font-semibold text-gray-700\">\n              \330\265\331\210\330\261\330\251 \330\247\331\204\331\203\331\212\331\203\330\251:\n            </label>\n            \n            <div className=\"relative group\">\n              {preview ? (\n                 <div className=\"relative rounded-lg overflow-hidden border-2 border-gray-200 group-hover:border-rose-400 transition-colors\">\n                    <img \n                      src={preview} \n                      alt=\"\331\205\330\271\330\247\331\212\331\206\330\251\" \n                      className=\"w-full h-48 object-cover aspect-video\" \n                    />\n                    <div className=\"absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center\">\n                       <span className=\"text-white font-medium flex items-center gap-2\">\n                         <ImageIcon className=\"w-5 h-5\" /> \330\252\330\272\331\212\331\212\330\261 \330\247\331\204\330\265\331\210\330\261\330\251\n                       </span>\n                    </div>\n                    <input \n                      type=\"file\" \n                      accept=\"image/*\" \n                      onChange={handleImageChange} \n                      className=\"absolute inset-0 w-full h-full opacity-0 cursor-pointer\"\n                    />\n                 </div>\n              ) : (\n                <label className=\"flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 hover:border-rose-400 transition-colors\">\n                  <div className=\"flex flex-col items-center justify-center pt-5 pb-6\">\n                    <ImageIcon className=\"w-8 h-8 text-gray-400 mb-2\" />\n                    <p className=\"mb-2 text-sm text-gray-500 font-semibold\">\330\247\330\266\330\272\330\267 \331\204\330\247\330\256\330\252\331\212\330\247\330\261 \330\265\331\210\330\261\330\251</p>\n                    <p className=\"text-xs text-gray-400\">PNG, JPG, GIF</p>\n                  </div>\n                  <input \n                    type=\"file\" \n                    accept=\"image/*\" \n                    className=\"hidden\" \n                    onChange={handleImageChange} \n                  />\n                </label>\n              )}\n            </div>\n          </div>\n\n          {/* Action Button */}\n          <button\n            onClick={handleShare}\n            className=\"w-full py-4 px-6 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl shadow-md font-bold text-lg flex items-center justify-center gap-2 transition-colors focus:ring-4 focus:ring-rose-300\"\n          >\n            <Share2 className=\"w-6 h-6\" />\n            \330\247\331\206\330\264\330\261 \330\247\331\204\330\242\331\206 (\331\206\330\263\330\256 + \331\205\330\264\330\247\330\261\331\203\330\251)\n          </button>\n\n          {/* Hint */}\n          <p className=\"text-xs text-gray-500 text-center leading-relaxed bg-gray-50 p-3 rounded-md\">\n            * \330\271\331\206\330\257 \330\247\331\204\330\266\330\272\330\267 \330\271\331\204\331\211 \330\247\331\204\330\262\330\261\330\214 \330\263\331\212\330\252\331\205 <strong className=\"text-gray-700\">\331\206\330\263\330\256 \330\247\331\204\331\206\330\265</strong> \330\252\331\204\331\202\330\247\330\246\331\212\330\247\331\213 \331\210\331\201\330\252\330\255 \331\202\330\247\330\246\331\205\330\251 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251 \330\250\331\207\330\247\330\252\331\201\331\203. \330\247\330\256\330\252\330\261 \330\247\331\204\330\252\330\267\330\250\331\212\331\202 (\330\247\331\206\330\263\330\252\330\247/\331\201\331\212\330\263/\330\252\331\212\331\203 \330\252\331\210\331\203) \330\253\331\205 \330\247\330\256\330\252\330\261 <strong className=\"text-gray-700\">\"\331\204\330\265\331\202\"</strong>.\n          </p>\n\n        </div>\n      </div>\n    </div>\n  );\n}\n"
+    }
+    diff {
+      unified_diff {
+        lines {
+          text: "import React, { useState } from \"react\";"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "import { Share2, Image as ImageIcon, Copy, AlertCircle, CheckCircle2 } from \"lucide-react\";"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "export default function CakePublisher() {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  const [caption, setCaption] = useState(\"\");"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  const [imageFile, setImageFile] = useState<File | null>(null);"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  const [preview, setPreview] = useState<string | null>(null);"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  const [status, setStatus] = useState<{ type: \'success\' | \'error\' | null, message: string }>({ type: null, message: \"\" });"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    const file = e.target.files?.[0];"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    if (file) {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      setImageFile(file);"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      setPreview(URL.createObjectURL(file));"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      setStatus({ type: null, message: \"\" });"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    }"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  };"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  const handleShare = async () => {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    if (!imageFile) {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      setStatus({ type: \'error\', message: \"\342\232\240\357\270\217 \331\212\330\261\330\254\331\211 \330\247\330\256\330\252\331\212\330\247\330\261 \330\265\331\210\330\261\330\251 \330\247\331\204\331\203\331\212\331\203\330\251 \330\243\331\210\331\204\330\247\331\213!\" });"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      return;"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    }"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    setStatus({ type: null, message: \"\" });"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    let textCopied = false;"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    // 1. Copy text to clipboard"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    if (caption) {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      try {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        await navigator.clipboard.writeText(caption);"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        console.log(\"\330\252\331\205 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \330\250\331\206\330\254\330\247\330\255\");"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        textCopied = true;"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      } catch (err) {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        console.error(\"\331\201\330\264\331\204 \331\201\331\212 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265:\", err);"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        setStatus({ type: \'error\', message: \"\331\201\330\264\331\204 \331\201\331\212 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265\330\214 \331\212\330\261\330\254\331\211 \330\247\331\204\331\206\330\263\330\256 \331\212\330\257\331\210\331\212\330\247\331\213.\" });"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        return; // Early return on copy fail if we want to be strict, but maybe proceed to share anyway? "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        // Let\'s proceed even if copy fails, maybe they just want to share the image."
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      }"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    }"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    // 2. Share using Web Share API"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    const shareData = {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      title: \"\331\205\331\206\330\264\331\210\330\261 \330\247\331\204\331\203\331\212\331\203\","
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      files: [imageFile],"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    };"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    if (navigator.canShare && navigator.canShare(shareData)) {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      try {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        await navigator.share(shareData);"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        setStatus({ "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          type: \'success\', "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          message: textCopied "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            ? \"\330\252\331\205 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \331\210\331\201\330\252\330\255 \331\202\330\247\330\246\331\205\330\251 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251 \330\250\331\206\330\254\330\247\330\255! \330\247\331\204\330\265\331\202 \330\247\331\204\331\206\330\265 \331\201\331\212 \330\247\331\204\330\252\330\267\330\250\331\212\331\202.\" "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            : \"\330\252\331\205 \331\201\330\252\330\255 \331\202\330\247\330\246\331\205\330\251 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251 \330\250\331\206\330\254\330\247\330\255!\" "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        });"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      } catch (error) {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        console.error(\"\330\252\331\205 \330\247\331\204\330\245\331\204\330\272\330\247\330\241 \330\243\331\210 \331\201\330\264\331\204 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251:\", error);"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        // User cancelled or generic error"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      }"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    } else {"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      setStatus({ type: \'error\', message: \"\331\205\330\252\330\265\331\201\330\255\331\203 \331\204\330\247 \331\212\330\257\330\271\331\205 \331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\265\331\210\330\261 \331\205\330\250\330\247\330\264\330\261\330\251. \331\212\330\261\330\254\331\211 \330\247\330\263\330\252\330\256\330\257\330\247\331\205 \331\205\330\252\330\265\331\201\330\255 \331\205\330\257\330\271\331\210\331\205 (\331\205\330\253\331\204 Safari \330\250\330\247\331\204\330\247\331\212\331\201\331\210\331\206).\" });"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    }"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  };"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  return ("
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    <div className=\"min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-right\" dir=\"rtl\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      <div className=\"w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        {/* Header */}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        <div className=\"bg-rose-500 p-6 text-white text-center\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          <h2 className=\"text-2xl font-bold flex items-center justify-center gap-2\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            <span>\360\237\215\260</span> \331\206\330\270\330\247\331\205 \331\206\330\264\330\261 \330\247\331\204\331\203\331\212\331\203 \330\247\331\204\331\205\331\210\330\255\330\257"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          </h2>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          <p className=\"text-rose-100 text-sm mt-2\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            \330\264\330\247\330\261\331\203 \330\245\330\250\330\257\330\247\330\271\330\247\330\252\331\203 \330\250\330\263\331\207\331\210\331\204\330\251 \330\271\331\204\331\211 \331\203\331\204 \330\247\331\204\331\205\331\206\330\265\330\247\330\252"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          </p>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        <div className=\"p-6 space-y-6\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          {/* Status Message */}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          {status.message && ("
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            <div className={`p-4 rounded-lg flex items-start gap-3 ${status.type === \'error\' ? \'bg-red-50 text-red-700 border border-red-200\' : \'bg-green-50 text-green-700 border border-green-200\'}`}>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              {status.type === \'error\' ? <AlertCircle className=\"w-5 h-5 flex-shrink-0 mt-0.5\" /> : <CheckCircle2 className=\"w-5 h-5 flex-shrink-0 mt-0.5\" />}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              <p className=\"text-sm font-medium\">{status.message}</p>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          )}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          {/* Caption Input */}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          <div className=\"space-y-2\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            <label className=\"block text-sm font-semibold text-gray-700\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              \331\210\330\265\331\201 \330\247\331\204\331\205\331\206\330\264\331\210\330\261 \331\210\330\247\331\204\331\207\330\247\330\264\330\252\330\247\331\203\330\247\330\252:"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            </label>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            <textarea"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              rows={4}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              className=\"w-full p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-shadow resize-none\""
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              placeholder=\"\331\205\330\253\330\247\331\204: \331\203\331\212\331\203\330\251 \330\264\331\210\331\203\331\210\331\204\330\247\330\252\330\251 \330\254\330\247\331\207\330\262\330\251 \331\204\331\204\330\252\331\210\330\265\331\212\331\204... #\331\203\331\212\331\203 #\330\250\330\272\330\257\330\247\330\257\""
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              value={caption}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              onChange={(e) => setCaption(e.target.value)}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            />"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          {/* Image Input */}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          <div className=\"space-y-2\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            <label className=\"block text-sm font-semibold text-gray-700\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              \330\265\331\210\330\261\330\251 \330\247\331\204\331\203\331\212\331\203\330\251:"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            </label>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            <div className=\"relative group\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              {preview ? ("
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                 <div className=\"relative rounded-lg overflow-hidden border-2 border-gray-200 group-hover:border-rose-400 transition-colors\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    <img "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                      src={preview} "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                      alt=\"\331\205\330\271\330\247\331\212\331\206\330\251\" "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                      className=\"w-full h-48 object-cover aspect-video\" "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    />"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    <div className=\"absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                       <span className=\"text-white font-medium flex items-center gap-2\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                         <ImageIcon className=\"w-5 h-5\" /> \330\252\330\272\331\212\331\212\330\261 \330\247\331\204\330\265\331\210\330\261\330\251"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                       </span>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    <input "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                      type=\"file\" "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                      accept=\"image/*\" "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                      onChange={handleImageChange} "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                      className=\"absolute inset-0 w-full h-full opacity-0 cursor-pointer\""
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    />"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                 </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              ) : ("
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                <label className=\"flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 hover:border-rose-400 transition-colors\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                  <div className=\"flex flex-col items-center justify-center pt-5 pb-6\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    <ImageIcon className=\"w-8 h-8 text-gray-400 mb-2\" />"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    <p className=\"mb-2 text-sm text-gray-500 font-semibold\">\330\247\330\266\330\272\330\267 \331\204\330\247\330\256\330\252\331\212\330\247\330\261 \330\265\331\210\330\261\330\251</p>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    <p className=\"text-xs text-gray-400\">PNG, JPG, GIF</p>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                  </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                  <input "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    type=\"file\" "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    accept=\"image/*\" "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    className=\"hidden\" "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                    onChange={handleImageChange} "
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                  />"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "                </label>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "              )}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          {/* Action Button */}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          <button"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            onClick={handleShare}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            className=\"w-full py-4 px-6 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl shadow-md font-bold text-lg flex items-center justify-center gap-2 transition-colors focus:ring-4 focus:ring-rose-300\""
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          >"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            <Share2 className=\"w-6 h-6\" />"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            \330\247\331\206\330\264\330\261 \330\247\331\204\330\242\331\206 (\331\206\330\263\330\256 + \331\205\330\264\330\247\330\261\331\203\330\251)"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          </button>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          {/* Hint */}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          <p className=\"text-xs text-gray-500 text-center leading-relaxed bg-gray-50 p-3 rounded-md\">"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "            * \330\271\331\206\330\257 \330\247\331\204\330\266\330\272\330\267 \330\271\331\204\331\211 \330\247\331\204\330\262\330\261\330\214 \330\263\331\212\330\252\331\205 <strong className=\"text-gray-700\">\331\206\330\263\330\256 \330\247\331\204\331\206\330\265</strong> \330\252\331\204\331\202\330\247\330\246\331\212\330\247\331\213 \331\210\331\201\330\252\330\255 \331\202\330\247\330\246\331\205\330\251 \330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251 \330\250\331\207\330\247\330\252\331\201\331\203. \330\247\330\256\330\252\330\261 \330\247\331\204\330\252\330\267\330\250\331\212\331\202 (\330\247\331\206\330\263\330\252\330\247/\331\201\331\212\330\263/\330\252\331\212\331\203 \330\252\331\210\331\203) \330\253\331\205 \330\247\330\256\330\252\330\261 <strong className=\"text-gray-700\">\"\331\204\330\265\331\202\"</strong>."
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "          </p>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "        </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "      </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "    </div>"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "  );"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "}"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+      }
+    }
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_PLANNER_RESPONSE
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201487
+      nanos: 29878926
+    }
+    source: CORTEX_STEP_SOURCE_MODEL
+    viewable_at {
+      seconds: 1779201496
+      nanos: 610549207
+    }
+    finished_generating_at {
+      seconds: 1779201496
+      nanos: 619814448
+    }
+    completed_at {
+      seconds: 1779201496
+      nanos: 619814448
+    }
+    model_usage {
+      input_tokens: 6411
+      output_tokens: 130
+      cache_read_tokens: 20371
+      message_id: "z3UMaveED5WZvdIP8quigQM"
+      thinking_output_tokens: 21
+      response_output_tokens: 109
+      response_id: "z3UMaveED5WZvdIP8quigQM"
+    }
+    generator_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    source_trajectory_step_info {
+      trajectory_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+      step_index: 8
+      metadata_index: 2
+      cascade_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    }
+    step_generation_version: 1
+    model_info {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    started_at {
+      seconds: 1779201496
+      nanos: 619814448
+    }
+  }
+  planner_response {
+    stop_reason: STOP_REASON_STOP_PATTERN
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_FILE_CHANGE
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201496
+      nanos: 610582837
+    }
+    source: CORTEX_STEP_SOURCE_MODEL
+    arguments_order: "Instruction"
+    arguments_order: "ReplacementContent"
+    arguments_order: "TargetContent"
+    arguments_order: "TargetFile"
+    arguments_order: "toolAction"
+    arguments_order: "toolSummary"
+    viewable_at {
+      seconds: 1779201496
+      nanos: 619659348
+    }
+    finished_generating_at {
+      seconds: 1779201496
+      nanos: 619658438
+    }
+    completed_at {
+      seconds: 1779201499
+      nanos: 271123440
+    }
+    generator_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    source_trajectory_step_info {
+      trajectory_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+      step_index: 9
+      metadata_index: 2
+      cascade_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    }
+    step_generation_version: 1
+    last_completed_chunk_at {
+      seconds: 1779201496
+      nanos: 619633278
+    }
+    tool_call_output_tokens: 94
+    model_info {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    tool_summary: "Update App.tsx"
+    tool_action: "Updating App.tsx to use CakePublisher"
+    started_at {
+      seconds: 1779201496
+      nanos: 620212638
+    }
+  }
+  file_change {
+    absolute_path_uri: "file:///src/App.tsx"
+    file_change_type: FILE_CHANGE_TYPE_EDIT
+    replacement_chunks {
+      target_content: "export default function App() {\n  return <div></div>;\n}"
+      replacement_content: "import CakePublisher from \'./components/CakePublisher\';\n\nexport default function App() {\n  return <CakePublisher />;\n}"
+    }
+    diff {
+      end_line: 8
+      unified_diff {
+        lines {
+          text: "/**"
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          text: " * @license"
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          text: " * SPDX-License-Identifier: Apache-2.0"
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          text: " */"
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          text: "import CakePublisher from \'./components/CakePublisher\';"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "export default function App() {"
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          text: "  return <div></div>;"
+          type: UNIFIED_DIFF_LINE_TYPE_DELETE
+        }
+        lines {
+          text: "  return <CakePublisher />;"
+          type: UNIFIED_DIFF_LINE_TYPE_INSERT
+        }
+        lines {
+          text: "}"
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+        lines {
+          type: UNIFIED_DIFF_LINE_TYPE_UNCHANGED
+        }
+      }
+    }
+    instruction: "Use CakePublisher in App"
+    replacement_infos {
+      original_chunk {
+        target_content: "export default function App() {\n  return <div></div>;\n}"
+        replacement_content: "import CakePublisher from \'./components/CakePublisher\';\n\nexport default function App() {\n  return <CakePublisher />;\n}"
+      }
+      num_matches: 1
+    }
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_PLANNER_RESPONSE
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201499
+      nanos: 273448440
+    }
+    source: CORTEX_STEP_SOURCE_MODEL
+    viewable_at {
+      seconds: 1779201543
+      nanos: 945396531
+    }
+    finished_generating_at {
+      seconds: 1779201544
+      nanos: 217051797
+    }
+    completed_at {
+      seconds: 1779201544
+      nanos: 217051797
+    }
+    model_usage {
+      input_tokens: 2690
+      output_tokens: 125
+      cache_read_tokens: 24439
+      message_id: "23UMapj0HK-rkdUP4afm2QQ"
+      thinking_output_tokens: 93
+      response_output_tokens: 32
+      response_id: "23UMapj0HK-rkdUP4afm2QQ"
+    }
+    generator_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    source_trajectory_step_info {
+      trajectory_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+      step_index: 10
+      metadata_index: 3
+      cascade_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    }
+    step_generation_version: 1
+    model_info {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    started_at {
+      seconds: 1779201544
+      nanos: 217051797
+    }
+  }
+  planner_response {
+    thinking: "**Verifying Project Dependencies**\n\nI\'m now running `compile_applet` to check for any issues. The use of Tailwind CSS classes and `lucide-react`, which are included in the standard setup and dependencies, respectively, should make the compilation straightforward. I need to make sure those dependencies are all available, given how essential they are for the applet.\n\n\n"
+    thinking_duration {
+      nanos: 271500186
+    }
+    stop_reason: STOP_REASON_STOP_PATTERN
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_SYSTEM_MESSAGE
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201544
+      nanos: 206302699
+    }
+    source: CORTEX_STEP_SOURCE_SYSTEM
+    arguments_order: "toolAction"
+    arguments_order: "toolSummary"
+    viewable_at {
+      seconds: 1779201544
+      nanos: 216951867
+    }
+    finished_generating_at {
+      seconds: 1779201544
+      nanos: 216951217
+    }
+    completed_at {
+      seconds: 1779201548
+      nanos: 855784179
+    }
+    generator_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    source_trajectory_step_info {
+      trajectory_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+      step_index: 11
+      metadata_index: 3
+      cascade_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    }
+    step_generation_version: 1
+    last_completed_chunk_at {
+      seconds: 1779201544
+      nanos: 216940357
+    }
+    tool_call_output_tokens: 18
+    model_info {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    tool_summary: "Compile the applet"
+    tool_action: "Compiling the applet"
+    started_at {
+      seconds: 1779201544
+      nanos: 217539246
+    }
+  }
+  system_message {
+    message: "Compiled application"
+  }
+}
+steps {
+  type: CORTEX_STEP_TYPE_PLANNER_RESPONSE
+  status: CORTEX_STEP_STATUS_DONE
+  metadata {
+    created_at {
+      seconds: 1779201548
+      nanos: 858069838
+    }
+    source: CORTEX_STEP_SOURCE_MODEL
+    viewable_at {
+      seconds: 1779201594
+      nanos: 643680739
+    }
+    finished_generating_at {
+      seconds: 1779201597
+      nanos: 319629147
+    }
+    completed_at {
+      seconds: 1779201597
+      nanos: 319629147
+    }
+    model_usage {
+      input_tokens: 2903
+      output_tokens: 293
+      cache_read_tokens: 24500
+      message_id: "DXYMau_jA6X7xN8PhKz3kAc"
+      thinking_output_tokens: 35
+      response_output_tokens: 258
+      response_id: "DXYMau_jA6X7xN8PhKz3kAc"
+    }
+    generator_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    source_trajectory_step_info {
+      trajectory_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+      step_index: 12
+      metadata_index: 4
+      cascade_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+    }
+    step_generation_version: 1
+    model_info {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    started_at {
+      seconds: 1779201597
+      nanos: 319629147
+    }
+  }
+  planner_response {
+    modified_response: "\331\204\331\202\330\257 \331\202\331\205\330\252 \330\250\330\245\330\266\330\247\331\201\330\251 \331\205\331\203\331\210\331\206 \"\331\206\330\270\330\247\331\205 \331\206\330\264\330\261 \330\247\331\204\331\203\331\212\331\203 \330\247\331\204\331\205\331\210\330\255\330\257\" (Cake Publisher) \330\245\331\204\331\211 \330\252\330\267\330\250\331\212\331\202\331\203 \330\250\331\206\330\254\330\247\330\255\330\214 \331\210 \331\202\331\205\330\252 \330\243\331\212\330\266\330\247\331\213 \330\250\330\252\330\267\331\210\331\212\330\261 \330\252\330\265\331\205\331\212\331\205\331\207 \330\250\330\247\330\263\330\252\330\256\330\257\330\247\331\205 \330\245\330\267\330\247\330\261 \330\271\331\205\331\204 `Tailwind CSS` \331\204\331\212\331\203\331\210\331\206 \330\243\331\203\330\253\330\261 \330\254\330\247\330\260\330\250\331\212\330\251 \331\210\330\243\330\263\331\207\331\204 \331\201\331\212 \330\247\331\204\330\247\330\263\330\252\330\256\330\257\330\247\331\205 \331\205\330\271 \330\247\331\204\330\255\331\201\330\247\330\270 \330\271\331\204\331\211 \331\206\331\201\330\263 \330\247\331\204\331\210\330\270\330\247\330\246\331\201 \331\210\330\247\331\204\330\264\330\261\330\255 \330\247\331\204\330\260\331\212 \331\202\330\257\331\205\330\252\331\207.\n\n\330\247\331\204\330\252\330\267\330\250\331\212\331\202 \330\247\331\204\330\242\331\206 \331\212\330\255\330\252\331\210\331\212 \330\271\331\204\331\211:\n1. **\331\210\330\247\330\254\331\207\330\251 \331\205\330\255\330\263\331\206\330\251:** \330\252\330\265\331\205\331\212\331\205 \330\271\330\265\330\261\331\212 \331\210\331\205\330\261\330\252\330\250 \331\212\330\263\331\207\331\204 \330\271\331\204\331\211 \330\247\331\204\331\205\330\263\330\252\330\256\330\257\331\205\331\212\331\206 \330\261\331\201\330\271 \330\247\331\204\330\265\331\210\330\261 \331\210\330\245\330\266\330\247\331\201\330\251 \330\247\331\204\331\206\330\265\331\210\330\265.\n2. **\331\206\331\201\330\263 \330\247\331\204\331\205\331\206\330\267\331\202 \330\247\331\204\330\250\330\261\331\205\330\254\331\212:** \331\212\330\257\330\271\331\205 \331\206\330\263\330\256 \330\247\331\204\331\206\330\265 \330\245\331\204\331\211 \330\247\331\204\330\255\330\247\331\201\330\270\330\251 \330\252\331\204\331\202\330\247\330\246\331\212\330\247\331\213 \331\210\331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\330\265\331\210\330\261\330\251 \330\271\330\250\330\261 \331\205\331\206\330\265\330\247\330\252 \330\247\331\204\330\252\331\210\330\247\330\265\331\204 (Instagram, TikTok\330\214 \330\247\331\204\330\256) \330\250\330\247\330\263\330\252\330\256\330\257\330\247\331\205 \331\202\330\247\330\246\331\205\330\251 \331\205\330\264\330\247\330\261\331\203\330\251 \330\247\331\204\331\206\330\270\330\247\331\205 \330\247\331\204\330\243\330\265\331\204\331\212\330\251 (\330\256\330\247\330\265\330\251 \331\204\330\243\330\254\331\207\330\262\330\251 iOS).\n3. **\330\252\331\206\330\250\331\212\331\207\330\247\330\252 \331\204\331\204\331\205\330\263\330\252\330\256\330\257\331\205:** \330\252\331\205 \330\245\330\266\330\247\331\201\330\251 \331\202\330\263\331\205 \330\265\330\272\331\212\330\261 \331\212\330\271\330\261\330\266 \330\255\330\247\331\204\330\251 \330\247\331\204\330\271\331\205\331\204\331\212\330\251 (\330\247\331\204\331\206\330\254\330\247\330\255 \331\201\331\212 \330\247\331\204\331\206\330\263\330\256 \331\210\330\247\331\204\331\205\330\264\330\247\330\261\331\203\330\251\330\214 \330\243\331\210 \330\261\330\263\330\247\330\246\331\204 \330\247\331\204\330\256\330\267\330\243) \331\205\330\271 \330\243\331\212\331\202\331\210\331\206\330\247\330\252 \330\252\331\210\330\266\331\212\330\255\331\212\330\251.\n\n\331\212\331\205\331\203\331\206\331\203 \330\247\331\204\330\242\331\206 \331\205\330\271\330\247\331\212\331\206\330\251 \330\247\331\204\330\252\330\267\330\250\331\212\331\202\330\214 \331\210\331\212\331\217\331\201\330\266\331\204 \330\252\330\254\330\261\330\250\330\252\331\207 \330\271\331\204\331\211 \330\247\331\204\331\207\330\247\330\252\331\201 (\331\205\330\253\331\204 iPhone/Safari) \331\204\331\204\330\247\330\263\330\252\331\201\330\247\330\257\330\251 \330\247\331\204\331\203\330\247\331\205\331\204\330\251 \331\205\331\206 \331\205\331\212\330\262\330\251 Share API. \331\204\330\247 \330\252\330\252\330\261\330\257\330\257 \330\245\331\206 \331\203\330\247\331\206 \331\204\330\257\331\212\331\203 \330\243\331\212 \330\252\330\271\330\257\331\212\331\204\330\247\330\252 \330\243\331\210 \330\245\330\266\330\247\331\201\330\247\330\252 \330\243\330\256\330\261\331\211 \330\252\331\210\330\257 \330\245\330\257\330\261\330\247\330\254\331\207\330\247!"
+    stop_reason: STOP_REASON_STOP_PATTERN
+  }
+}
+generator_metadata {
+  step_indices: 12
+  planner_config {
+    plan_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    max_output_tokens: 32768
+    no_tool_explanation: true
+    tool_config {
+      code {
+        disable_extensions: ".ipynb"
+        apply_edits: true
+        replace_content_tool_config {
+          max_fuzzy_edit_distance_fraction: 0.001
+          allow_partial_replacement_success: true
+          fast_apply_fallback_config {
+            enabled: true
+            prompt_unchanged_threshold: 5
+            content_view_radius_lines: 200
+            content_edit_radius_lines: 5
+            fast_apply_model: MODEL_GOOGLE_GEMINI_2_5_FLASH
+          }
+          show_triggered_memories: true
+          disable_allow_multiple: false
+          use_line_range: true
+        }
+        auto_fix_lints_config {
+          enabled: false
+          notifying_prompt: "As IDE feedback, the following lint errors may be related to your recent edits up to this point. Consider whether they deserve immediate attention. If worth addressing, clearly comment on them and/or fix them. Be explicit in acknowledging lints and explaining your fix\'s approach. AVOID unproductive loops; if you detect yourself repeatedly creating/fixing lints in a short period, offer some thoughts but MOVE ON."
+        }
+        allow_edit_gitignore: false
+        use_replace_content_propose_code: false
+        classify_edit: false
+        skip_await_lint_errors: false
+        provide_importance: false
+        use_sed_edit: false
+      }
+      intent {
+        intent_model: MODEL_GOOGLE_GEMINI_2_5_FLASH
+        max_context_tokens: 40000
+      }
+      grep {
+        max_grep_results: 50
+        use_code_search: false
+        disable_fallback_to_local_execution: false
+      }
+      find {
+        max_find_results: 50
+        use_code_search: false
+        disable_fallback_to_local_execution: false
+        force_disable: true
+      }
+      run_command {
+        max_chars_command_stdout: 8192
+        force_disable: false
+        auto_command_config {
+          auto_execution_policy: CASCADE_COMMANDS_AUTO_EXECUTION_EAGER
+        }
+        enable_ide_terminal_execution: false
+        shell_name: "bash"
+        shell_path: "bash"
+        forbid_search_commands: false
+        force_go_terminal_execution: false
+        enable_pty: false
+        enable_persistent_mode: false
+      }
+      view_file {
+        allow_view_gitignore: false
+        split_outline_tool: true
+        max_total_outline_bytes: 8192
+        show_full_file_bytes: 8192
+        max_bytes_per_outline_item: 512
+        show_triggered_memories: true
+        max_lines_per_view: 800
+        include_line_numbers: true
+      }
+      suggested_response {
+        force_disable: true
+      }
+      search_web {
+        force_disable: false
+        third_party_config {
+          provider: THIRD_PARTY_WEB_SEARCH_PROVIDER_GEMINI
+        }
+      }
+      mcp {
+        force_disable: false
+        max_output_bytes: 4096
+      }
+      list_dir {
+      }
+      command_status {
+        use_delta: true
+        max_output_characters: 8192
+        min_output_characters: 1024
+        max_wait_duration_seconds: 300
+        output_stabilization_duration_seconds: 5
+        enable_input_detection: true
+        input_detection_model: MODEL_GOOGLE_GEMINI_2_5_FLASH_LITE
+      }
+      antigravity_browser {
+        enabled: false
+        capture_browser_screenshot {
+          enable_saving: true
+        }
+        browser_subagent {
+          mode: BROWSER_SUBAGENT_MODE_SUBAGENT_ONLY
+          browser_subagent_model: MODEL_PLACEHOLDER_M18
+          use_detailed_converter: true
+          disable_onboarding: false
+          subagent_reminder_mode {
+            verify_screenshots {
+            }
+          }
+          max_context_tokens: 67420
+          context_config {
+            type: CONTEXT_TYPE_WITH_MARKDOWN_TRAJECTORY_SUMMARY
+            max_chars: 10000
+          }
+          dom_extraction_config {
+            include_coordinates: true
+          }
+          low_level_tools_config {
+            enable_low_level_tools_instructions: true
+            enable_mouse_tools: true
+          }
+          enable_scratchpad: true
+        }
+        click_browser_pixel {
+          click_feedback {
+            display_color: "red"
+            red: 255
+            green: 0
+            blue: 0
+            alpha: 255
+            radius: 25
+            enabled: true
+            feedback_type: FEEDBACK_TYPE_MOUSE_POINTER
+          }
+        }
+        tool_set_mode: BROWSER_TOOL_SET_MODE_ALL_INPUT_PIXEL_OUTPUT
+        disable_open_url: false
+        browser_state_diffing_config {
+          capture_agent_action_diffs: true
+          include_dom_tree_in_diffs: false
+        }
+        variable_wait_tool: true
+        dom_extraction_config {
+          include_coordinates: true
+        }
+        disable_workspace_api: false
+        browser_list_network_requests_tool_config {
+          enabled: true
+        }
+        browser_get_network_request_tool_config {
+          enabled: true
+        }
+        use_antigravity_as_browser_prompting: false
+        enable_refresh_tool: false
+        disable_read_browser_page: false
+        use_extended_timeout: false
+        log_timeout_errors_instead_of_sentry: false
+        skip_permission_checks: false
+        display_on_crd: true
+        generate_recording_synchronously: false
+        enable_browser_subagent_v2: false
+      }
+      code_search {
+        force_disable: false
+      }
+      internal_search {
+        max_results: 10
+        max_content_length: 5000
+      }
+      notify_user {
+        artifact_review_mode: ARTIFACT_REVIEW_MODE_ALWAYS
+      }
+      finish {
+      }
+      notebook_edit {
+        enabled: false
+      }
+      invoke_subagent {
+        enabled: false
+        max_nesting_depth: 10
+        allow_task_mode: false
+        always_inherit_model: true
+      }
+      generate_image {
+        output_directory: "/src/assets/images"
+      }
+      permission_config {
+        enterprise_config {
+          enforce_workspace_validation: true
+        }
+        effective_grants {
+        }
+      }
+      auto_allow_all_interactions: false
+    }
+    ephemeral_messages_config {
+      enabled: false
+      persistence_level: EPHEMERAL_MESSAGE_PERSISTENCE_LEVEL_LATEST_ONLY
+      browser_ephemeral_options: BROWSER_EPHEMERAL_OPTION_SCREENSHOT
+      browser_ephemeral_options: BROWSER_EPHEMERAL_OPTION_DOM
+      use_allowlist: true
+    }
+    google {
+      planner_mode: CONVERSATIONAL_PLANNER_MODE_DEFAULT
+      eval_mode: false
+      agentic_mode: false
+    }
+    custom_model_info_override {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    retry_config {
+      model_output_retry {
+        max_retries: 4
+        forbid_tool_use: true
+      }
+      api_retry {
+        max_retries: 2
+        initial_sleep_duration_ms: 1000
+        exponential_multiplier: 2.0
+        include_error_feedback: true
+        range: 0.4
+      }
+    }
+    knowledge_config {
+      enabled: false
+      model: MODEL_PLACEHOLDER_M18
+      max_context_tokens: 200000
+      max_invocations: 20
+      min_turns_between_knowledge_generation: 10000
+      max_knowledge_items: 20
+      max_artifacts_per_ki: 20
+      max_title_length: 100
+      max_summary_length: 1000
+    }
+    no_tool_summary: false
+    no_wait_for_previous_tools: false
+    disable_loop_detection: false
+  }
+  execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+}
+generator_metadata {
+  step_indices: 10
+  step_indices: 11
+  planner_config {
+    plan_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    max_output_tokens: 32768
+    no_tool_explanation: true
+    tool_config {
+      code {
+        disable_extensions: ".ipynb"
+        apply_edits: true
+        replace_content_tool_config {
+          max_fuzzy_edit_distance_fraction: 0.001
+          allow_partial_replacement_success: true
+          fast_apply_fallback_config {
+            enabled: true
+            prompt_unchanged_threshold: 5
+            content_view_radius_lines: 200
+            content_edit_radius_lines: 5
+            fast_apply_model: MODEL_GOOGLE_GEMINI_2_5_FLASH
+          }
+          show_triggered_memories: true
+          disable_allow_multiple: false
+          use_line_range: true
+        }
+        auto_fix_lints_config {
+          enabled: false
+          notifying_prompt: "As IDE feedback, the following lint errors may be related to your recent edits up to this point. Consider whether they deserve immediate attention. If worth addressing, clearly comment on them and/or fix them. Be explicit in acknowledging lints and explaining your fix\'s approach. AVOID unproductive loops; if you detect yourself repeatedly creating/fixing lints in a short period, offer some thoughts but MOVE ON."
+        }
+        allow_edit_gitignore: false
+        use_replace_content_propose_code: false
+        classify_edit: false
+        skip_await_lint_errors: false
+        provide_importance: false
+        use_sed_edit: false
+      }
+      intent {
+        intent_model: MODEL_GOOGLE_GEMINI_2_5_FLASH
+        max_context_tokens: 40000
+      }
+      grep {
+        max_grep_results: 50
+        use_code_search: false
+        disable_fallback_to_local_execution: false
+      }
+      find {
+        max_find_results: 50
+        use_code_search: false
+        disable_fallback_to_local_execution: false
+        force_disable: true
+      }
+      run_command {
+        max_chars_command_stdout: 8192
+        force_disable: false
+        auto_command_config {
+          auto_execution_policy: CASCADE_COMMANDS_AUTO_EXECUTION_EAGER
+        }
+        enable_ide_terminal_execution: false
+        shell_name: "bash"
+        shell_path: "bash"
+        forbid_search_commands: false
+        force_go_terminal_execution: false
+        enable_pty: false
+        enable_persistent_mode: false
+      }
+      view_file {
+        allow_view_gitignore: false
+        split_outline_tool: true
+        max_total_outline_bytes: 8192
+        show_full_file_bytes: 8192
+        max_bytes_per_outline_item: 512
+        show_triggered_memories: true
+        max_lines_per_view: 800
+        include_line_numbers: true
+      }
+      suggested_response {
+        force_disable: true
+      }
+      search_web {
+        force_disable: false
+        third_party_config {
+          provider: THIRD_PARTY_WEB_SEARCH_PROVIDER_GEMINI
+        }
+      }
+      mcp {
+        force_disable: false
+        max_output_bytes: 4096
+      }
+      list_dir {
+      }
+      command_status {
+        use_delta: true
+        max_output_characters: 8192
+        min_output_characters: 1024
+        max_wait_duration_seconds: 300
+        output_stabilization_duration_seconds: 5
+        enable_input_detection: true
+        input_detection_model: MODEL_GOOGLE_GEMINI_2_5_FLASH_LITE
+      }
+      antigravity_browser {
+        enabled: false
+        capture_browser_screenshot {
+          enable_saving: true
+        }
+        browser_subagent {
+          mode: BROWSER_SUBAGENT_MODE_SUBAGENT_ONLY
+          browser_subagent_model: MODEL_PLACEHOLDER_M18
+          use_detailed_converter: true
+          disable_onboarding: false
+          subagent_reminder_mode {
+            verify_screenshots {
+            }
+          }
+          max_context_tokens: 67420
+          context_config {
+            type: CONTEXT_TYPE_WITH_MARKDOWN_TRAJECTORY_SUMMARY
+            max_chars: 10000
+          }
+          dom_extraction_config {
+            include_coordinates: true
+          }
+          low_level_tools_config {
+            enable_low_level_tools_instructions: true
+            enable_mouse_tools: true
+          }
+          enable_scratchpad: true
+        }
+        click_browser_pixel {
+          click_feedback {
+            display_color: "red"
+            red: 255
+            green: 0
+            blue: 0
+            alpha: 255
+            radius: 25
+            enabled: true
+            feedback_type: FEEDBACK_TYPE_MOUSE_POINTER
+          }
+        }
+        tool_set_mode: BROWSER_TOOL_SET_MODE_ALL_INPUT_PIXEL_OUTPUT
+        disable_open_url: false
+        browser_state_diffing_config {
+          capture_agent_action_diffs: true
+          include_dom_tree_in_diffs: false
+        }
+        variable_wait_tool: true
+        dom_extraction_config {
+          include_coordinates: true
+        }
+        disable_workspace_api: false
+        browser_list_network_requests_tool_config {
+          enabled: true
+        }
+        browser_get_network_request_tool_config {
+          enabled: true
+        }
+        use_antigravity_as_browser_prompting: false
+        enable_refresh_tool: false
+        disable_read_browser_page: false
+        use_extended_timeout: false
+        log_timeout_errors_instead_of_sentry: false
+        skip_permission_checks: false
+        display_on_crd: true
+        generate_recording_synchronously: false
+        enable_browser_subagent_v2: false
+      }
+      code_search {
+        force_disable: false
+      }
+      internal_search {
+        max_results: 10
+        max_content_length: 5000
+      }
+      notify_user {
+        artifact_review_mode: ARTIFACT_REVIEW_MODE_ALWAYS
+      }
+      finish {
+      }
+      notebook_edit {
+        enabled: false
+      }
+      invoke_subagent {
+        enabled: false
+        max_nesting_depth: 10
+        allow_task_mode: false
+        always_inherit_model: true
+      }
+      generate_image {
+        output_directory: "/src/assets/images"
+      }
+      permission_config {
+        enterprise_config {
+          enforce_workspace_validation: true
+        }
+        effective_grants {
+        }
+      }
+      auto_allow_all_interactions: false
+    }
+    ephemeral_messages_config {
+      enabled: false
+      persistence_level: EPHEMERAL_MESSAGE_PERSISTENCE_LEVEL_LATEST_ONLY
+      browser_ephemeral_options: BROWSER_EPHEMERAL_OPTION_SCREENSHOT
+      browser_ephemeral_options: BROWSER_EPHEMERAL_OPTION_DOM
+      use_allowlist: true
+    }
+    google {
+      planner_mode: CONVERSATIONAL_PLANNER_MODE_DEFAULT
+      eval_mode: false
+      agentic_mode: false
+    }
+    custom_model_info_override {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    retry_config {
+      model_output_retry {
+        max_retries: 4
+        forbid_tool_use: true
+      }
+      api_retry {
+        max_retries: 2
+        initial_sleep_duration_ms: 1000
+        exponential_multiplier: 2.0
+        include_error_feedback: true
+        range: 0.4
+      }
+    }
+    knowledge_config {
+      enabled: false
+      model: MODEL_PLACEHOLDER_M18
+      max_context_tokens: 200000
+      max_invocations: 20
+      min_turns_between_knowledge_generation: 10000
+      max_knowledge_items: 20
+      max_artifacts_per_ki: 20
+      max_title_length: 100
+      max_summary_length: 1000
+    }
+    no_tool_summary: false
+    no_wait_for_previous_tools: false
+    disable_loop_detection: false
+  }
+  execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+}
+generator_metadata {
+  step_indices: 8
+  step_indices: 9
+  planner_config {
+    plan_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    max_output_tokens: 32768
+    no_tool_explanation: true
+    tool_config {
+      code {
+        disable_extensions: ".ipynb"
+        apply_edits: true
+        replace_content_tool_config {
+          max_fuzzy_edit_distance_fraction: 0.001
+          allow_partial_replacement_success: true
+          fast_apply_fallback_config {
+            enabled: true
+            prompt_unchanged_threshold: 5
+            content_view_radius_lines: 200
+            content_edit_radius_lines: 5
+            fast_apply_model: MODEL_GOOGLE_GEMINI_2_5_FLASH
+          }
+          show_triggered_memories: true
+          disable_allow_multiple: false
+          use_line_range: true
+        }
+        auto_fix_lints_config {
+          enabled: false
+          notifying_prompt: "As IDE feedback, the following lint errors may be related to your recent edits up to this point. Consider whether they deserve immediate attention. If worth addressing, clearly comment on them and/or fix them. Be explicit in acknowledging lints and explaining your fix\'s approach. AVOID unproductive loops; if you detect yourself repeatedly creating/fixing lints in a short period, offer some thoughts but MOVE ON."
+        }
+        allow_edit_gitignore: false
+        use_replace_content_propose_code: false
+        classify_edit: false
+        skip_await_lint_errors: false
+        provide_importance: false
+        use_sed_edit: false
+      }
+      intent {
+        intent_model: MODEL_GOOGLE_GEMINI_2_5_FLASH
+        max_context_tokens: 40000
+      }
+      grep {
+        max_grep_results: 50
+        use_code_search: false
+        disable_fallback_to_local_execution: false
+      }
+      find {
+        max_find_results: 50
+        use_code_search: false
+        disable_fallback_to_local_execution: false
+        force_disable: true
+      }
+      run_command {
+        max_chars_command_stdout: 8192
+        force_disable: false
+        auto_command_config {
+          auto_execution_policy: CASCADE_COMMANDS_AUTO_EXECUTION_EAGER
+        }
+        enable_ide_terminal_execution: false
+        shell_name: "bash"
+        shell_path: "bash"
+        forbid_search_commands: false
+        force_go_terminal_execution: false
+        enable_pty: false
+        enable_persistent_mode: false
+      }
+      view_file {
+        allow_view_gitignore: false
+        split_outline_tool: true
+        max_total_outline_bytes: 8192
+        show_full_file_bytes: 8192
+        max_bytes_per_outline_item: 512
+        show_triggered_memories: true
+        max_lines_per_view: 800
+        include_line_numbers: true
+      }
+      suggested_response {
+        force_disable: true
+      }
+      search_web {
+        force_disable: false
+        third_party_config {
+          provider: THIRD_PARTY_WEB_SEARCH_PROVIDER_GEMINI
+        }
+      }
+      mcp {
+        force_disable: false
+        max_output_bytes: 4096
+      }
+      list_dir {
+      }
+      command_status {
+        use_delta: true
+        max_output_characters: 8192
+        min_output_characters: 1024
+        max_wait_duration_seconds: 300
+        output_stabilization_duration_seconds: 5
+        enable_input_detection: true
+        input_detection_model: MODEL_GOOGLE_GEMINI_2_5_FLASH_LITE
+      }
+      antigravity_browser {
+        enabled: false
+        capture_browser_screenshot {
+          enable_saving: true
+        }
+        browser_subagent {
+          mode: BROWSER_SUBAGENT_MODE_SUBAGENT_ONLY
+          browser_subagent_model: MODEL_PLACEHOLDER_M18
+          use_detailed_converter: true
+          disable_onboarding: false
+          subagent_reminder_mode {
+            verify_screenshots {
+            }
+          }
+          max_context_tokens: 67420
+          context_config {
+            type: CONTEXT_TYPE_WITH_MARKDOWN_TRAJECTORY_SUMMARY
+            max_chars: 10000
+          }
+          dom_extraction_config {
+            include_coordinates: true
+          }
+          low_level_tools_config {
+            enable_low_level_tools_instructions: true
+            enable_mouse_tools: true
+          }
+          enable_scratchpad: true
+        }
+        click_browser_pixel {
+          click_feedback {
+            display_color: "red"
+            red: 255
+            green: 0
+            blue: 0
+            alpha: 255
+            radius: 25
+            enabled: true
+            feedback_type: FEEDBACK_TYPE_MOUSE_POINTER
+          }
+        }
+        tool_set_mode: BROWSER_TOOL_SET_MODE_ALL_INPUT_PIXEL_OUTPUT
+        disable_open_url: false
+        browser_state_diffing_config {
+          capture_agent_action_diffs: true
+          include_dom_tree_in_diffs: false
+        }
+        variable_wait_tool: true
+        dom_extraction_config {
+          include_coordinates: true
+        }
+        disable_workspace_api: false
+        browser_list_network_requests_tool_config {
+          enabled: true
+        }
+        browser_get_network_request_tool_config {
+          enabled: true
+        }
+        use_antigravity_as_browser_prompting: false
+        enable_refresh_tool: false
+        disable_read_browser_page: false
+        use_extended_timeout: false
+        log_timeout_errors_instead_of_sentry: false
+        skip_permission_checks: false
+        display_on_crd: true
+        generate_recording_synchronously: false
+        enable_browser_subagent_v2: false
+      }
+      code_search {
+        force_disable: false
+      }
+      internal_search {
+        max_results: 10
+        max_content_length: 5000
+      }
+      notify_user {
+        artifact_review_mode: ARTIFACT_REVIEW_MODE_ALWAYS
+      }
+      finish {
+      }
+      notebook_edit {
+        enabled: false
+      }
+      invoke_subagent {
+        enabled: false
+        max_nesting_depth: 10
+        allow_task_mode: false
+        always_inherit_model: true
+      }
+      generate_image {
+        output_directory: "/src/assets/images"
+      }
+      permission_config {
+        enterprise_config {
+          enforce_workspace_validation: true
+        }
+        effective_grants {
+        }
+      }
+      auto_allow_all_interactions: false
+    }
+    ephemeral_messages_config {
+      enabled: false
+      persistence_level: EPHEMERAL_MESSAGE_PERSISTENCE_LEVEL_LATEST_ONLY
+      browser_ephemeral_options: BROWSER_EPHEMERAL_OPTION_SCREENSHOT
+      browser_ephemeral_options: BROWSER_EPHEMERAL_OPTION_DOM
+      use_allowlist: true
+    }
+    google {
+      planner_mode: CONVERSATIONAL_PLANNER_MODE_DEFAULT
+      eval_mode: false
+      agentic_mode: false
+    }
+    custom_model_info_override {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    retry_config {
+      model_output_retry {
+        max_retries: 4
+        forbid_tool_use: true
+      }
+      api_retry {
+        max_retries: 2
+        initial_sleep_duration_ms: 1000
+        exponential_multiplier: 2.0
+        include_error_feedback: true
+        range: 0.4
+      }
+    }
+    knowledge_config {
+      enabled: false
+      model: MODEL_PLACEHOLDER_M18
+      max_context_tokens: 200000
+      max_invocations: 20
+      min_turns_between_knowledge_generation: 10000
+      max_knowledge_items: 20
+      max_artifacts_per_ki: 20
+      max_title_length: 100
+      max_summary_length: 1000
+    }
+    no_tool_summary: false
+    no_wait_for_previous_tools: false
+    disable_loop_detection: false
+  }
+  execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+}
+generator_metadata {
+  step_indices: 5
+  step_indices: 6
+  step_indices: 7
+  planner_config {
+    plan_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    max_output_tokens: 32768
+    no_tool_explanation: true
+    tool_config {
+      code {
+        disable_extensions: ".ipynb"
+        apply_edits: true
+        replace_content_tool_config {
+          max_fuzzy_edit_distance_fraction: 0.001
+          allow_partial_replacement_success: true
+          fast_apply_fallback_config {
+            enabled: true
+            prompt_unchanged_threshold: 5
+            content_view_radius_lines: 200
+            content_edit_radius_lines: 5
+            fast_apply_model: MODEL_GOOGLE_GEMINI_2_5_FLASH
+          }
+          show_triggered_memories: true
+          disable_allow_multiple: false
+          use_line_range: true
+        }
+        auto_fix_lints_config {
+          enabled: false
+          notifying_prompt: "As IDE feedback, the following lint errors may be related to your recent edits up to this point. Consider whether they deserve immediate attention. If worth addressing, clearly comment on them and/or fix them. Be explicit in acknowledging lints and explaining your fix\'s approach. AVOID unproductive loops; if you detect yourself repeatedly creating/fixing lints in a short period, offer some thoughts but MOVE ON."
+        }
+        allow_edit_gitignore: false
+        use_replace_content_propose_code: false
+        classify_edit: false
+        skip_await_lint_errors: false
+        provide_importance: false
+        use_sed_edit: false
+      }
+      intent {
+        intent_model: MODEL_GOOGLE_GEMINI_2_5_FLASH
+        max_context_tokens: 40000
+      }
+      grep {
+        max_grep_results: 50
+        use_code_search: false
+        disable_fallback_to_local_execution: false
+      }
+      find {
+        max_find_results: 50
+        use_code_search: false
+        disable_fallback_to_local_execution: false
+        force_disable: true
+      }
+      run_command {
+        max_chars_command_stdout: 8192
+        force_disable: false
+        auto_command_config {
+          auto_execution_policy: CASCADE_COMMANDS_AUTO_EXECUTION_EAGER
+        }
+        enable_ide_terminal_execution: false
+        shell_name: "bash"
+        shell_path: "bash"
+        forbid_search_commands: false
+        force_go_terminal_execution: false
+        enable_pty: false
+        enable_persistent_mode: false
+      }
+      view_file {
+        allow_view_gitignore: false
+        split_outline_tool: true
+        max_total_outline_bytes: 8192
+        show_full_file_bytes: 8192
+        max_bytes_per_outline_item: 512
+        show_triggered_memories: true
+        max_lines_per_view: 800
+        include_line_numbers: true
+      }
+      suggested_response {
+        force_disable: true
+      }
+      search_web {
+        force_disable: false
+        third_party_config {
+          provider: THIRD_PARTY_WEB_SEARCH_PROVIDER_GEMINI
+        }
+      }
+      mcp {
+        force_disable: false
+        max_output_bytes: 4096
+      }
+      list_dir {
+      }
+      command_status {
+        use_delta: true
+        max_output_characters: 8192
+        min_output_characters: 1024
+        max_wait_duration_seconds: 300
+        output_stabilization_duration_seconds: 5
+        enable_input_detection: true
+        input_detection_model: MODEL_GOOGLE_GEMINI_2_5_FLASH_LITE
+      }
+      antigravity_browser {
+        enabled: false
+        capture_browser_screenshot {
+          enable_saving: true
+        }
+        browser_subagent {
+          mode: BROWSER_SUBAGENT_MODE_SUBAGENT_ONLY
+          browser_subagent_model: MODEL_PLACEHOLDER_M18
+          use_detailed_converter: true
+          disable_onboarding: false
+          subagent_reminder_mode {
+            verify_screenshots {
+            }
+          }
+          max_context_tokens: 67420
+          context_config {
+            type: CONTEXT_TYPE_WITH_MARKDOWN_TRAJECTORY_SUMMARY
+            max_chars: 10000
+          }
+          dom_extraction_config {
+            include_coordinates: true
+          }
+          low_level_tools_config {
+            enable_low_level_tools_instructions: true
+            enable_mouse_tools: true
+          }
+          enable_scratchpad: true
+        }
+        click_browser_pixel {
+          click_feedback {
+            display_color: "red"
+            red: 255
+            green: 0
+            blue: 0
+            alpha: 255
+            radius: 25
+            enabled: true
+            feedback_type: FEEDBACK_TYPE_MOUSE_POINTER
+          }
+        }
+        tool_set_mode: BROWSER_TOOL_SET_MODE_ALL_INPUT_PIXEL_OUTPUT
+        disable_open_url: false
+        browser_state_diffing_config {
+          capture_agent_action_diffs: true
+          include_dom_tree_in_diffs: false
+        }
+        variable_wait_tool: true
+        dom_extraction_config {
+          include_coordinates: true
+        }
+        disable_workspace_api: false
+        browser_list_network_requests_tool_config {
+          enabled: true
+        }
+        browser_get_network_request_tool_config {
+          enabled: true
+        }
+        use_antigravity_as_browser_prompting: false
+        enable_refresh_tool: false
+        disable_read_browser_page: false
+        use_extended_timeout: false
+        log_timeout_errors_instead_of_sentry: false
+        skip_permission_checks: false
+        display_on_crd: true
+        generate_recording_synchronously: false
+        enable_browser_subagent_v2: false
+      }
+      code_search {
+        force_disable: false
+      }
+      internal_search {
+        max_results: 10
+        max_content_length: 5000
+      }
+      notify_user {
+        artifact_review_mode: ARTIFACT_REVIEW_MODE_ALWAYS
+      }
+      finish {
+      }
+      notebook_edit {
+        enabled: false
+      }
+      invoke_subagent {
+        enabled: false
+        max_nesting_depth: 10
+        allow_task_mode: false
+        always_inherit_model: true
+      }
+      generate_image {
+        output_directory: "/src/assets/images"
+      }
+      permission_config {
+        enterprise_config {
+          enforce_workspace_validation: true
+        }
+        effective_grants {
+        }
+      }
+      auto_allow_all_interactions: false
+    }
+    ephemeral_messages_config {
+      enabled: false
+      persistence_level: EPHEMERAL_MESSAGE_PERSISTENCE_LEVEL_LATEST_ONLY
+      browser_ephemeral_options: BROWSER_EPHEMERAL_OPTION_SCREENSHOT
+      browser_ephemeral_options: BROWSER_EPHEMERAL_OPTION_DOM
+      use_allowlist: true
+    }
+    google {
+      planner_mode: CONVERSATIONAL_PLANNER_MODE_DEFAULT
+      eval_mode: false
+      agentic_mode: false
+    }
+    custom_model_info_override {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    retry_config {
+      model_output_retry {
+        max_retries: 4
+        forbid_tool_use: true
+      }
+      api_retry {
+        max_retries: 2
+        initial_sleep_duration_ms: 1000
+        exponential_multiplier: 2.0
+        include_error_feedback: true
+        range: 0.4
+      }
+    }
+    knowledge_config {
+      enabled: false
+      model: MODEL_PLACEHOLDER_M18
+      max_context_tokens: 200000
+      max_invocations: 20
+      min_turns_between_knowledge_generation: 10000
+      max_knowledge_items: 20
+      max_artifacts_per_ki: 20
+      max_title_length: 100
+      max_summary_length: 1000
+    }
+    no_tool_summary: false
+    no_wait_for_previous_tools: false
+    disable_loop_detection: false
+  }
+  execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+}
+generator_metadata {
+  step_indices: 2
+  step_indices: 3
+  planner_config {
+    plan_model: MODEL_GOOGLE_GEMINI_INTERNAL_BYOM
+    max_output_tokens: 32768
+    no_tool_explanation: true
+    tool_config {
+      code {
+        disable_extensions: ".ipynb"
+        apply_edits: true
+        replace_content_tool_config {
+          max_fuzzy_edit_distance_fraction: 0.001
+          allow_partial_replacement_success: true
+          fast_apply_fallback_config {
+            enabled: true
+            prompt_unchanged_threshold: 5
+            content_view_radius_lines: 200
+            content_edit_radius_lines: 5
+            fast_apply_model: MODEL_GOOGLE_GEMINI_2_5_FLASH
+          }
+          show_triggered_memories: true
+          disable_allow_multiple: false
+          use_line_range: true
+        }
+        auto_fix_lints_config {
+          enabled: false
+          notifying_prompt: "As IDE feedback, the following lint errors may be related to your recent edits up to this point. Consider whether they deserve immediate attention. If worth addressing, clearly comment on them and/or fix them. Be explicit in acknowledging lints and explaining your fix\'s approach. AVOID unproductive loops; if you detect yourself repeatedly creating/fixing lints in a short period, offer some thoughts but MOVE ON."
+        }
+        allow_edit_gitignore: false
+        use_replace_content_propose_code: false
+        classify_edit: false
+        skip_await_lint_errors: false
+        provide_importance: false
+        use_sed_edit: false
+      }
+      intent {
+        intent_model: MODEL_GOOGLE_GEMINI_2_5_FLASH
+        max_context_tokens: 40000
+      }
+      grep {
+        max_grep_results: 50
+        use_code_search: false
+        disable_fallback_to_local_execution: false
+      }
+      find {
+        max_find_results: 50
+        use_code_search: false
+        disable_fallback_to_local_execution: false
+        force_disable: true
+      }
+      run_command {
+        max_chars_command_stdout: 8192
+        force_disable: false
+        auto_command_config {
+          auto_execution_policy: CASCADE_COMMANDS_AUTO_EXECUTION_EAGER
+        }
+        enable_ide_terminal_execution: false
+        shell_name: "bash"
+        shell_path: "bash"
+        forbid_search_commands: false
+        force_go_terminal_execution: false
+        enable_pty: false
+        enable_persistent_mode: false
+      }
+      view_file {
+        allow_view_gitignore: false
+        split_outline_tool: true
+        max_total_outline_bytes: 8192
+        show_full_file_bytes: 8192
+        max_bytes_per_outline_item: 512
+        show_triggered_memories: true
+        max_lines_per_view: 800
+        include_line_numbers: true
+      }
+      suggested_response {
+        force_disable: true
+      }
+      search_web {
+        force_disable: false
+        third_party_config {
+          provider: THIRD_PARTY_WEB_SEARCH_PROVIDER_GEMINI
+        }
+      }
+      mcp {
+        force_disable: false
+        max_output_bytes: 4096
+      }
+      list_dir {
+      }
+      command_status {
+        use_delta: true
+        max_output_characters: 8192
+        min_output_characters: 1024
+        max_wait_duration_seconds: 300
+        output_stabilization_duration_seconds: 5
+        enable_input_detection: true
+        input_detection_model: MODEL_GOOGLE_GEMINI_2_5_FLASH_LITE
+      }
+      antigravity_browser {
+        enabled: false
+        capture_browser_screenshot {
+          enable_saving: true
+        }
+        browser_subagent {
+          mode: BROWSER_SUBAGENT_MODE_SUBAGENT_ONLY
+          browser_subagent_model: MODEL_PLACEHOLDER_M18
+          use_detailed_converter: true
+          disable_onboarding: false
+          subagent_reminder_mode {
+            verify_screenshots {
+            }
+          }
+          max_context_tokens: 67420
+          context_config {
+            type: CONTEXT_TYPE_WITH_MARKDOWN_TRAJECTORY_SUMMARY
+            max_chars: 10000
+          }
+          dom_extraction_config {
+            include_coordinates: true
+          }
+          low_level_tools_config {
+            enable_low_level_tools_instructions: true
+            enable_mouse_tools: true
+          }
+          enable_scratchpad: true
+        }
+        click_browser_pixel {
+          click_feedback {
+            display_color: "red"
+            red: 255
+            green: 0
+            blue: 0
+            alpha: 255
+            radius: 25
+            enabled: true
+            feedback_type: FEEDBACK_TYPE_MOUSE_POINTER
+          }
+        }
+        tool_set_mode: BROWSER_TOOL_SET_MODE_ALL_INPUT_PIXEL_OUTPUT
+        disable_open_url: false
+        browser_state_diffing_config {
+          capture_agent_action_diffs: true
+          include_dom_tree_in_diffs: false
+        }
+        variable_wait_tool: true
+        dom_extraction_config {
+          include_coordinates: true
+        }
+        disable_workspace_api: false
+        browser_list_network_requests_tool_config {
+          enabled: true
+        }
+        browser_get_network_request_tool_config {
+          enabled: true
+        }
+        use_antigravity_as_browser_prompting: false
+        enable_refresh_tool: false
+        disable_read_browser_page: false
+        use_extended_timeout: false
+        log_timeout_errors_instead_of_sentry: false
+        skip_permission_checks: false
+        display_on_crd: true
+        generate_recording_synchronously: false
+        enable_browser_subagent_v2: false
+      }
+      code_search {
+        force_disable: false
+      }
+      internal_search {
+        max_results: 10
+        max_content_length: 5000
+      }
+      notify_user {
+        artifact_review_mode: ARTIFACT_REVIEW_MODE_ALWAYS
+      }
+      finish {
+      }
+      notebook_edit {
+        enabled: false
+      }
+      invoke_subagent {
+        enabled: false
+        max_nesting_depth: 10
+        allow_task_mode: false
+        always_inherit_model: true
+      }
+      generate_image {
+        output_directory: "/src/assets/images"
+      }
+      permission_config {
+        enterprise_config {
+          enforce_workspace_validation: true
+        }
+        effective_grants {
+        }
+      }
+      auto_allow_all_interactions: false
+    }
+    ephemeral_messages_config {
+      enabled: false
+      persistence_level: EPHEMERAL_MESSAGE_PERSISTENCE_LEVEL_LATEST_ONLY
+      browser_ephemeral_options: BROWSER_EPHEMERAL_OPTION_SCREENSHOT
+      browser_ephemeral_options: BROWSER_EPHEMERAL_OPTION_DOM
+      use_allowlist: true
+    }
+    google {
+      planner_mode: CONVERSATIONAL_PLANNER_MODE_DEFAULT
+      eval_mode: false
+      agentic_mode: false
+    }
+    custom_model_info_override {
+      model_name: "gemini-3.1-pro-preview"
+      thinking_level: 3
+    }
+    retry_config {
+      model_output_retry {
+        max_retries: 4
+        forbid_tool_use: true
+      }
+      api_retry {
+        max_retries: 2
+        initial_sleep_duration_ms: 1000
+        exponential_multiplier: 2.0
+        include_error_feedback: true
+        range: 0.4
+      }
+    }
+    knowledge_config {
+      enabled: false
+      model: MODEL_PLACEHOLDER_M18
+      max_context_tokens: 200000
+      max_invocations: 20
+      min_turns_between_knowledge_generation: 10000
+      max_knowledge_items: 20
+      max_artifacts_per_ki: 20
+      max_title_length: 100
+      max_summary_length: 1000
+    }
+    no_tool_summary: false
+    no_wait_for_previous_tools: false
+    disable_loop_detection: false
+  }
+  execution_id: "70d0430a-6cb3-44f7-879b-5c7579c810bf"
+}

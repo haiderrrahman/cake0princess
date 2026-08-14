@@ -1,0 +1,29 @@
+{
+  "name": "كيك الأميرة | Cake Princess",
+  "short_name": "كيك الأميرة",
+  "description": "اطلب أفضل أنواع الكيك وتعلم فنون التزيين",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4c1d95",
+  "icons": [
+    {
+      "src": "/cp-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/cp-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/cp-logo.png",
+      "sizes": "1400x1400",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

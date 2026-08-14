@@ -1,0 +1,54 @@
+{
+  "name": "cake-publisher",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "browser-image-compression": "^2.0.2",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "firebase": "^12.13.0",
+    "firebase-admin": "^13.10.0",
+    "framer-motion": "^12.40.0",
+    "html-to-image": "^1.11.13",
+    "jsonwebtoken": "^9.0.3",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.546.0",
+    "next": "14.2.3",
+    "next-themes": "^0.4.6",
+    "omggif": "^1.0.10",
+    "react": "^18.2.0",
+    "react-datepicker": "^9.1.0",
+    "react-dom": "^18.2.0",
+    "react-easy-crop": "^6.2.3",
+    "react-hot-toast": "^2.6.0",
+    "react-image-crop": "^11.1.2",
+    "react-player": "^3.4.0",
+    "recharts": "^3.9.2",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "@tailwindcss/postcss": "^4.1.14",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20",
+    "@types/omggif": "^1.0.5",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "dotenv": "^17.4.2",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.3",
+    "tailwindcss": "^4.1.14",
+    "typescript": "^5"
+  }
+}
