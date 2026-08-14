@@ -276,6 +276,7 @@ export default function HomeFinanceDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "expenses" | "income" | "installments" | "needs" | "bills" | "debts" | "inventory" | "car" | "travel" | "familyNeeds" | "futurePlans">("overview");
 
   // Data state
+  const [debugErrors, setDebugErrors] = useState<string[]>([]);
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -485,6 +486,8 @@ export default function HomeFinanceDashboard() {
           setters[k](snap.data().data);
         } else {
           setters[k]([]);
+          // Capture empty state reason for debugging
+          setDebugErrors(prev => [...prev, `${k}: exists=${snap.exists()}`]);
         }
         loadedCount++;
         if (loadedCount >= keys.length) {
@@ -492,6 +495,7 @@ export default function HomeFinanceDashboard() {
         }
       }, (error) => {
         console.error(`Snapshot error for ${k}:`, error);
+        setDebugErrors(prev => [...prev, `${k} error: ${error.message}`]);
         loadedCount++;
         if (loadedCount >= keys.length) {
           setDataLoading(false);
@@ -1823,6 +1827,15 @@ export default function HomeFinanceDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#0D0A1A] pb-28 font-sans text-right" dir="rtl">
 
+      {debugErrors.length > 0 && (
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-2xl m-4 text-sm border border-red-200 dark:border-red-800">
+          <strong>معلومات تصحيح الأخطاء (Debug):</strong>
+          <ul className="list-disc pr-5 mt-2">
+            {debugErrors.map((err, i) => <li key={i}>{err}</li>)}
+          </ul>
+          <p className="mt-2 text-xs">FamilyNeeds length in state: {familyNeeds.length}</p>
+        </div>
+      )}
       {/* ═══════════════ SMART MODALS ═══════════════ */}
       {confirmConfig?.isOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
