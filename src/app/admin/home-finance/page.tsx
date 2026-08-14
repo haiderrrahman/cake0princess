@@ -480,6 +480,16 @@ export default function HomeFinanceDashboard() {
     };
 
     let loadedCount = 0;
+    
+    // Explicit debug test with getDoc
+    import("firebase/firestore").then(({ getDoc, doc }) => {
+      getDoc(doc(db, "home_finance", "familyNeeds")).then(d => {
+        setDebugErrors(prev => [...prev, `getDoc test: exists=${d.exists()}, size=${d.exists() ? d.data()?.data?.length : 0}`]);
+      }).catch(e => {
+        setDebugErrors(prev => [...prev, `getDoc error: ${e.message}`]);
+      });
+    });
+
     const unsubscribers = keys.map(k => {
       return onSnapshot(doc(db, "home_finance", k), (snap) => {
         if (snap.exists() && snap.data().data) {
