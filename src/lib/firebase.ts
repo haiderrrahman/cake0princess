@@ -16,17 +16,8 @@ const firebaseConfig = {
 // تهيئة Firebase بطريقة آمنة لبيئة Next.js
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Use persistent cache to make page loads instant and offline capable
-let db: any;
-try {
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager()
-    })
-  });
-} catch (e) {
-  db = getFirestore(app);
-}
+// تعطيل الكاش المحلي تماماً لاختبار إذا كان هو سبب تصفير البيانات
+let db = getFirestore(app);
 
 const auth = getAuth(app);
 const storage = getStorage(app);
