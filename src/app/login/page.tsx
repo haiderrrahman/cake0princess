@@ -50,7 +50,18 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error("Login Error:", err);
-      setError(`الخطأ: ${err.message || err.code}`);
+      const code = err.code;
+      let friendlyMessage = "حدث خطأ أثناء العملية. يرجى المحاولة لاحقاً.";
+      if (code === "auth/invalid-credential" || code === "auth/user-not-found" || code === "auth/wrong-password") {
+        friendlyMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
+      } else if (code === "auth/email-already-in-use") {
+        friendlyMessage = "هذا البريد الإلكتروني مسجل لدينا مسبقاً.";
+      } else if (code === "auth/weak-password") {
+        friendlyMessage = "كلمة المرور ضعيفة جداً. يرجى اختيار كلمة مرور أقوى.";
+      } else if (code === "auth/network-request-failed") {
+        friendlyMessage = "مشكلة في الاتصال بالإنترنت. يرجى التحقق من الشبكة.";
+      }
+      setError(friendlyMessage);
     } finally {
       setIsSubmitting(false);
     }
