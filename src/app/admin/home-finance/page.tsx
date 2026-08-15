@@ -78,6 +78,7 @@ interface InventoryItem {
   imageUrl?: string;
   tripDestination?: string;
   createdAt: string;
+  _source?: "inventory" | "car" | "travel";
 }
 
 interface Need {
@@ -673,7 +674,11 @@ export default function HomeFinanceDashboard() {
   // بناءً على طلبك السابق: يتم خصم القسط أو الفاتورة فقط عند دفعها (لتصبح ضمن المصاريف) لمنع الخصم المزدوج
   const balance = totalIncome - totalExpensesAmt;
 
-  const shoppingList = inventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "inventory" as const }));
+  const shoppingList = [
+    ...inventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "inventory" as const })),
+    ...carInventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "car" as const })),
+    ...travelInventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "travel" as const }))
+  ];
 
   const needsSummaryStats = useMemo(() => {
     const summary: { id: string; name: string; count: number; price: number; icon: string; colorClass: string }[] = [];
@@ -1236,41 +1241,64 @@ export default function HomeFinanceDashboard() {
     const unit = fd.get("unit") as string || "قطعة";
     const category = fd.get("category") as string || "سوبر ماركت";
     
-    let updated = [...inventory];
-    if (isEdit) {
-      updated = updated.map(x => x.id === editNeed!.id ? {
-        ...x,
-        name: needName,
-        neededQuantity: neededQty,
-        estimatedPrice: estPrice,
-        unit: unit,
-        category: category
-      } : x);
-      toast.success("تم التعديل");
-    } else {
-      const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
-      if (existing) {
-        existing.neededQuantity = (existing.neededQuantity || 0) + neededQty;
-        existing.estimatedPrice = estPrice;
-        toast.success("تم التحديث في النواقص");
+    const source = editNeed?._source || (activeTab === "car" ? "car" : activeTab === "travel" ? "travel" : "inventory");
+
+    if (source === "car") {
+      let updated = [...carInventory];
+      if (isEdit) {
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category } : x);
+        toast.success("تم التعديل");
       } else {
-        updated.push({
-          id: Date.now().toString(),
-          name: needName,
-          quantity: 0,
-          neededQuantity: neededQty,
-          threshold: 1,
-          unit: unit,
-          estimatedPrice: estPrice,
-          category: category,
-          createdAt: new Date().toISOString()
-        });
-        toast.success("تم إضافة الاحتياج");
+        const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
+        if (existing) {
+          existing.neededQuantity = (existing.neededQuantity || 0) + neededQty;
+          existing.estimatedPrice = estPrice;
+          toast.success("تم التحديث");
+        } else {
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, createdAt: new Date().toISOString() });
+          toast.success("تم إضافة الاحتياج");
+        }
       }
+      setCarInventory(updated);
+      syncToFirebase("carInventory", updated);
+    } else if (source === "travel") {
+      let updated = [...travelInventory];
+      if (isEdit) {
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category } : x);
+        toast.success("تم التعديل");
+      } else {
+        const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
+        if (existing) {
+          existing.neededQuantity = (existing.neededQuantity || 0) + neededQty;
+          existing.estimatedPrice = estPrice;
+          toast.success("تم التحديث");
+        } else {
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, createdAt: new Date().toISOString() });
+          toast.success("تم إضافة الاحتياج");
+        }
+      }
+      setTravelInventory(updated);
+      syncToFirebase("travelInventory", updated);
+    } else {
+      let updated = [...inventory];
+      if (isEdit) {
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category } : x);
+        toast.success("تم التعديل");
+      } else {
+        const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
+        if (existing) {
+          existing.neededQuantity = (existing.neededQuantity || 0) + neededQty;
+          existing.estimatedPrice = estPrice;
+          toast.success("تم التحديث في النواقص");
+        } else {
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, createdAt: new Date().toISOString() });
+          toast.success("تم إضافة الاحتياج");
+        }
+      }
+      setInventory(updated);
+      syncToFirebase("inventory", updated);
     }
     
-    setInventory(updated);
-    syncToFirebase("inventory", updated);
     e.currentTarget.reset();
     setShowNeedModal(false);
     setEditNeed(null);
@@ -3568,78 +3596,91 @@ export default function HomeFinanceDashboard() {
               </div>
             ) : (
               <div className="space-y-2">
-                {shoppingList.length > 0 && (
-                  <>
-                    <div className="text-xs font-black text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-2">
-                      <Package className="w-3.5 h-3.5" /> نواقص البيت ({shoppingList.length})
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                      {shoppingList.map(item => {
-                        const neededQty = item.neededQuantity || 1;
-                        const estimatedTotal = neededQty * (item.estimatedPrice || 0);
-                        return (
-                          <div key={`inv-${item.id}`} className="bg-orange-50 dark:bg-orange-900/15 rounded-2xl p-2.5 border border-orange-200 dark:border-orange-800/40 shadow-sm flex flex-col relative overflow-hidden aspect-square">
-                            <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-orange-400 to-red-500 opacity-60 rounded-t-2xl" />
-                            {/* Image/Icon + Item Name */}
-                            <div className="flex flex-col gap-1.5 flex-1 items-center text-center justify-center">
-                              <div className="w-10 h-10 bg-orange-100 dark:bg-orange-800/30 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                {item.imageUrl ? (
-                                  <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                                ) : (
-                                  <span className="text-xl">📦</span>
-                                )}
-                              </div>
-                              <div className="min-w-0 flex flex-col gap-0.5">
-                                <div className="font-black text-xs text-gray-800 dark:text-gray-100 line-clamp-2 leading-tight">{item.name}</div>
-                                {item.tripDestination && (
-                                  <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[8px] px-1.5 py-0.5 rounded font-black border border-blue-200 dark:border-blue-800/50 inline-block w-fit mx-auto">رحلة {item.tripDestination}</span>
-                                )}
-                              </div>
-                            </div>
-                            {/* Stats */}
-                            <div className="text-[9px] text-gray-500 flex flex-col gap-0.5 text-center mt-1">
-                              <span>متوفر: {item.quantity} {item.unit} | تحتاج: {neededQty}</span>
-                              {estimatedTotal > 0 && <span className="text-orange-600 dark:text-orange-400 font-black">{fmt(estimatedTotal)} د.ع</span>}
-                            </div>
-                            {/* Actions */}
-                            <div className="flex flex-col items-stretch gap-1 mt-auto pt-2">
-                              <div className="flex gap-1">
-                                <div className="flex items-center justify-between w-full bg-white dark:bg-zinc-800/50 rounded-full px-1 border border-orange-100 dark:border-orange-800/30">
-                                  <button onClick={async () => {
-                                    const src = (item as any)._source;
-                                    if (src === "car") { const updated = carInventory.map(x => x.id === item.id ? { ...x, neededQuantity: neededQty + 1 } : x); setCarInventory(updated); syncToFirebase("carInventory", updated);
-                                    } else if (src === "travel") { const updated = travelInventory.map(x => x.id === item.id ? { ...x, neededQuantity: neededQty + 1 } : x); setTravelInventory(updated); syncToFirebase("travelInventory", updated);
-                                    } else { const updated = inventory.map(x => x.id === item.id ? { ...x, neededQuantity: neededQty + 1 } : x); setInventory(updated); syncToFirebase("inventory", updated); }
-                                  }} className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 font-bold text-sm flex items-center justify-center hover:bg-red-200 transition">+</button>
-                                  <span className="text-[10px] font-black text-gray-700 dark:text-gray-300 w-4 text-center">{neededQty}</span>
-                                  <button onClick={async () => {
-                                    const src = (item as any)._source;
-                                    if (src === "car") { const updated = carInventory.map(x => x.id === item.id ? { ...x, neededQuantity: Math.max(0, neededQty - 1) } : x); setCarInventory(updated); syncToFirebase("carInventory", updated);
-                                    } else if (src === "travel") { const updated = travelInventory.map(x => x.id === item.id ? { ...x, neededQuantity: Math.max(0, neededQty - 1) } : x); setTravelInventory(updated); syncToFirebase("travelInventory", updated);
-                                    } else { const updated = inventory.map(x => x.id === item.id ? { ...x, neededQuantity: Math.max(0, neededQty - 1) } : x); setInventory(updated); syncToFirebase("inventory", updated); }
-                                  }} className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 font-bold text-sm flex items-center justify-center hover:bg-red-200 transition">-</button>
+                {["inventory", "car", "travel"].map(source => {
+                  const items = shoppingList.filter(i => i._source === source);
+                  if (items.length === 0) return null;
+                  const titles = { inventory: "نواقص البيت", car: "نواقص السيارة", travel: "نواقص السفر" };
+                  const icons = { inventory: <Package className="w-3.5 h-3.5" />, car: <span className="text-sm">🚗</span>, travel: <span className="text-sm">✈️</span> };
+                  return (
+                    <div key={source}>
+                      <div className="text-xs font-black text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-2 mt-4 first:mt-0">
+                        {icons[source as keyof typeof icons]} {titles[source as keyof typeof titles]} ({items.length})
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mb-4">
+                        {items.map(item => {
+                          const neededQty = item.neededQuantity || 1;
+                          const estimatedTotal = neededQty * (item.estimatedPrice || 0);
+                          return (
+                            <div key={`inv-${item.id}`} className="bg-orange-50 dark:bg-orange-900/15 rounded-2xl p-2.5 border border-orange-200 dark:border-orange-800/40 shadow-sm flex flex-col relative overflow-hidden aspect-square group">
+                              <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-orange-400 to-red-500 opacity-60 rounded-t-2xl" />
+                              
+                              <button onClick={() => { setEditNeed(item); setShowNeedModal(true); }} className="absolute top-2 left-2 p-1.5 bg-white/80 dark:bg-zinc-800/80 hover:bg-orange-100 dark:hover:bg-orange-900/50 rounded-lg text-gray-500 opacity-0 group-hover:opacity-100 transition shadow-sm z-10">
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+
+                              <span className="absolute top-2 right-2 text-[8px] font-black px-1.5 py-0.5 rounded bg-white/80 dark:bg-zinc-800/80 text-orange-600 shadow-sm z-10">{item.category}</span>
+
+                              {/* Image/Icon + Item Name */}
+                              <div className="flex flex-col gap-1.5 flex-1 items-center text-center justify-center pt-3">
+                                <div className="w-10 h-10 bg-orange-100 dark:bg-orange-800/30 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                  {item.imageUrl ? (
+                                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span className="text-xl">📦</span>
+                                  )}
                                 </div>
-                                <button onClick={() => {
-                                  setFulfillModal({
-                                    isOpen: true,
-                                    title: item.name,
-                                    category: item.category || "الاحتياجات المنزلية",
-                                    estimatedPrice: estimatedTotal,
-                                    quantity: neededQty,
-                                    type: "shopping",
-                                    item: item
-                                  });
-                                }} className="flex-1 bg-orange-500 text-white text-[10px] font-black px-2 py-1 rounded-xl active:scale-95 transition flex items-center justify-center gap-0.5">
-                                  <Check className="w-3 h-3" /> تم
-                                </button>
+                                <div className="min-w-0 flex flex-col gap-0.5">
+                                  <div className="font-black text-xs text-gray-800 dark:text-gray-100 line-clamp-2 leading-tight">{item.name}</div>
+                                  {item.tripDestination && (
+                                    <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[8px] px-1.5 py-0.5 rounded font-black border border-blue-200 dark:border-blue-800/50 inline-block w-fit mx-auto">رحلة {item.tripDestination}</span>
+                                  )}
+                                </div>
+                              </div>
+                              {/* Stats */}
+                              <div className="text-[9px] text-gray-500 flex flex-col gap-0.5 text-center mt-1">
+                                <span>متوفر: {item.quantity} {item.unit} | تحتاج: {neededQty}</span>
+                                {estimatedTotal > 0 && <span className="text-orange-600 dark:text-orange-400 font-black">{fmt(estimatedTotal)} د.ع</span>}
+                              </div>
+                              {/* Actions */}
+                              <div className="flex flex-col items-stretch gap-1 mt-auto pt-2">
+                                <div className="flex gap-1">
+                                  <div className="flex items-center justify-between w-full bg-white dark:bg-zinc-800/50 rounded-full px-1 border border-orange-100 dark:border-orange-800/30">
+                                    <button onClick={async () => {
+                                      const src = item._source;
+                                      if (src === "car") { const updated = carInventory.map(x => x.id === item.id ? { ...x, neededQuantity: neededQty + 1 } : x); setCarInventory(updated); syncToFirebase("carInventory", updated);
+                                      } else if (src === "travel") { const updated = travelInventory.map(x => x.id === item.id ? { ...x, neededQuantity: neededQty + 1 } : x); setTravelInventory(updated); syncToFirebase("travelInventory", updated);
+                                      } else { const updated = inventory.map(x => x.id === item.id ? { ...x, neededQuantity: neededQty + 1 } : x); setInventory(updated); syncToFirebase("inventory", updated); }
+                                    }} className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 font-bold text-sm flex items-center justify-center hover:bg-red-200 transition">+</button>
+                                    <span className="text-[10px] font-black text-gray-700 dark:text-gray-300 w-4 text-center">{neededQty}</span>
+                                    <button onClick={async () => {
+                                      const src = item._source;
+                                      if (src === "car") { const updated = carInventory.map(x => x.id === item.id ? { ...x, neededQuantity: Math.max(0, neededQty - 1) } : x); setCarInventory(updated); syncToFirebase("carInventory", updated);
+                                      } else if (src === "travel") { const updated = travelInventory.map(x => x.id === item.id ? { ...x, neededQuantity: Math.max(0, neededQty - 1) } : x); setTravelInventory(updated); syncToFirebase("travelInventory", updated);
+                                      } else { const updated = inventory.map(x => x.id === item.id ? { ...x, neededQuantity: Math.max(0, neededQty - 1) } : x); setInventory(updated); syncToFirebase("inventory", updated); }
+                                    }} className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 font-bold text-sm flex items-center justify-center hover:bg-red-200 transition">-</button>
+                                  </div>
+                                  <button onClick={() => {
+                                    setFulfillModal({
+                                      isOpen: true,
+                                      title: item.name,
+                                      category: item.category || "الاحتياجات المنزلية",
+                                      estimatedPrice: estimatedTotal,
+                                      quantity: neededQty,
+                                      type: "shopping",
+                                      item: item
+                                    });
+                                  }} className="flex-1 bg-orange-500 text-white text-[10px] font-black px-2 py-1 rounded-xl active:scale-95 transition flex items-center justify-center gap-0.5">
+                                    <Check className="w-3 h-3" /> تم
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </>
-                )}
+                  );
+                })}
                 {familyNeeds.filter(n => n.status === "pending" && n.type !== "duty").length > 0 && (
                   <>
                     <div className="font-black text-pink-600 dark:text-pink-400 text-xs mb-2 flex items-center gap-2">
@@ -3666,16 +3707,23 @@ export default function HomeFinanceDashboard() {
                         const memberColor = need.member.includes("إيڤا") || need.member.includes("إيفا") || need.member.includes("ايفا") ? "text-red-500" : need.member.includes("إيمان") || need.member.includes("ايمان") ? "text-green-500" : need.member.includes("رقية") ? "text-purple-500" : need.member.includes("قنوت") ? "text-amber-500" : need.member.includes("حيدر") ? "text-blue-500" : "text-indigo-500";
                         const memberBg = need.member.includes("إيڤا") || need.member.includes("ايفا") ? "bg-red-100 dark:bg-red-900/30" : need.member.includes("إيمان") || need.member.includes("ايمان") ? "bg-green-100 dark:bg-green-900/30" : need.member.includes("رقية") ? "bg-purple-100 dark:bg-purple-900/30" : need.member.includes("قنوت") ? "bg-amber-100 dark:bg-amber-900/30" : "bg-blue-100 dark:bg-blue-900/30";
                         return (
-                          <div key={`fam-${need.id}`} className="bg-pink-50 dark:bg-pink-900/15 rounded-2xl p-3 border border-pink-200 dark:border-pink-800/40 shadow-sm flex flex-col gap-2 relative overflow-hidden">
+                          <div key={`fam-${need.id}`} className="bg-pink-50 dark:bg-pink-900/15 rounded-2xl p-3 border border-pink-200 dark:border-pink-800/40 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
                             <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-pink-400 to-rose-500 opacity-60 rounded-t-2xl" />
+                            
+                            <button onClick={() => { setEditFamilyNeed(need); setFamilyNeedType(need.type || "need"); setShowFamilyNeedModal(true); }} className="absolute top-2 left-2 p-1.5 bg-white/80 dark:bg-zinc-800/80 hover:bg-pink-100 dark:hover:bg-pink-900/50 rounded-lg text-gray-500 opacity-0 group-hover:opacity-100 transition shadow-sm z-10">
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+
+                            <span className="absolute top-2 right-2 text-[8px] font-black px-1.5 py-0.5 rounded bg-white/80 dark:bg-zinc-800/80 text-pink-600 shadow-sm z-10">{need.category || "عائلة"}</span>
+
                             {/* Member badge + name */}
-                            <div className="flex items-start gap-2">
+                            <div className="flex items-start gap-2 pt-3">
                               <div className={`w-8 h-8 ${memberBg} rounded-xl flex items-center justify-center text-sm flex-shrink-0`}>
                                 👤
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="font-black text-xs text-gray-800 dark:text-gray-100 line-clamp-2">{need.title}</div>
-                                <span className={`text-[9px] font-black ${memberColor}`}>{need.member}</span>
+                                <span className={`text-[9px] font-black ${memberColor}`}>{need.member} - {need.quantity} قطعة</span>
                               </div>
                             </div>
                             {/* Price */}
