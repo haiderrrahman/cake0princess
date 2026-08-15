@@ -1,50 +1,39 @@
-const settings = {};
-const arr = [];
-const now = new Date("2026-08-14T20:00:00Z");
-let currentCycleStartMonth = now.getMonth();
-let currentCycleStartYear = now.getFullYear();
+const monthNames = ["كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز", "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول"];
+const now = new Date("2026-08-14T21:00:00");
+let currentCycleStartMonth = now.getMonth(); // 7
+let currentCycleStartYear = now.getFullYear(); // 2026
+const startDay = 12;
 
-if (now.getDate() < 12) {
-  currentCycleStartMonth -= 1;
-  if (currentCycleStartMonth < 0) {
-    currentCycleStartMonth = 11;
-    currentCycleStartYear -= 1;
-  }
+let validBoundaries = [];
+let d = new Date(currentCycleStartYear, currentCycleStartMonth, startDay); // 2026-08-12
+if (d > now) {
+  d = new Date(currentCycleStartYear, currentCycleStartMonth - 1, startDay);
 }
-
-const arMonths = ["كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز", "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول"];
-
-const boundaries = [];
-for (let i = -1; i <= 24; i++) {
-  let month = currentCycleStartMonth - i;
-  let year = currentCycleStartYear;
-  while (month < 0) {
-    month += 12;
-    year -= 1;
-  }
-  while (month > 11) {
-    month -= 12;
-    year += 1;
-  }
-  boundaries.push(new Date(year, month, 12));
+for (let m = 0; m < 24; m++) {
+  validBoundaries.push(new Date(d));
+  d.setMonth(d.getMonth() - 1);
 }
-
-const manualDates = (settings.manualCycleStarts || []).map(ds => new Date(ds));
-
-const validBoundaries = boundaries.filter(b => {
-  return !manualDates.some(md => md.getFullYear() === b.getFullYear() && md.getMonth() === b.getMonth());
-});
-
-const allBoundaries = [...validBoundaries, ...manualDates].sort((a,b) => b.getTime() - a.getTime());
-
+let allBoundaries = [...validBoundaries].sort((a, b) => b.getTime() - a.getTime());
+let arr = [];
 for (let i = 1; i < allBoundaries.length && arr.length < 24; i++) {
-  const endD = new Date(allBoundaries[i-1].getTime() - 1);
-  const startD = allBoundaries[i];
-  if (startD > now && endD > now) continue;
+  const endBoundary = allBoundaries[i - 1];
+  const startBoundary = allBoundaries[i];
+  
+  const startMonth = startBoundary.getMonth() + 1;
+  const startYear = startBoundary.getFullYear();
+  const startDayStr = startBoundary.getDate();
+  const endMonth = endBoundary.getMonth() + 1;
+  const endDay = endBoundary.getDate() - 1;
+  const startMonthName = monthNames[startBoundary.getMonth()];
+  
+  const cycleName = `دورة ${startMonthName} ${startYear} (${startDayStr}/${startMonth} - ${endDay}/${endMonth})`;
+  
   arr.push({
-    id: `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${startD.getDate()}`,
-    label: `دورة ${arMonths[startD.getMonth()]} ${startD.getFullYear()} (${startD.getDate()}/${startD.getMonth() + 1} - ${endD.getDate()}/${endD.getMonth() + 1})`
+    id: `cycle_${startBoundary.getTime()}`,
+    name: cycleName,
+    start: startBoundary.toISOString(),
+    end: endBoundary.toISOString()
   });
 }
-console.log(arr.length);
-console.log(arr.slice(0, 3));
+console.log(arr[0]);
+console.log(arr[1]);

@@ -1,5 +1,5 @@
 const { initializeApp } = require("firebase/app");
-const { getFirestore, doc, getDoc } = require("firebase/firestore");
+const { getFirestore, doc, getDoc, collection, getDocs } = require("firebase/firestore");
 const firebaseConfig = {
   apiKey: "AIzaSyA4l36usNaltDW4PAKr7lM4l8IOp2QJDRo",
   authDomain: "cake-publisher-app.firebaseapp.com",
@@ -12,10 +12,23 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 async function check() {
-  const keys = ['expenses', 'incomes', 'bills', 'debts', 'installments', 'familyNeeds', 'carNeeds', 'travelNeeds', 'futurePlans', 'inventory', 'settings'];
-  for (const k of keys) {
+  console.log("Checking home_finance...");
+  const hfDocs = ["settings", "expenses", "incomes", "bills", "installments", "familyNeeds", "debts"];
+  for (const k of hfDocs) {
     const d = await getDoc(doc(db, "home_finance", k));
-    console.log(`home_finance/${k}:`, d.exists() ? (d.data().data ? d.data().data.length : 'exists but no data array') : "Not Found");
+    if (d.exists()) {
+      console.log(`- home_finance/${k}: ${d.data().data ? d.data().data.length : 'no array'} items`);
+    } else {
+      console.log(`- home_finance/${k}: NOT FOUND`);
+    }
   }
+
+  console.log("\nChecking independent collections...");
+  const cols = ["finances", "home_finance", "expenses", "incomes", "familyNeeds"];
+  for (const c of cols) {
+    const snap = await getDocs(collection(db, c));
+    console.log(`- collection ${c}: ${snap.size} documents`);
+  }
+  process.exit(0);
 }
 check();
