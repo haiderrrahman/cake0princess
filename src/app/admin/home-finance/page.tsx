@@ -1967,210 +1967,6 @@ export default function HomeFinanceDashboard() {
         )}
 
         {/* Cycle Selector & Report Button */}
-        {activeTab === "overview" && (
-          <>
-            <div className="relative z-10 mb-4 bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/20 flex flex-col md:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
-            <h3 className="font-bold text-white text-sm">الدورة المالية:</h3>
-            <select
-              value={selectedCycleId}
-              onChange={(e) => setSelectedCycleId(e.target.value)}
-              className="bg-black/30 border border-white/20 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-purple-500 p-2 outline-none"
-            >
-              {cycles.map(c => (
-                <option key={c.id} value={c.id} className="text-black">{c.label}</option>
-              ))}
-            </select>
-          </div>
-          
-          <button
-            onClick={() => {
-              if (!confirm("هل أنت متأكد من إنهاء الدورة المالية الحالية يدوياً وبدء دورة جديدة؟ هذا سيؤدي إلى نقل الميزانية المتبقية إلى الدورة الجديدة.")) return;
-              
-              const newCycleStarts = [...(settings?.manualCycleStarts || []), today()];
-              setSettings({ ...settings, manualCycleStarts: newCycleStarts });
-              syncToFirebase("settings", { ...settings, manualCycleStarts: newCycleStarts });
-            }}
-            className="w-full md:w-auto bg-blue-600/50 hover:bg-blue-600 border border-blue-400/50 text-white rounded-xl px-4 py-2 text-xs font-bold transition flex items-center justify-center gap-2"
-          >
-            إنهاء الدورة يدوياً
-          </button>
-        </div>
-        
-        {/* Helper Alert if user is confused about missing data on new cycle */}
-        {(expenses.length > 0 || incomes.length > 0) && totalExpensesAmt === 0 && totalIncome === 0 && selectedCycleId === cycles[0]?.id && (
-          <div className="relative z-10 bg-indigo-500/20 backdrop-blur-md border border-indigo-400/50 rounded-2xl p-4 text-center mb-5 shadow-lg shadow-indigo-500/20 animate-pulse">
-            <div className="flex justify-center items-center gap-2 mb-1">
-              <span className="text-indigo-100 font-black text-sm">مرحباً! لقد بدأت دورة مالية جديدة فارغة 🗓️</span>
-            </div>
-            <p className="text-indigo-200/80 font-bold text-xs mt-1">
-              أنت الآن في دورة شهرية جديدة. لرؤية مصاريفك وإدخالاتك السابقة، قم بتغيير الدورة المالية من القائمة المنسدلة في الأعلى (اختر الدورة السابقة).
-            </p>
-          </div>
-        )}
-
-        {/* Professional Summary Cards */}
-
-        {/* Professional Summary Cards */}
-        <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-3">
-          
-          {/* Main Balance Card (Spans Full Width) */}
-          <div className="col-span-2 md:col-span-4 bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 backdrop-blur-xl rounded-[2rem] p-6 border border-white/20 shadow-2xl relative overflow-hidden group">
-            <div className="absolute -top-24 -right-24 w-48 h-48 bg-purple-500/30 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/40 transition-colors duration-700" />
-            <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-indigo-500/30 rounded-full blur-3xl pointer-events-none group-hover:bg-indigo-500/40 transition-colors duration-700" />
-            
-            <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md">
-                    <Wallet className="w-5 h-5 text-purple-200" />
-                  </div>
-                  <span className="text-purple-100 text-sm font-black tracking-wide">الرصيد الصافي للشهر</span>
-                </div>
-                <div className={`text-4xl md:text-5xl font-black tracking-tight ${balance < 0 ? "text-rose-400 drop-shadow-[0_0_15px_rgba(251,113,133,0.3)]" : "text-emerald-300 drop-shadow-[0_0_15px_rgba(110,231,183,0.3)]"}`}>
-                  {fmt(balance)} <span className="text-xl md:text-2xl font-bold text-white/50">د.ع</span>
-                </div>
-              </div>
-              
-              <div className="flex flex-col gap-2 w-full md:w-auto">
-                {balance < 0 && (
-                  <div className="flex items-center gap-2 bg-rose-500/20 backdrop-blur-md rounded-2xl px-4 py-3 border border-rose-500/30 shadow-inner">
-                    <AlertCircle className="w-5 h-5 text-rose-400" />
-                    <span className="text-rose-200 text-xs font-black">تجاوزت الميزانية المحددة!</span>
-                  </div>
-                )}
-                {balance >= 0 && balance < unpaidObligations && (
-                  <div className="flex items-center gap-2 bg-amber-500/20 backdrop-blur-md rounded-2xl px-4 py-3 border border-amber-500/30 shadow-inner">
-                    <AlertCircle className="w-5 h-5 text-amber-400" />
-                    <span className="text-amber-200 text-xs font-black">تحذير: الرصيد لا يكفي لتسديد الالتزامات ({fmt(unpaidObligations)} د.ع)</span>
-                  </div>
-                )}
-                {balance >= unpaidObligations && (
-                  <div className="flex items-center gap-2 bg-emerald-500/20 backdrop-blur-md rounded-2xl px-4 py-3 border border-emerald-500/30 shadow-inner">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                    <span className="text-emerald-200 text-xs font-black">الرصيد يغطي جميع الالتزامات بنجاح</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* KPI Cards */}
-          <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors duration-300 flex flex-col justify-between group relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-colors duration-500" />
-            <div className="flex items-center justify-between mb-3 relative z-10">
-              <span className="text-emerald-200 text-[10px] md:text-xs font-bold">الدخل الكلي</span>
-              <div className="p-1.5 bg-emerald-500/20 rounded-lg"><TrendingUp className="w-3.5 h-3.5 text-emerald-400" /></div>
-            </div>
-            <div className="text-lg md:text-xl font-black text-white relative z-10">{fmt(totalIncome)}</div>
-          </div>
-
-          <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors duration-300 flex flex-col justify-between group relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-colors duration-500" />
-            <div className="flex items-center justify-between mb-3 relative z-10">
-              <span className="text-rose-200 text-[10px] md:text-xs font-bold">المصاريف الكلية</span>
-              <div className="p-1.5 bg-rose-500/20 rounded-lg"><TrendingDown className="w-3.5 h-3.5 text-rose-400" /></div>
-            </div>
-            <div className="text-lg md:text-xl font-black text-white relative z-10">{fmt(totalExpensesAmt)}</div>
-          </div>
-
-          <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors duration-300 flex flex-col justify-between group relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition-colors duration-500" />
-            <div className="flex items-center justify-between mb-3 relative z-10">
-              <span className="text-indigo-200 text-[10px] md:text-xs font-bold">الأقساط الشهرية</span>
-              <div className="p-1.5 bg-indigo-500/20 rounded-lg"><CreditCard className="w-3.5 h-3.5 text-indigo-400" /></div>
-            </div>
-            <div className="text-lg md:text-xl font-black text-white relative z-10">{fmt(totalInstallmentMonthly)}</div>
-          </div>
-
-          <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors duration-300 flex flex-col justify-between group relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-colors duration-500" />
-            <div className="flex items-center justify-between mb-3 relative z-10">
-              <span className="text-amber-200 text-[10px] md:text-xs font-bold">الفواتير الثابتة</span>
-              <div className="p-1.5 bg-amber-500/20 rounded-lg"><Receipt className="w-3.5 h-3.5 text-amber-400" /></div>
-            </div>
-            <div className="text-lg md:text-xl font-black text-white relative z-10">{fmt(totalBillsAmt)}</div>
-          </div>
-
-          {/* Complex Mini-Cards */}
-          <div className="col-span-2 md:col-span-2 bg-gradient-to-br from-cyan-900/40 to-blue-900/40 backdrop-blur-md rounded-3xl p-4 border border-cyan-500/20 flex flex-col justify-center shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-                <span className="text-cyan-200 text-xs font-bold">لك (فائض / ديون خارجية)</span>
-              </div>
-              <span className="text-base font-black text-white">{fmt(totalDebtsForMe)} <span className="text-[10px] text-cyan-300/50">د.ع</span></span>
-            </div>
-            <div className="w-full h-px bg-cyan-400/10 my-3"></div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-rose-400 rounded-full" />
-                <span className="text-rose-200 text-xs font-bold">عليك (ديون غير مسددة)</span>
-              </div>
-              <span className="text-base font-black text-white">{fmt(totalDebtsOnMe)} <span className="text-[10px] text-rose-300/50">د.ع</span></span>
-            </div>
-          </div>
-
-          <div className="col-span-2 md:col-span-2 bg-gradient-to-br from-orange-900/40 to-red-900/40 backdrop-blur-md rounded-3xl p-4 border border-orange-500/20 flex flex-col justify-center shadow-lg">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <ShoppingCart className="w-4 h-4 text-orange-400" />
-                <span className="text-orange-200 text-xs font-bold">الاحتياجات والنواقص (تقديري)</span>
-              </div>
-              <span className="text-base font-black text-white">{fmt(totalNeedsAmt)} <span className="text-[10px] text-orange-300/50">د.ع</span></span>
-            </div>
-            {shoppingList.length > 0 && (
-              <div className="mt-2 text-[10px] text-orange-300/80 font-bold bg-black/20 rounded-xl p-2 flex items-center justify-between border border-white/5">
-                <span>{shoppingList.length} مواد مفقودة من موجودات البيت</span>
-                <button onClick={() => setActiveTab("needs")} className="bg-orange-500/20 hover:bg-orange-500/40 px-2 py-1 rounded-lg transition text-white">الذهاب للمخزن</button>
-              </div>
-            )}
-          </div>
-
-          {/* UPCOMING OBLIGATIONS SUMMARY */}
-          <div className="col-span-2 md:col-span-4 mt-2 bg-gradient-to-br from-gray-900/80 to-black backdrop-blur-xl rounded-[2rem] p-5 border border-white/10 shadow-2xl relative overflow-hidden">
-            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 mix-blend-overlay pointer-events-none" />
-            <h3 className="text-white font-black mb-4 flex items-center gap-2 text-sm md:text-base border-b border-white/10 pb-3">
-              <AlertCircle className="w-5 h-5 text-purple-400" />
-              سجل الالتزامات والمصاريف (ديون، فواتير، أقساط، ومصاريف)
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
-                <span className="text-gray-400 group-hover:text-amber-200 transition-colors text-xs font-bold flex items-center gap-2">
-                  <div className="p-1.5 bg-amber-500/10 rounded-lg"><Receipt className="w-4 h-4 text-amber-400"/></div> فواتير غير مسددة
-                </span>
-                <span className="text-white font-black text-sm">{fmt(unpaidBillsAmt)} <span className="text-[10px] text-gray-500">د.ع</span></span>
-              </div>
-              <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
-                <span className="text-gray-400 group-hover:text-indigo-200 transition-colors text-xs font-bold flex items-center gap-2">
-                  <div className="p-1.5 bg-indigo-500/10 rounded-lg"><CreditCard className="w-4 h-4 text-indigo-400"/></div> أقساط مطلوبة الدفع
-                </span>
-                <span className="text-white font-black text-sm">{fmt(unpaidInstallmentsMonthly)} <span className="text-[10px] text-gray-500">د.ع</span></span>
-              </div>
-              <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
-                <span className="text-gray-400 group-hover:text-rose-200 transition-colors text-xs font-bold flex items-center gap-2">
-                  <div className="p-1.5 bg-rose-500/10 rounded-lg"><Banknote className="w-4 h-4 text-rose-400"/></div> ديون عليك (غير مسددة)
-                </span>
-                <span className="text-white font-black text-sm">{fmt(totalDebtsOnMe)} <span className="text-[10px] text-gray-500">د.ع</span></span>
-              </div>
-              <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
-                <span className="text-gray-400 group-hover:text-emerald-200 transition-colors text-xs font-bold flex items-center gap-2">
-                  <div className="p-1.5 bg-emerald-500/10 rounded-lg"><ShoppingCart className="w-4 h-4 text-emerald-400"/></div> مصاريف هذا الشهر
-                </span>
-                <span className="text-white font-black text-sm">{fmt(totalExpensesAmt)} <span className="text-[10px] text-gray-500">د.ع</span></span>
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center bg-rose-500/10 -mx-5 -mb-5 px-5 py-4">
-              <span className="text-rose-200 font-black text-sm flex items-center gap-2">
-                <Target className="w-5 h-5 text-rose-400" />
-                المجموع الكلي المطلوب:
-              </span>
-              <span className="text-xl md:text-2xl font-black text-white drop-shadow-md">{fmt(unpaidBillsAmt + unpaidInstallmentsMonthly + totalDebtsOnMe + totalExpensesAmt)} <span className="text-xs text-rose-300">د.ع</span></span>
-            </div>
-          </div>
-        </div>
-        </>
-        )}
       </div>
 
       {/* ═══════════════ TABS AS APP ICONS ═══════════════ */}
@@ -2437,6 +2233,211 @@ export default function HomeFinanceDashboard() {
               </div>
             )}
 
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/15 blur-[60px] rounded-full pointer-events-none" />
+            <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/20 blur-[80px] rounded-full pointer-events-none" />
+            {/* Financial Cycle moved from Header */}
+          <div className="relative bg-gradient-to-br from-[#1a0533] via-[#2d1060] to-[#0f3460] rounded-[2rem] p-5 shadow-2xl overflow-hidden mt-6 mb-4">
+            <div className="relative z-10 mb-4 bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/20 flex flex-col md:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
+            <h3 className="font-bold text-white text-sm">الدورة المالية:</h3>
+            <select
+              value={selectedCycleId}
+              onChange={(e) => setSelectedCycleId(e.target.value)}
+              className="bg-black/30 border border-white/20 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-purple-500 p-2 outline-none"
+            >
+              {cycles.map(c => (
+                <option key={c.id} value={c.id} className="text-black">{c.label}</option>
+              ))}
+            </select>
+          </div>
+          
+          <button
+            onClick={() => {
+              if (!confirm("هل أنت متأكد من إنهاء الدورة المالية الحالية يدوياً وبدء دورة جديدة؟ هذا سيؤدي إلى نقل الميزانية المتبقية إلى الدورة الجديدة.")) return;
+              
+              const newCycleStarts = [...(settings?.manualCycleStarts || []), today()];
+              setSettings({ ...settings, manualCycleStarts: newCycleStarts });
+              syncToFirebase("settings", { ...settings, manualCycleStarts: newCycleStarts });
+            }}
+            className="w-full md:w-auto bg-blue-600/50 hover:bg-blue-600 border border-blue-400/50 text-white rounded-xl px-4 py-2 text-xs font-bold transition flex items-center justify-center gap-2"
+          >
+            إنهاء الدورة يدوياً
+          </button>
+        </div>
+        
+        {/* Helper Alert if user is confused about missing data on new cycle */}
+        {(expenses.length > 0 || incomes.length > 0) && totalExpensesAmt === 0 && totalIncome === 0 && selectedCycleId === cycles[0]?.id && (
+          <div className="relative z-10 bg-indigo-500/20 backdrop-blur-md border border-indigo-400/50 rounded-2xl p-4 text-center mb-5 shadow-lg shadow-indigo-500/20 animate-pulse">
+            <div className="flex justify-center items-center gap-2 mb-1">
+              <span className="text-indigo-100 font-black text-sm">مرحباً! لقد بدأت دورة مالية جديدة فارغة 🗓️</span>
+            </div>
+            <p className="text-indigo-200/80 font-bold text-xs mt-1">
+              أنت الآن في دورة شهرية جديدة. لرؤية مصاريفك وإدخالاتك السابقة، قم بتغيير الدورة المالية من القائمة المنسدلة في الأعلى (اختر الدورة السابقة).
+            </p>
+          </div>
+        )}
+
+        {/* Professional Summary Cards */}
+
+        {/* Professional Summary Cards */}
+        <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-3">
+          
+          {/* Main Balance Card (Spans Full Width) */}
+          <div className="col-span-2 md:col-span-4 bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 backdrop-blur-xl rounded-[2rem] p-6 border border-white/20 shadow-2xl relative overflow-hidden group">
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-purple-500/30 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/40 transition-colors duration-700" />
+            <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-indigo-500/30 rounded-full blur-3xl pointer-events-none group-hover:bg-indigo-500/40 transition-colors duration-700" />
+            
+            <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md">
+                    <Wallet className="w-5 h-5 text-purple-200" />
+                  </div>
+                  <span className="text-purple-100 text-sm font-black tracking-wide">الرصيد الصافي للشهر</span>
+                </div>
+                <div className={`text-4xl md:text-5xl font-black tracking-tight ${balance < 0 ? "text-rose-400 drop-shadow-[0_0_15px_rgba(251,113,133,0.3)]" : "text-emerald-300 drop-shadow-[0_0_15px_rgba(110,231,183,0.3)]"}`}>
+                  {fmt(balance)} <span className="text-xl md:text-2xl font-bold text-white/50">د.ع</span>
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-2 w-full md:w-auto">
+                {balance < 0 && (
+                  <div className="flex items-center gap-2 bg-rose-500/20 backdrop-blur-md rounded-2xl px-4 py-3 border border-rose-500/30 shadow-inner">
+                    <AlertCircle className="w-5 h-5 text-rose-400" />
+                    <span className="text-rose-200 text-xs font-black">تجاوزت الميزانية المحددة!</span>
+                  </div>
+                )}
+                {balance >= 0 && balance < unpaidObligations && (
+                  <div className="flex items-center gap-2 bg-amber-500/20 backdrop-blur-md rounded-2xl px-4 py-3 border border-amber-500/30 shadow-inner">
+                    <AlertCircle className="w-5 h-5 text-amber-400" />
+                    <span className="text-amber-200 text-xs font-black">تحذير: الرصيد لا يكفي لتسديد الالتزامات ({fmt(unpaidObligations)} د.ع)</span>
+                  </div>
+                )}
+                {balance >= unpaidObligations && (
+                  <div className="flex items-center gap-2 bg-emerald-500/20 backdrop-blur-md rounded-2xl px-4 py-3 border border-emerald-500/30 shadow-inner">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    <span className="text-emerald-200 text-xs font-black">الرصيد يغطي جميع الالتزامات بنجاح</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* KPI Cards */}
+          <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors duration-300 flex flex-col justify-between group relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-colors duration-500" />
+            <div className="flex items-center justify-between mb-3 relative z-10">
+              <span className="text-emerald-200 text-[10px] md:text-xs font-bold">الدخل الكلي</span>
+              <div className="p-1.5 bg-emerald-500/20 rounded-lg"><TrendingUp className="w-3.5 h-3.5 text-emerald-400" /></div>
+            </div>
+            <div className="text-lg md:text-xl font-black text-white relative z-10">{fmt(totalIncome)}</div>
+          </div>
+
+          <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors duration-300 flex flex-col justify-between group relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-16 h-16 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-colors duration-500" />
+            <div className="flex items-center justify-between mb-3 relative z-10">
+              <span className="text-rose-200 text-[10px] md:text-xs font-bold">المصاريف الكلية</span>
+              <div className="p-1.5 bg-rose-500/20 rounded-lg"><TrendingDown className="w-3.5 h-3.5 text-rose-400" /></div>
+            </div>
+            <div className="text-lg md:text-xl font-black text-white relative z-10">{fmt(totalExpensesAmt)}</div>
+          </div>
+
+          <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors duration-300 flex flex-col justify-between group relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition-colors duration-500" />
+            <div className="flex items-center justify-between mb-3 relative z-10">
+              <span className="text-indigo-200 text-[10px] md:text-xs font-bold">الأقساط الشهرية</span>
+              <div className="p-1.5 bg-indigo-500/20 rounded-lg"><CreditCard className="w-3.5 h-3.5 text-indigo-400" /></div>
+            </div>
+            <div className="text-lg md:text-xl font-black text-white relative z-10">{fmt(totalInstallmentMonthly)}</div>
+          </div>
+
+          <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors duration-300 flex flex-col justify-between group relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-colors duration-500" />
+            <div className="flex items-center justify-between mb-3 relative z-10">
+              <span className="text-amber-200 text-[10px] md:text-xs font-bold">الفواتير الثابتة</span>
+              <div className="p-1.5 bg-amber-500/20 rounded-lg"><Receipt className="w-3.5 h-3.5 text-amber-400" /></div>
+            </div>
+            <div className="text-lg md:text-xl font-black text-white relative z-10">{fmt(totalBillsAmt)}</div>
+          </div>
+
+          {/* Complex Mini-Cards */}
+          <div className="col-span-2 md:col-span-2 bg-gradient-to-br from-cyan-900/40 to-blue-900/40 backdrop-blur-md rounded-3xl p-4 border border-cyan-500/20 flex flex-col justify-center shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+                <span className="text-cyan-200 text-xs font-bold">لك (فائض / ديون خارجية)</span>
+              </div>
+              <span className="text-base font-black text-white">{fmt(totalDebtsForMe)} <span className="text-[10px] text-cyan-300/50">د.ع</span></span>
+            </div>
+            <div className="w-full h-px bg-cyan-400/10 my-3"></div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-rose-400 rounded-full" />
+                <span className="text-rose-200 text-xs font-bold">عليك (ديون غير مسددة)</span>
+              </div>
+              <span className="text-base font-black text-white">{fmt(totalDebtsOnMe)} <span className="text-[10px] text-rose-300/50">د.ع</span></span>
+            </div>
+          </div>
+
+          <div className="col-span-2 md:col-span-2 bg-gradient-to-br from-orange-900/40 to-red-900/40 backdrop-blur-md rounded-3xl p-4 border border-orange-500/20 flex flex-col justify-center shadow-lg">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4 text-orange-400" />
+                <span className="text-orange-200 text-xs font-bold">الاحتياجات والنواقص (تقديري)</span>
+              </div>
+              <span className="text-base font-black text-white">{fmt(totalNeedsAmt)} <span className="text-[10px] text-orange-300/50">د.ع</span></span>
+            </div>
+            {shoppingList.length > 0 && (
+              <div className="mt-2 text-[10px] text-orange-300/80 font-bold bg-black/20 rounded-xl p-2 flex items-center justify-between border border-white/5">
+                <span>{shoppingList.length} مواد مفقودة من موجودات البيت</span>
+                <button onClick={() => setActiveTab("needs")} className="bg-orange-500/20 hover:bg-orange-500/40 px-2 py-1 rounded-lg transition text-white">الذهاب للمخزن</button>
+              </div>
+            )}
+          </div>
+
+          {/* UPCOMING OBLIGATIONS SUMMARY */}
+          <div className="col-span-2 md:col-span-4 mt-2 bg-gradient-to-br from-gray-900/80 to-black backdrop-blur-xl rounded-[2rem] p-5 border border-white/10 shadow-2xl relative overflow-hidden">
+            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 mix-blend-overlay pointer-events-none" />
+            <h3 className="text-white font-black mb-4 flex items-center gap-2 text-sm md:text-base border-b border-white/10 pb-3">
+              <AlertCircle className="w-5 h-5 text-purple-400" />
+              سجل الالتزامات والمصاريف (ديون، فواتير، أقساط، ومصاريف)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
+                <span className="text-gray-400 group-hover:text-amber-200 transition-colors text-xs font-bold flex items-center gap-2">
+                  <div className="p-1.5 bg-amber-500/10 rounded-lg"><Receipt className="w-4 h-4 text-amber-400"/></div> فواتير غير مسددة
+                </span>
+                <span className="text-white font-black text-sm">{fmt(unpaidBillsAmt)} <span className="text-[10px] text-gray-500">د.ع</span></span>
+              </div>
+              <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
+                <span className="text-gray-400 group-hover:text-indigo-200 transition-colors text-xs font-bold flex items-center gap-2">
+                  <div className="p-1.5 bg-indigo-500/10 rounded-lg"><CreditCard className="w-4 h-4 text-indigo-400"/></div> أقساط مطلوبة الدفع
+                </span>
+                <span className="text-white font-black text-sm">{fmt(unpaidInstallmentsMonthly)} <span className="text-[10px] text-gray-500">د.ع</span></span>
+              </div>
+              <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
+                <span className="text-gray-400 group-hover:text-rose-200 transition-colors text-xs font-bold flex items-center gap-2">
+                  <div className="p-1.5 bg-rose-500/10 rounded-lg"><Banknote className="w-4 h-4 text-rose-400"/></div> ديون عليك (غير مسددة)
+                </span>
+                <span className="text-white font-black text-sm">{fmt(totalDebtsOnMe)} <span className="text-[10px] text-gray-500">د.ع</span></span>
+              </div>
+              <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
+                <span className="text-gray-400 group-hover:text-emerald-200 transition-colors text-xs font-bold flex items-center gap-2">
+                  <div className="p-1.5 bg-emerald-500/10 rounded-lg"><ShoppingCart className="w-4 h-4 text-emerald-400"/></div> مصاريف هذا الشهر
+                </span>
+                <span className="text-white font-black text-sm">{fmt(totalExpensesAmt)} <span className="text-[10px] text-gray-500">د.ع</span></span>
+              </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center bg-rose-500/10 -mx-5 -mb-5 px-5 py-4">
+              <span className="text-rose-200 font-black text-sm flex items-center gap-2">
+                <Target className="w-5 h-5 text-rose-400" />
+                المجموع الكلي المطلوب:
+              </span>
+              <span className="text-xl md:text-2xl font-black text-white drop-shadow-md">{fmt(unpaidBillsAmt + unpaidInstallmentsMonthly + totalDebtsOnMe + totalExpensesAmt)} <span className="text-xs text-rose-300">د.ع</span></span>
+            </div>
+          </div>
+        </div>
+          </div>
             {/* ══════════════════════════════════════════
                 PREMIUM BUDGET BREAKDOWN SECTION
             ══════════════════════════════════════════ */}
