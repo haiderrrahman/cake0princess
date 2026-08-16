@@ -104,7 +104,6 @@ function AdminHubContent() {
   // Track purchase source per item: 'haider' | 'cake'
   const [purchaseSource, setPurchaseSource] = useState<Record<string, 'salary' | 'cake'>>({});
   const [invExpSummary, setInvExpSummary] = useState({ haider: 0, cake: 0 });
-  const [deliveryDebtModal, setDeliveryDebtModal] = useState<{ isOpen: boolean, orderId: string, customerName: string, price: number, paidAmount: string }>({ isOpen: false, orderId: "", customerName: "", price: 0, paidAmount: "" });
 
   const [stats, setStats] = useState<any>(() => {
     if (typeof window !== 'undefined') {
@@ -391,48 +390,12 @@ function AdminHubContent() {
   };
 
   const updateExternalOrderStatus = async (orderId: string, newStatus: string) => {
-    if (newStatus === "delivered") {
-      const order = externalOrders.find(o => o.id === orderId);
-      if (order) {
-        setDeliveryDebtModal({ 
-          isOpen: true, 
-          orderId: order.id, 
-          customerName: order.customerName, 
-          price: Number(order.price) || 0, 
-          paidAmount: String(Number(order.price) || 0) 
-        });
-        return; // Wait for modal confirmation
-      }
-    }
-
     try {
       setUpdatingOrder(orderId);
       const orderRef = doc(db, "external_orders", orderId);
       await updateDoc(orderRef, { status: newStatus });
       toast.success("تم تحديث حالة طلب السوشيال ميديا");
       fetchAll();
-    } catch (error) {
-      console.error(error);
-      toast.error("حدث خطأ أثناء التحديث");
-    } finally {
-      setUpdatingOrder(null);
-    }
-  };
-
-  const handleConfirmDelivery = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setUpdatingOrder(deliveryDebtModal.orderId);
-      const orderRef = doc(db, "external_orders", deliveryDebtModal.orderId);
-      const paid = Number(deliveryDebtModal.paidAmount) || 0;
-      await updateDoc(orderRef, { 
-        status: "delivered",
-        paidAmount: paid,
-        isDebtSettled: paid === deliveryDebtModal.price
-      });
-      toast.success("تم تأكيد التسليم وتحديث السجل المالي");
-      fetchAll();
-      setDeliveryDebtModal(prev => ({ ...prev, isOpen: false }));
     } catch (error) {
       console.error(error);
       toast.error("حدث خطأ أثناء التحديث");
@@ -1385,64 +1348,6 @@ function AdminHubContent() {
             fetchAll();
           }}
         />
-      )}
-
-      {deliveryDebtModal.isOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden animate-scale-in">
-            <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/10">
-              <h3 className="font-black text-lg text-emerald-800 dark:text-emerald-200">تأكيد التسليم والمستحقات</h3>
-              <button onClick={() => setDeliveryDebtModal(prev => ({ ...prev, isOpen: false }))} className="text-gray-400 hover:text-gray-600">✕</button>
-            </div>
-            <form onSubmit={handleConfirmDelivery} className="p-5">
-              <p className="text-sm font-bold text-gray-600 dark:text-gray-300 mb-4 text-center">
-                تأكيد تسليم الطلب للزبون <span className="text-purple-600">{deliveryDebtModal.customerName}</span>؟
-              </p>
-              
-              <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-2xl p-4 mb-4 border border-gray-100 dark:border-zinc-700">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-gray-500">السعر الكلي للطلب</span>
-                  <span className="font-black">{deliveryDebtModal.price.toLocaleString()} د.ع</span>
-                </div>
-                
-                <label className="block text-sm font-black text-gray-800 dark:text-gray-200 mt-3 mb-2">المبلغ الواصل (المستلم):</label>
-                <input 
-                  type="number" 
-                  required
-                  value={deliveryDebtModal.paidAmount} 
-                  onChange={e => setDeliveryDebtModal(prev => ({ ...prev, paidAmount: e.target.value }))}
-                  className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-600 rounded-xl px-4 py-3 font-bold text-lg text-center focus:border-emerald-500 outline-none"
-                  dir="ltr"
-                />
-              </div>
-
-              {Number(deliveryDebtModal.paidAmount) < deliveryDebtModal.price && (
-                <div className="bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 p-3 rounded-xl mb-4 text-xs font-bold text-center border border-rose-200 dark:border-rose-900/50">
-                  ⚠️ الزبون لديه نقص بالدفع! سيتم تسجيل <span className="font-black">{(deliveryDebtModal.price - Number(deliveryDebtModal.paidAmount)).toLocaleString()} د.ع</span> كدين على الزبون.
-                </div>
-              )}
-
-              {Number(deliveryDebtModal.paidAmount) > deliveryDebtModal.price && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 p-3 rounded-xl mb-4 text-xs font-bold text-center border border-amber-200 dark:border-amber-900/50">
-                  ⚠️ تم استلام مبلغ زائد! سيتم تسجيل <span className="font-black">{(Number(deliveryDebtModal.paidAmount) - deliveryDebtModal.price).toLocaleString()} د.ع</span> كدين للزبون في ذمتك.
-                </div>
-              )}
-
-              {Number(deliveryDebtModal.paidAmount) === deliveryDebtModal.price && (
-                <div className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 p-3 rounded-xl mb-4 text-xs font-bold text-center border border-emerald-200 dark:border-emerald-900/50">
-                  ✅ تم تسديد المبلغ بالكامل!
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setDeliveryDebtModal(prev => ({ ...prev, isOpen: false }))} className="flex-1 px-4 py-3 bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 rounded-xl font-bold">إلغاء</button>
-                <button type="submit" disabled={updatingOrder === deliveryDebtModal.orderId} className="flex-[2] px-4 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black disabled:opacity-50">
-                  تأكيد وحفظ
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
     </div>
   );

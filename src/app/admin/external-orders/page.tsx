@@ -20,9 +20,11 @@ export default function ExternalOrdersAdmin() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [activeTab, setActiveTab] = useState<string>("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "debts">("orders");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [settleOrder, setSettleOrder] = useState<any>(null);
+  const [settlePaidAmount, setSettlePaidAmount] = useState<string>("");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editOrderId, setEditOrderId] = useState<string | null>(null);
   
@@ -33,7 +35,6 @@ export default function ExternalOrdersAdmin() {
   const [cakeName, setCakeName] = useState("");
   const [price, setPrice] = useState("");
   const [cost, setCost] = useState("");
-  const [paidAmount, setPaidAmount] = useState("");
   const [deliveryDate, setDeliveryDate] = useState<string>(new Date().toISOString());
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -106,7 +107,6 @@ export default function ExternalOrdersAdmin() {
     setCakeName(order.cakeName || "");
     setPrice(order.price ? String(order.price) : "");
     setCost(order.cost ? String(order.cost) : "");
-    setPaidAmount(order.paidAmount ? String(order.paidAmount) : "");
     setDeliveryDate(order.deliveryDate || new Date().toISOString());
     setImagePreview(order.imageUrl || null);
     setImageFile(null);
@@ -151,7 +151,6 @@ export default function ExternalOrdersAdmin() {
 
       const numPrice = parseIqdInput(price);
       const numCost = cost ? parseIqdInput(cost) : 0;
-      const numPaid = paidAmount ? parseIqdInput(paidAmount) : 0;
       const profit = numCost > 0 ? numPrice - numCost : numPrice;
 
       const existingCustomer = customers.find(c => c.name === customerName);
@@ -195,7 +194,6 @@ export default function ExternalOrdersAdmin() {
         cakeName,
         price: numPrice,
         cost: numCost,
-        paidAmount: numPaid,
         profit,
         deliveryDate,
         ...(imageUrl && { imageUrl }),
@@ -222,7 +220,6 @@ export default function ExternalOrdersAdmin() {
       setCakeName("");
       setPrice("");
       setCost("");
-      setPaidAmount("");
       setDeliveryDate(new Date().toISOString());
       setImageFile(null);
       setImagePreview(null);
@@ -250,6 +247,35 @@ export default function ExternalOrdersAdmin() {
       } catch (e) {
         toast.error("خطأ أثناء التسديد");
       }
+    }
+  };
+
+
+  const handleStatusChange = async (order: any, newStatus: string) => {
+    if (newStatus === "delivered") {
+      setSettleOrder(order);
+      setSettlePaidAmount(String(order.price));
+    } else {
+      await updateDoc(doc(db, "external_orders", order.id), { status: newStatus });
+      toast.success("تم تحديث الحالة");
+      fetchOrdersAndCustomers();
+    }
+  };
+
+  const submitSettlement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!settleOrder) return;
+    const numPaid = Number(settlePaidAmount) || 0;
+    try {
+      await updateDoc(doc(db, "external_orders", settleOrder.id), { 
+        status: "delivered", 
+        paidAmount: numPaid 
+      });
+      toast.success("تم تحديث الطلب بنجاح");
+      setSettleOrder(null);
+      fetchOrdersAndCustomers();
+    } catch (e) {
+      toast.error("حدث خطأ");
     }
   };
 
@@ -327,7 +353,6 @@ export default function ExternalOrdersAdmin() {
                 setCakeName("");
                 setPrice("");
                 setCost("");
-                setPaidAmount("");
                 setDeliveryDate(new Date().toISOString());
                 setImageFile(null);
                 setImagePreview(null);
@@ -400,6 +425,7 @@ export default function ExternalOrdersAdmin() {
 
       {activeTab === "orders" && (
         <>
+
       {/* Visible Filter Grid (No Horizontal Scroll / Swipe) */}
       <div className="px-5 mb-6">
         <div className="flex flex-wrap gap-2 bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm">
@@ -432,8 +458,75 @@ export default function ExternalOrdersAdmin() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredOrders.map(order => (
-            <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[24px] p-4 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition">
+          
+          {(() => {
+            const debts = filteredOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled);
+            const normals = filteredOrders.filter(o => !(o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled));
+            return (
+              <>
+                {debts.length > 0 && (
+                  <div className="mb-6 space-y-3">
+                    <h3 className="font-black text-rose-600 dark:text-rose-400 mb-2 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                      الديون المعلقة (يتطلب تسوية)
+                    </h3>
+                    {debts.map(order => {
+                      const customerOwesUs = order.price > (order.paidAmount || 0);
+                      const diff = Math.abs(order.price - (order.paidAmount || 0));
+                      return (
+                        <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
+                          <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
+                            {order.imageUrl ? (
+                              <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                <Smartphone className="w-8 h-8" />
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex-1 flex flex-col justify-between">
+                            <div>
+                              <div className="flex justify-between items-start mb-1">
+                                <div>
+                                  <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
+                                  <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5" /> {order.customerName}
+                                  </p>
+                                </div>
+                                <div className="flex gap-2 items-center">
+                                  <div className={`px-3 py-1 rounded-lg text-xs font-black ${customerOwesUs ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {customerOwesUs ? 'نطلبه' : 'يطلبنا'}: {diff.toLocaleString()} د.ع
+                                  </div>
+                                  <button onClick={() => openEditModal(order)} className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center transition hover:bg-blue-100">
+                                    <Edit3 className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDelete(order.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center transition hover:bg-red-100">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 pt-3 border-t border-gray-50 dark:border-zinc-800/50">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-gray-400 font-bold">الإجمالي</span>
+                                <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.price).toLocaleString()} د.ع</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-gray-400 font-bold">الواصل</span>
+                                <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.paidAmount || 0).toLocaleString()} د.ع</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="space-y-3">
+                  {normals.map(order => (
+                    <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[24px] p-4 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition">
+
               {/* Image / Icon */}
               <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                 {order.imageUrl ? (
@@ -457,7 +550,18 @@ export default function ExternalOrdersAdmin() {
                         <Smartphone className="w-3.5 h-3.5" /> {order.platform}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
+                      <select 
+                        value={order.status || 'pending'} 
+                        onChange={(e) => handleStatusChange(order, e.target.value)}
+                        className="text-xs font-bold bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-emerald-500"
+                      >
+                        <option value="pending">⏳ قيد التحضير</option>
+                        <option value="prepared">✨ تم التحضير</option>
+                        <option value="delivering">🚗 قيد التوصيل</option>
+                        <option value="delivered">✅ تم التسليم</option>
+                        <option value="cancelled">❌ ملغي</option>
+                      </select>
                       <button onClick={() => openEditModal(order)} className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-blue-100">
                         <Edit3 className="w-4 h-4" />
                       </button>
@@ -492,6 +596,10 @@ export default function ExternalOrdersAdmin() {
               </div>
             </div>
           ))}
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -576,6 +684,45 @@ export default function ExternalOrdersAdmin() {
         );
       })()}
 
+      
+      {settleOrder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center">
+              <h3 className="font-bold text-lg">تسوية الطلب</h3>
+              <button onClick={() => setSettleOrder(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <form onSubmit={submitSettlement} className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-2">المبلغ الإجمالي</label>
+                <div className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-gray-500 font-bold">
+                  {Number(settleOrder.price).toLocaleString()} د.ع
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 text-emerald-600">المبلغ الواصل من الزبون (د.ع)</label>
+                <input 
+                  type="number" 
+                  required 
+                  value={settlePaidAmount} 
+                  onChange={e => setSettlePaidAmount(e.target.value)}
+                  className="w-full bg-white dark:bg-zinc-800 border-2 border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none font-black text-lg" 
+                  placeholder="أدخل المبلغ الواصل" 
+                />
+                <p className="text-xs text-gray-400 mt-2">
+                  إذا كان المبلغ الواصل أقل من السعر الإجمالي، سيتم تسجيل الباقي كدين (نطلبه).
+                  <br/>
+                  إذا كان الواصل أكثر، سيتم تسجيل الباقي كدين (يطلبنا).
+                </p>
+              </div>
+              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl flex justify-center items-center gap-2 transition">
+                حفظ وإنهاء
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Add Order Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -645,22 +792,18 @@ export default function ExternalOrdersAdmin() {
                 <textarea required value={cakeName} onChange={e => setCakeName(e.target.value)} className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none min-h-[80px]" placeholder="مثال: كيكة عيد ميلاد طابقين بنكهة الفراولة..."></textarea>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
                 <div>
-                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">سعر البيع (د.ع)</label>
+                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">سعر البيع للزبون (د.ع)</label>
                   <FormattedNumberInput required value={price} onChange={val => setPrice(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: 55" />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">تكلفة الصنع (د.ع)</label>
-                  <FormattedNumberInput value={cost} onChange={val => setCost(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="اختياري" />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">العربون المستلم (د.ع)</label>
-                  <FormattedNumberInput value={paidAmount} onChange={val => setPaidAmount(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="اختياري" />
+                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">تكلفة الصنع (د.ع) - اختياري</label>
+                  <FormattedNumberInput value={cost} onChange={val => setCost(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: 20" />
                 </div>
                 
                 {price && (
-                  <div className="col-span-3 pt-2 flex items-center justify-between text-emerald-700 dark:text-emerald-400 border-t border-emerald-200 dark:border-emerald-800/50 mt-2">
+                  <div className="col-span-2 pt-2 flex items-center justify-between text-emerald-700 dark:text-emerald-400 border-t border-emerald-200 dark:border-emerald-800/50 mt-2">
                     <span className="text-sm font-bold flex items-center gap-2"><Calculator className="w-4 h-4"/> الربح الصافي:</span>
                     <span className="font-black text-lg">{(Number(price) - (cost ? Number(cost) : 0)).toLocaleString()} د.ع</span>
                   </div>
