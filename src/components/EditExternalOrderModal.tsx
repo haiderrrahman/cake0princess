@@ -24,6 +24,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
   const [customerPhone, setCustomerPhone] = useState("");
   const [cakeName, setCakeName] = useState("");
   const [price, setPrice] = useState("");
+  const [paidAmount, setPaidAmount] = useState<string | number>("");
   const [cost, setCost] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,6 +38,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       setCustomerPhone(order.customerPhone || "");
       setCakeName(order.cakeName || "");
       setPrice(order.price || "");
+      setPaidAmount(order.paidAmount !== undefined ? order.paidAmount : (order.price || ""));
       setCost(order.cost || "");
       setDeliveryDate(order.deliveryDate || "");
       setImagePreview(order.imageUrl || null);
@@ -71,6 +73,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
     try {
       const numPrice = parseIqdInput(price);
       const numCost = parseIqdInput(cost);
+      const numPaidAmount = parseIqdInput(paidAmount);
+      const isDebtSettled = numPaidAmount === numPrice;
 
       let tempImageUrl = "";
       if (imageFile) {
@@ -87,6 +91,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         customerPhone,
         cakeName,
         price: numPrice,
+        paidAmount: numPaidAmount,
+        isDebtSettled,
         cost: numCost,
         profit: numCost > 0 ? numPrice - numCost : numPrice,
         deliveryDate,
@@ -183,17 +189,23 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-sm font-medium mb-1 dark:text-gray-300">السعر (د.ع)</label>
                 <FormattedNumberInput required value={price} onChange={val => setPrice(val)}
-                  className="w-full border dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#e8456b]" />
+                  className="w-full border dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#e8456b] text-sm" />
               </div>
               
               <div>
+                <label className="block text-sm font-medium mb-1 dark:text-gray-300">المُستلم (د.ع)</label>
+                <FormattedNumberInput required value={paidAmount} onChange={val => setPaidAmount(val)}
+                  className="w-full border dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm" />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium mb-1 dark:text-gray-300">الكلفة (د.ع)</label>
                 <FormattedNumberInput required value={cost} onChange={val => setCost(val)}
-                  className="w-full border dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#e8456b]" />
+                  className="w-full border dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#e8456b] text-sm" />
               </div>
             </div>
 
