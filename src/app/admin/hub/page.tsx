@@ -220,7 +220,7 @@ function AdminHubContent() {
       
       allExt.forEach(o => {
         if (["rejected", "cancelled"].includes(o.status)) return;
-        const amt = Number(o.price) || 0;
+        const amt = o.paidAmount !== undefined ? Number(o.paidAmount) : (Number(o.price) || 0);
         calcSales(o, amt, true);
         totalProfit += Number(o.profit) || 0;
         breakdown.social += amt;
@@ -457,6 +457,46 @@ function AdminHubContent() {
     } catch (error) {
       console.error(error);
       toast.error("حدث خطأ أثناء الحفظ");
+    } finally {
+      setUpdatingOrder(null);
+    }
+  };
+
+  const handleSettleDebt = async (order: any, diffAmt: number, customerOwesUs: boolean) => {
+    if (!window.confirm("هل تم تسديد هذا المبلغ بالكامل؟")) return;
+    try {
+      setUpdatingOrder(order.id);
+      
+      // Update the order
+      await updateDoc(doc(db, "external_orders", order.id), { 
+        paidAmount: order.price,
+        isDebtSettled: true 
+      });
+      
+      // Add to sales or expenses
+      if (customerOwesUs) {
+        await addDoc(collection(db, "store_sales"), {
+          itemName: "تسديد دين سوشيال - " + (order.customerName || ""),
+          price: diffAmt,
+          profit: diffAmt,
+          quantity: 1,
+          category: "تسديد ديون",
+          createdAt: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, "expenses"), {
+          amount: diffAmt,
+          category: "إرجاع أمانة زبون",
+          description: "إرجاع مبلغ للزبون - " + (order.customerName || ""),
+          date: new Date().toISOString().split('T')[0],
+          createdAt: serverTimestamp()
+        });
+      }
+      
+      toast.success("تم التسديد بنجاح وتم تسجيلها في الحسابات");
+      fetchAll();
+    } catch (e) {
+      toast.error("خطأ أثناء التسديد");
     } finally {
       setUpdatingOrder(null);
     }
@@ -922,7 +962,11 @@ function AdminHubContent() {
                       const diffAmt = isDebt ? Math.abs(Number(order.price) - Number(order.paidAmount || 0)) : 0;
 
                       return (
-                        <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-3xl p-3 flex flex-col gap-3 shadow-sm relative group border-2 ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : weOweCustomer ? 'border-blue-400 dark:border-blue-800/50' : 'border-gray-100 dark:border-zinc-800'}`}>
+                        <div key={order.id} className={`rounded-3xl p-3 flex flex-col gap-3 shadow-sm relative group border-2 transition-all ${
+                          customerOwesUs ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-400 dark:border-rose-800' : 
+                          weOweCustomer ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-400 dark:border-blue-800' : 
+                          'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800'
+                        }`}>
                           
                           {/* Image Top */}
                           <div className="w-full aspect-square rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 border border-gray-100 dark:border-zinc-700 relative">
@@ -956,9 +1000,18 @@ function AdminHubContent() {
                                 <span className="font-black text-emerald-600 dark:text-emerald-400">{Number(order.price || 0).toLocaleString()} د.ع</span>
                               </div>
                               {isDebt && (
-                                <div className={`flex justify-between items-center text-[10px] font-black px-2 py-1 rounded-lg ${customerOwesUs ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'}`}>
-                                  <span>{customerOwesUs ? 'الباقي نطلبه:' : 'أمانة يطلبنا:'}</span>
-                                  <span>{diffAmt.toLocaleString()} د.ع</span>
+                                <div className="flex flex-col gap-1.5 mt-1">
+                                  <div className={`flex justify-between items-center text-[10px] font-black px-2 py-1.5 rounded-lg ${customerOwesUs ? 'bg-rose-100/50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-blue-100/50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                                    <span>{customerOwesUs ? '🔴 الباقي نطلبه:' : '🔵 أمانة يطلبنا:'}</span>
+                                    <span>{diffAmt.toLocaleString()} د.ع</span>
+                                  </div>
+                                  <button 
+                                    onClick={() => handleSettleDebt(order, diffAmt, customerOwesUs)}
+                                    disabled={isUpdating}
+                                    className={`w-full text-center text-[10px] font-black py-1.5 rounded-lg transition-all ${customerOwesUs ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'}`}
+                                  >
+                                    تأكيد التسديد
+                                  </button>
                                 </div>
                               )}
                               <div className="relative w-full">
