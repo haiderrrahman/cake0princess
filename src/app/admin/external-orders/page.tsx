@@ -300,8 +300,20 @@ export default function ExternalOrdersAdmin() {
     const isDeliveredA = a.status === 'delivered' || a.status === 'completed';
     const isDeliveredB = b.status === 'delivered' || b.status === 'completed';
     
-    if (isDeliveredA && !isDeliveredB) return 1;
-    if (!isDeliveredA && isDeliveredB) return -1;
+    // Check if debt
+    const isDebtA = isDeliveredA && a.paidAmount !== undefined && a.paidAmount !== a.price && !a.isDebtSettled;
+    const isDebtB = isDeliveredB && b.paidAmount !== undefined && b.paidAmount !== b.price && !b.isDebtSettled;
+
+    // Debt orders MUST be at the top, even above pending orders!
+    if (isDebtA && !isDebtB) return -1;
+    if (!isDebtA && isDebtB) return 1;
+
+    // Then, normal delivered orders sink to bottom
+    const shouldSinkA = isDeliveredA && !isDebtA;
+    const shouldSinkB = isDeliveredB && !isDebtB;
+    
+    if (shouldSinkA && !shouldSinkB) return 1;
+    if (!shouldSinkA && shouldSinkB) return -1;
     
     const parseDate = (d: any) => {
       if (!d) return new Date(8640000000000000); // push to bottom if no date
@@ -460,146 +472,88 @@ export default function ExternalOrdersAdmin() {
         <div className="space-y-3">
           
           {(() => {
-            const allDebts = filteredOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled);
-            const customersOweUs = allDebts.filter(o => o.paidAmount < o.price);
-            const weOweCustomers = allDebts.filter(o => o.paidAmount > o.price);
-            const totalOwedToUs = customersOweUs.reduce((s, o) => s + (o.price - o.paidAmount), 0);
-            const totalWeOwe = weOweCustomers.reduce((s, o) => s + (o.paidAmount - o.price), 0);
-            
+            const debts = filteredOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled);
             const normals = filteredOrders.filter(o => !(o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled));
+            
+            const weDemandTotal = debts.reduce((sum, o) => o.price > (o.paidAmount || 0) ? sum + (o.price - (o.paidAmount || 0)) : sum, 0);
+            const theyDemandTotal = debts.reduce((sum, o) => (o.paidAmount || 0) > o.price ? sum + ((o.paidAmount || 0) - o.price) : sum, 0);
+
             return (
               <>
-                {allDebts.length > 0 && (
-                  <div className="mb-6 space-y-6 border-b-2 border-gray-100 dark:border-zinc-800 pb-6">
-                    {customersOweUs.length > 0 && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-black text-rose-600 dark:text-rose-400 flex items-center gap-2 text-sm">
-                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                            زبائن المديون (نطلبهم)
-                          </h3>
-                          <span className="bg-rose-100 text-rose-700 px-3 py-1 rounded-xl text-xs font-black shadow-sm">
-                            مجموع الباقي: {totalOwedToUs.toLocaleString()} د.ع
-                          </span>
-                        </div>
-                        {customersOweUs.map(order => {
-                          const diff = Math.abs(order.price - (order.paidAmount || 0));
-                          return (
-                            <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 border-rose-400 dark:border-rose-800/50 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition">
-                              <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
-                                {order.imageUrl ? (
-                                  <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                    <Smartphone className="w-8 h-8" />
-                                  </div>
-                                )}
-                              </div>
-                              
-                              <div className="flex-1 flex flex-col justify-between">
-                                <div>
-                                  <div className="flex justify-between items-start mb-1">
-                                    <div>
-                                      <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
-                                      <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1.5">
-                                        <User className="w-3.5 h-3.5" /> {order.customerName}
-                                      </p>
-                                    </div>
-                                    <div className="flex gap-2 items-center">
-                                      <div className="px-3 py-1 rounded-lg text-xs font-black bg-rose-100 text-rose-700 flex items-center gap-1.5">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                                        نطلبه (المبلغ الباقي): {diff.toLocaleString()} د.ع
-                                      </div>
-                                      <button onClick={() => openEditModal(order)} className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center transition hover:bg-blue-100">
-                                        <Edit3 className="w-4 h-4" />
-                                      </button>
-                                      <button onClick={() => handleDelete(order.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center transition hover:bg-red-100">
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 pt-3 border-t border-gray-50 dark:border-zinc-800/50">
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] text-gray-400 font-bold">الإجمالي</span>
-                                    <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.price).toLocaleString()} د.ع</span>
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] text-gray-400 font-bold">الواصل</span>
-                                    <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.paidAmount || 0).toLocaleString()} د.ع</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                {debts.length > 0 && (
+                  <div className="mb-6 space-y-3">
+                    <h3 className="font-black text-rose-600 dark:text-rose-400 mb-2 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                      الديون المعلقة (يتطلب تسوية)
+                    </h3>
 
-                    {weOweCustomers.length > 0 && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-black text-blue-600 dark:text-blue-400 flex items-center gap-2 text-sm">
-                            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-                            زبائن المدان (يطلبونا)
-                          </h3>
-                          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-xl text-xs font-black shadow-sm">
-                            مجموع الباقي: {totalWeOwe.toLocaleString()} د.ع
-                          </span>
+                    {/* Summary Totals Banner */}
+                    <div className="flex gap-3 mb-4">
+                      {weDemandTotal > 0 && (
+                        <div className="bg-rose-50 border border-rose-200 dark:bg-rose-900/20 dark:border-rose-800/50 p-3 rounded-2xl flex-1 flex flex-col justify-center items-center text-center shadow-sm">
+                          <span className="text-xs font-bold text-rose-600/80 dark:text-rose-400/80 mb-1">مجموع نطلبه (لنا)</span>
+                          <span className="text-lg font-black text-rose-700 dark:text-rose-300">{weDemandTotal.toLocaleString()} د.ع</span>
                         </div>
-                        {weOweCustomers.map(order => {
-                          const diff = Math.abs(order.price - (order.paidAmount || 0));
-                          return (
-                            <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 border-blue-400 dark:border-blue-800/50 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition">
-                              <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
-                                {order.imageUrl ? (
-                                  <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                    <Smartphone className="w-8 h-8" />
-                                  </div>
-                                )}
+                      )}
+                      {theyDemandTotal > 0 && (
+                        <div className="bg-blue-50 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-800/50 p-3 rounded-2xl flex-1 flex flex-col justify-center items-center text-center shadow-sm">
+                          <span className="text-xs font-bold text-blue-600/80 dark:text-blue-400/80 mb-1">مجموع يطلبونا (علينا)</span>
+                          <span className="text-lg font-black text-blue-700 dark:text-blue-300">{theyDemandTotal.toLocaleString()} د.ع</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {debts.map(order => {
+                      const customerOwesUs = order.price > (order.paidAmount || 0);
+                      const diff = Math.abs(order.price - (order.paidAmount || 0));
+                      return (
+                        <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
+                          <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
+                            {order.imageUrl ? (
+                              <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                <Smartphone className="w-8 h-8" />
                               </div>
-                              
-                              <div className="flex-1 flex flex-col justify-between">
+                            )}
+                          </div>
+                          
+                          <div className="flex-1 flex flex-col justify-between">
+                            <div>
+                              <div className="flex justify-between items-start mb-1">
                                 <div>
-                                  <div className="flex justify-between items-start mb-1">
-                                    <div>
-                                      <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
-                                      <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1.5">
-                                        <User className="w-3.5 h-3.5" /> {order.customerName}
-                                      </p>
-                                    </div>
-                                    <div className="flex gap-2 items-center">
-                                      <div className="px-3 py-1 rounded-lg text-xs font-black bg-blue-100 text-blue-700 flex items-center gap-1.5">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                        يطلبنا (المبلغ الباقي): {diff.toLocaleString()} د.ع
-                                      </div>
-                                      <button onClick={() => openEditModal(order)} className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center transition hover:bg-blue-100">
-                                        <Edit3 className="w-4 h-4" />
-                                      </button>
-                                      <button onClick={() => handleDelete(order.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center transition hover:bg-red-100">
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  </div>
+                                  <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
+                                  <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5" /> {order.customerName}
+                                  </p>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 pt-3 border-t border-gray-50 dark:border-zinc-800/50">
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] text-gray-400 font-bold">الإجمالي</span>
-                                    <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.price).toLocaleString()} د.ع</span>
+                                <div className="flex gap-2 items-center">
+                                  <div className={`px-3 py-1 rounded-lg text-xs font-black ${customerOwesUs ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {customerOwesUs ? 'نطلبه' : 'يطلبنا'}: {diff.toLocaleString()} د.ع
                                   </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] text-gray-400 font-bold">الواصل</span>
-                                    <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.paidAmount || 0).toLocaleString()} د.ع</span>
-                                  </div>
+                                  <button onClick={() => openEditModal(order)} className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center transition hover:bg-blue-100">
+                                    <Edit3 className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDelete(order.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center transition hover:bg-red-100">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
                                 </div>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 pt-3 border-t border-gray-50 dark:border-zinc-800/50">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-gray-400 font-bold">الإجمالي</span>
+                                <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.price).toLocaleString()} د.ع</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-gray-400 font-bold">الواصل</span>
+                                <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.paidAmount || 0).toLocaleString()} د.ع</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 <div className="space-y-3">
@@ -764,43 +718,67 @@ export default function ExternalOrdersAdmin() {
       })()}
 
       
-      {settleOrder && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden animate-scale-in">
-            <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center">
-              <h3 className="font-bold text-lg">تسوية الطلب</h3>
-              <button onClick={() => setSettleOrder(null)} className="text-gray-400 hover:text-gray-600">✕</button>
-            </div>
-            <form onSubmit={submitSettlement} className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-bold mb-2">المبلغ الإجمالي</label>
-                <div className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-gray-500 font-bold">
-                  {Number(settleOrder.price).toLocaleString()} د.ع
+      {settleOrder && (() => {
+        const total = Number(settleOrder.price) || 0;
+        const paid = Number(settlePaidAmount) || 0;
+        const diff = Math.abs(total - paid);
+        const customerOwesUs = total > paid;
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden animate-scale-in">
+              <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center">
+                <h3 className="font-bold text-lg">تسوية الطلب</h3>
+                <button onClick={() => setSettleOrder(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+              </div>
+              <form onSubmit={submitSettlement} className="p-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-bold mb-2">المبلغ الإجمالي</label>
+                  <div className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-gray-500 font-bold">
+                    {total.toLocaleString()} د.ع
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-bold mb-2 text-emerald-600">المبلغ الواصل من الزبون (د.ع)</label>
-                <input 
-                  type="number" 
-                  required 
-                  value={settlePaidAmount} 
-                  onChange={e => setSettlePaidAmount(e.target.value)}
-                  className="w-full bg-white dark:bg-zinc-800 border-2 border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none font-black text-lg" 
-                  placeholder="أدخل المبلغ الواصل" 
-                />
-                <p className="text-xs text-gray-400 mt-2">
-                  إذا كان المبلغ الواصل أقل من السعر الإجمالي، سيتم تسجيل الباقي كدين (نطلبه).
-                  <br/>
-                  إذا كان الواصل أكثر، سيتم تسجيل الباقي كدين (يطلبنا).
-                </p>
-              </div>
-              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl flex justify-center items-center gap-2 transition">
-                حفظ وإنهاء
-              </button>
-            </form>
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-emerald-600">المبلغ الواصل من الزبون (د.ع)</label>
+                  <input 
+                    type="number" 
+                    required 
+                    value={settlePaidAmount} 
+                    onChange={e => setSettlePaidAmount(e.target.value)}
+                    className="w-full bg-white dark:bg-zinc-800 border-2 border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none font-black text-lg" 
+                    placeholder="أدخل المبلغ الواصل" 
+                  />
+                </div>
+                
+                {/* Dynamic Remaining Amount Section */}
+                {diff > 0 ? (
+                  <div className={`p-4 rounded-xl border-2 ${customerOwesUs ? 'bg-rose-50 border-rose-200 dark:bg-rose-900/10 dark:border-rose-800/50' : 'bg-blue-50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800/50'}`}>
+                    <label className={`block text-xs font-black mb-1 ${customerOwesUs ? 'text-rose-600 dark:text-rose-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                      المبلغ الباقي الدَين ({customerOwesUs ? 'نطلبه' : 'يطلبنا'})
+                    </label>
+                    <div className={`text-xl font-black ${customerOwesUs ? 'text-rose-700 dark:text-rose-300' : 'text-blue-700 dark:text-blue-300'}`}>
+                      {diff.toLocaleString()} د.ع
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border-2 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800/50">
+                    <label className="block text-xs font-black mb-1 text-emerald-600 dark:text-emerald-400">
+                      حالة الدفع
+                    </label>
+                    <div className="text-lg font-black text-emerald-700 dark:text-emerald-300">
+                      تم الدفع بالكامل ✅
+                    </div>
+                  </div>
+                )}
+
+                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl flex justify-center items-center gap-2 transition">
+                  حفظ وإنهاء
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Add Order Modal */}
       {isModalOpen && (

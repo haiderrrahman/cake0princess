@@ -1240,24 +1240,22 @@ export default function HomeFinanceDashboard() {
     const estPrice = Number(fd.get("price")) || 0;
     const unit = fd.get("unit") as string || "قطعة";
     const category = fd.get("category") as string || "سوبر ماركت";
-    const notes = fd.get("notes") as string || "";
     
     const source = editNeed?._source || (activeTab === "car" ? "car" : activeTab === "travel" ? "travel" : "inventory");
 
     if (source === "car") {
       let updated = [...carInventory];
       if (isEdit) {
-        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes } : x);
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category } : x);
         toast.success("تم التعديل");
       } else {
         const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
         if (existing) {
           existing.neededQuantity = (existing.neededQuantity || 0) + neededQty;
           existing.estimatedPrice = estPrice;
-          if (notes) existing.notes = notes;
           toast.success("تم التحديث");
         } else {
-          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, createdAt: new Date().toISOString() });
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, createdAt: new Date().toISOString() });
           toast.success("تم إضافة الاحتياج");
         }
       }
@@ -1266,17 +1264,16 @@ export default function HomeFinanceDashboard() {
     } else if (source === "travel") {
       let updated = [...travelInventory];
       if (isEdit) {
-        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes } : x);
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category } : x);
         toast.success("تم التعديل");
       } else {
         const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
         if (existing) {
           existing.neededQuantity = (existing.neededQuantity || 0) + neededQty;
           existing.estimatedPrice = estPrice;
-          if (notes) existing.notes = notes;
           toast.success("تم التحديث");
         } else {
-          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, createdAt: new Date().toISOString() });
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, createdAt: new Date().toISOString() });
           toast.success("تم إضافة الاحتياج");
         }
       }
@@ -1285,17 +1282,16 @@ export default function HomeFinanceDashboard() {
     } else {
       let updated = [...inventory];
       if (isEdit) {
-        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes } : x);
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category } : x);
         toast.success("تم التعديل");
       } else {
         const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
         if (existing) {
           existing.neededQuantity = (existing.neededQuantity || 0) + neededQty;
           existing.estimatedPrice = estPrice;
-          if (notes) existing.notes = notes;
           toast.success("تم التحديث في النواقص");
         } else {
-          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, createdAt: new Date().toISOString() });
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, createdAt: new Date().toISOString() });
           toast.success("تم إضافة الاحتياج");
         }
       }
@@ -3551,13 +3547,12 @@ export default function HomeFinanceDashboard() {
                                   )}
                                 </div>
                               </div>
-                                {/* Stats */}
-                                <div className="text-[9px] text-gray-500 flex flex-col gap-0.5 text-center mt-1">
-                                  <span>متوفر: {item.quantity} {item.unit} | تحتاج: {neededQty}</span>
-                                  {estimatedTotal > 0 && <span className="text-orange-600 dark:text-orange-400 font-black">{fmt(estimatedTotal)} د.ع</span>}
-                                  {item.notes && <span className="text-gray-400 mt-1 line-clamp-2" title={item.notes}>{item.notes}</span>}
-                                </div>
-                                {/* Actions */}
+                              {/* Stats */}
+                              <div className="text-[9px] text-gray-500 flex flex-col gap-0.5 text-center mt-1">
+                                <span>متوفر: {item.quantity} {item.unit} | تحتاج: {neededQty}</span>
+                                {estimatedTotal > 0 && <span className="text-orange-600 dark:text-orange-400 font-black">{fmt(estimatedTotal)} د.ع</span>}
+                              </div>
+                              {/* Actions */}
                               <div className="flex flex-col items-stretch gap-1 mt-auto pt-2">
                                 <div className="flex gap-1">
                                   <div className="flex items-center justify-between w-full bg-white dark:bg-zinc-800/50 rounded-full px-1 border border-orange-100 dark:border-orange-800/30">
@@ -3646,9 +3641,6 @@ export default function HomeFinanceDashboard() {
                             {need.estimatedPrice && Number(need.estimatedPrice) > 0 ? (
                               <div className="font-black text-emerald-600 dark:text-emerald-400 text-xs">{fmt(Number(need.estimatedPrice))} <span className="text-[9px] font-bold opacity-70">د.ع</span></div>
                             ) : null}
-                            {need.notes && (
-                              <div className="text-[9px] text-gray-500 line-clamp-2 mt-1">{need.notes}</div>
-                            )}
                             {/* Action */}
                             <button onClick={() => handleToggleFamilyNeedStatus(need)} className="w-full bg-pink-500 text-white text-[9px] font-black py-1.5 rounded-xl active:scale-95 transition flex items-center justify-center gap-0.5 mt-auto">
                               <Check className="w-2.5 h-2.5" /> توفير
@@ -5381,8 +5373,6 @@ export default function HomeFinanceDashboard() {
                       className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-orange-500/50 outline-none" />
                   </div>
                 </div>
-
-                <DetailsInput defaultValue={editNeed?.notes || ""} isRequired={false} />
 
                 <button type="submit" className="w-full bg-orange-500 text-white font-black py-3.5 rounded-2xl shadow-lg shadow-orange-500/25 active:scale-[0.98] transition">
                   حفظ
