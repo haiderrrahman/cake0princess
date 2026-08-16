@@ -20,6 +20,7 @@ export default function ExternalOrdersAdmin() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState<string>("orders");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -32,6 +33,7 @@ export default function ExternalOrdersAdmin() {
   const [cakeName, setCakeName] = useState("");
   const [price, setPrice] = useState("");
   const [cost, setCost] = useState("");
+  const [paidAmount, setPaidAmount] = useState("");
   const [deliveryDate, setDeliveryDate] = useState<string>(new Date().toISOString());
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -104,6 +106,7 @@ export default function ExternalOrdersAdmin() {
     setCakeName(order.cakeName || "");
     setPrice(order.price ? String(order.price) : "");
     setCost(order.cost ? String(order.cost) : "");
+    setPaidAmount(order.paidAmount ? String(order.paidAmount) : "");
     setDeliveryDate(order.deliveryDate || new Date().toISOString());
     setImagePreview(order.imageUrl || null);
     setImageFile(null);
@@ -148,6 +151,7 @@ export default function ExternalOrdersAdmin() {
 
       const numPrice = parseIqdInput(price);
       const numCost = cost ? parseIqdInput(cost) : 0;
+      const numPaid = paidAmount ? parseIqdInput(paidAmount) : 0;
       const profit = numCost > 0 ? numPrice - numCost : numPrice;
 
       const existingCustomer = customers.find(c => c.name === customerName);
@@ -191,6 +195,7 @@ export default function ExternalOrdersAdmin() {
         cakeName,
         price: numPrice,
         cost: numCost,
+        paidAmount: numPaid,
         profit,
         deliveryDate,
         ...(imageUrl && { imageUrl }),
@@ -217,6 +222,7 @@ export default function ExternalOrdersAdmin() {
       setCakeName("");
       setPrice("");
       setCost("");
+      setPaidAmount("");
       setDeliveryDate(new Date().toISOString());
       setImageFile(null);
       setImagePreview(null);
@@ -229,6 +235,22 @@ export default function ExternalOrdersAdmin() {
       toast.error("حدث خطأ أثناء إضافة الطلب");
     }
     setSubmitting(false);
+  };
+
+
+  const handleSettleDebt = async (order: any) => {
+    if (await customConfirm("هل تم تسديد هذا الدين بالكامل؟")) {
+      try {
+        await updateDoc(doc(db, "external_orders", order.id), { 
+          paidAmount: order.price,
+          isDebtSettled: true 
+        });
+        toast.success("تم تسديد الدين بنجاح");
+        fetchOrdersAndCustomers();
+      } catch (e) {
+        toast.error("خطأ أثناء التسديد");
+      }
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -305,6 +327,7 @@ export default function ExternalOrdersAdmin() {
                 setCakeName("");
                 setPrice("");
                 setCost("");
+                setPaidAmount("");
                 setDeliveryDate(new Date().toISOString());
                 setImageFile(null);
                 setImagePreview(null);
@@ -357,6 +380,26 @@ export default function ExternalOrdersAdmin() {
         })()}
       </div>
 
+      {/* ═══════════════ TABS ═══════════════ */}
+      <div className="px-5 mb-4">
+        <div className="flex bg-white dark:bg-zinc-900 rounded-2xl p-1.5 shadow-sm border border-gray-100 dark:border-zinc-800">
+          <button 
+            onClick={() => setActiveTab("orders")}
+            className={`flex-1 py-2.5 text-sm font-black rounded-xl transition-all ${activeTab === "orders" ? "bg-emerald-500 text-white shadow-md" : "text-gray-500 hover:bg-gray-50 dark:hover:bg-zinc-800"}`}
+          >
+            سجل الطلبات
+          </button>
+          <button 
+            onClick={() => setActiveTab("debts")}
+            className={`flex-1 py-2.5 text-sm font-black rounded-xl transition-all ${activeTab === "debts" ? "bg-purple-500 text-white shadow-md" : "text-gray-500 hover:bg-gray-50 dark:hover:bg-zinc-800"}`}
+          >
+            الديون والمستحقات
+          </button>
+        </div>
+      </div>
+
+      {activeTab === "orders" && (
+        <>
       {/* Visible Filter Grid (No Horizontal Scroll / Swipe) */}
       <div className="px-5 mb-6">
         <div className="flex flex-wrap gap-2 bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm">
@@ -452,6 +495,87 @@ export default function ExternalOrdersAdmin() {
         </div>
       )}
 
+        </>
+      )}
+
+      {activeTab === "debts" && !loading && (() => {
+        // Debts are orders where status is 'delivered' and paidAmount != price and !isDebtSettled
+        const debtOrders = orders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled);
+        const customersOweUs = debtOrders.filter(o => o.paidAmount < o.price);
+        const weOweCustomers = debtOrders.filter(o => o.paidAmount > o.price);
+
+        const totalCustomersOweUs = customersOweUs.reduce((s, o) => s + (o.price - o.paidAmount), 0);
+        const totalWeOweCustomers = weOweCustomers.reduce((s, o) => s + (o.paidAmount - o.price), 0);
+
+        return (
+          <div className="px-5 space-y-6">
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gradient-to-br from-rose-50 to-red-50 dark:from-rose-900/20 dark:to-red-900/10 border border-rose-200 dark:border-rose-800/50 rounded-2xl p-4 text-center">
+                <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">الديون التي لك (تطلبهم)</p>
+                <p className="text-xl font-black text-rose-700 dark:text-rose-300">{totalCustomersOweUs.toLocaleString()} د.ع</p>
+              </div>
+              <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 border border-amber-200 dark:border-amber-800/50 rounded-2xl p-4 text-center">
+                <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">الديون التي عليك (يطلبونك)</p>
+                <p className="text-xl font-black text-amber-700 dark:text-amber-300">{totalWeOweCustomers.toLocaleString()} د.ع</p>
+              </div>
+            </div>
+
+            {/* Customers Owe Us */}
+            <div>
+              <h2 className="font-black text-rose-600 dark:text-rose-400 flex items-center gap-2 mb-3">
+                <User className="w-5 h-5" />
+                جماعة المديون (أنت تطلبهم)
+              </h2>
+              {customersOweUs.length === 0 ? (
+                <p className="text-sm font-bold text-gray-400">لا يوجد ديون لك حالياً.</p>
+              ) : (
+                <div className="space-y-3">
+                  {customersOweUs.map(order => (
+                    <div key={order.id} className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4 flex justify-between items-center shadow-sm">
+                      <div>
+                        <h3 className="font-black text-gray-800 dark:text-white mb-1">{order.customerName} <span className="text-xs font-bold text-gray-400">({order.cakeName})</span></h3>
+                        <p className="text-xs font-bold text-gray-500">السعر: {order.price.toLocaleString()} | الواصل: {order.paidAmount.toLocaleString()}</p>
+                      </div>
+                      <div className="text-left">
+                        <div className="text-lg font-black text-rose-600 mb-1">{(order.price - order.paidAmount).toLocaleString()} د.ع</div>
+                        <button onClick={() => handleSettleDebt(order)} className="text-xs font-black bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg hover:bg-rose-200">تم التسديد</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* We Owe Customers */}
+            <div>
+              <h2 className="font-black text-amber-600 dark:text-amber-400 flex items-center gap-2 mb-3">
+                <User className="w-5 h-5" />
+                جماعة الدين (هم يطلبونك)
+              </h2>
+              {weOweCustomers.length === 0 ? (
+                <p className="text-sm font-bold text-gray-400">لا توجد مبالغ بذمتك للزبائن.</p>
+              ) : (
+                <div className="space-y-3">
+                  {weOweCustomers.map(order => (
+                    <div key={order.id} className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4 flex justify-between items-center shadow-sm">
+                      <div>
+                        <h3 className="font-black text-gray-800 dark:text-white mb-1">{order.customerName} <span className="text-xs font-bold text-gray-400">({order.cakeName})</span></h3>
+                        <p className="text-xs font-bold text-gray-500">السعر: {order.price.toLocaleString()} | الواصل: {order.paidAmount.toLocaleString()}</p>
+                      </div>
+                      <div className="text-left">
+                        <div className="text-lg font-black text-amber-600 mb-1">{(order.paidAmount - order.price).toLocaleString()} د.ع</div>
+                        <button onClick={() => handleSettleDebt(order)} className="text-xs font-black bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg hover:bg-amber-200">تم الإرجاع والتسوية</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Add Order Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -521,18 +645,22 @@ export default function ExternalOrdersAdmin() {
                 <textarea required value={cakeName} onChange={e => setCakeName(e.target.value)} className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none min-h-[80px]" placeholder="مثال: كيكة عيد ميلاد طابقين بنكهة الفراولة..."></textarea>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
+              <div className="grid grid-cols-3 gap-4 p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
                 <div>
-                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">سعر البيع للزبون (د.ع)</label>
+                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">سعر البيع (د.ع)</label>
                   <FormattedNumberInput required value={price} onChange={val => setPrice(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: 55" />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">تكلفة الصنع (د.ع) - اختياري</label>
-                  <FormattedNumberInput value={cost} onChange={val => setCost(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: 20" />
+                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">تكلفة الصنع (د.ع)</label>
+                  <FormattedNumberInput value={cost} onChange={val => setCost(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="اختياري" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">العربون المستلم (د.ع)</label>
+                  <FormattedNumberInput value={paidAmount} onChange={val => setPaidAmount(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="اختياري" />
                 </div>
                 
                 {price && (
-                  <div className="col-span-2 pt-2 flex items-center justify-between text-emerald-700 dark:text-emerald-400 border-t border-emerald-200 dark:border-emerald-800/50 mt-2">
+                  <div className="col-span-3 pt-2 flex items-center justify-between text-emerald-700 dark:text-emerald-400 border-t border-emerald-200 dark:border-emerald-800/50 mt-2">
                     <span className="text-sm font-bold flex items-center gap-2"><Calculator className="w-4 h-4"/> الربح الصافي:</span>
                     <span className="font-black text-lg">{(Number(price) - (cost ? Number(cost) : 0)).toLocaleString()} د.ع</span>
                   </div>
