@@ -25,6 +25,8 @@ export default function ExternalOrdersAdmin() {
   const [submitting, setSubmitting] = useState(false);
   const [settleOrder, setSettleOrder] = useState<any>(null);
   const [settlePaidAmount, setSettlePaidAmount] = useState<string>("");
+  const [settleDebtType, setSettleDebtType] = useState<"none" | "customer_owes" | "we_owe">("none");
+  const [settleRemainingAmount, setSettleRemainingAmount] = useState<string>("");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editOrderId, setEditOrderId] = useState<string | null>(null);
   
@@ -254,7 +256,8 @@ export default function ExternalOrdersAdmin() {
   const handleStatusChange = async (order: any, newStatus: string) => {
     if (newStatus === "delivered") {
       setSettleOrder(order);
-      setSettlePaidAmount(String(order.price));
+      setSettleDebtType("none");
+      setSettleRemainingAmount("");
     } else {
       await updateDoc(doc(db, "external_orders", order.id), { status: newStatus });
       toast.success("تم تحديث الحالة");
@@ -265,11 +268,20 @@ export default function ExternalOrdersAdmin() {
   const submitSettlement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!settleOrder) return;
-    const numPaid = Number(settlePaidAmount) || 0;
+    
+    let finalPaidAmount = Number(settleOrder.price);
+    const remAmt = Number(settleRemainingAmount) || 0;
+    
+    if (settleDebtType === "customer_owes") {
+      finalPaidAmount = settleOrder.price - remAmt; // They paid less
+    } else if (settleDebtType === "we_owe") {
+      finalPaidAmount = settleOrder.price + remAmt; // They paid more
+    }
+    
     try {
       await updateDoc(doc(db, "external_orders", settleOrder.id), { 
         status: "delivered", 
-        paidAmount: numPaid 
+        paidAmount: finalPaidAmount 
       });
       toast.success("تم تحديث الطلب بنجاح");
       setSettleOrder(null);
@@ -701,41 +713,53 @@ export default function ExternalOrdersAdmin() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden animate-scale-in">
             <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center">
-              <h3 className="font-bold text-lg">تسوية الطلب</h3>
-              <button onClick={() => setSettleOrder(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <h3 className="font-bold text-lg">تسوية الطلب وتسليمه</h3>
+              <button type="button" onClick={() => setSettleOrder(null)} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
             <form onSubmit={submitSettlement} className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-bold mb-2">المبلغ الإجمالي</label>
-                <div className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-gray-500 font-bold">
+                <label className="block text-sm font-bold mb-2">المبلغ الإجمالي للطلب</label>
+                <div className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-gray-500 font-black text-center text-lg">
                   {Number(settleOrder.price).toLocaleString()} د.ع
                 </div>
               </div>
+              
               <div>
-                <label className="block text-sm font-bold mb-2 text-emerald-600">المبلغ الواصل من الزبون (د.ع)</label>
-                <input 
-                  type="number" 
-                  required 
-                  value={settlePaidAmount} 
-                  onChange={e => setSettlePaidAmount(e.target.value)}
-                  className="w-full bg-white dark:bg-zinc-800 border-2 border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none font-black text-lg mb-3" 
-                  placeholder="أدخل المبلغ الواصل" 
-                />
-                
-                {settleOrder && settlePaidAmount !== "" && (
-                  <div className={"p-3 rounded-xl border " + (Number(settlePaidAmount) < Number(settleOrder.price) ? "bg-rose-50 border-rose-200" : Number(settlePaidAmount) > Number(settleOrder.price) ? "bg-blue-50 border-blue-200" : "bg-emerald-50 border-emerald-200")}>
-                    <label className="block text-xs font-bold mb-1 text-gray-600">المبلغ الباقي (الفرق):</label>
-                    <div className={"text-lg font-black " + (Number(settlePaidAmount) < Number(settleOrder.price) ? "text-rose-600" : Number(settlePaidAmount) > Number(settleOrder.price) ? "text-blue-600" : "text-emerald-600")}>
-                      {Math.abs(Number(settleOrder.price) - Number(settlePaidAmount)).toLocaleString()} د.ع
-                      <span className="text-sm ml-2">
-                        {Number(settlePaidAmount) < Number(settleOrder.price) ? "(دين عليه - نطلبه 🔴)" : Number(settlePaidAmount) > Number(settleOrder.price) ? "(دين لنا - يطلبنا 🔵)" : "(الواصل يطابق السعر ✅)"}
-                      </span>
-                    </div>
-                  </div>
-                )}
+                <label className="block text-sm font-bold mb-2 text-emerald-600">حالة الحساب عند التسليم</label>
+                <select 
+                  value={settleDebtType}
+                  onChange={(e) => setSettleDebtType(e.target.value as any)}
+                  className="w-full bg-white dark:bg-zinc-800 border-2 border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none font-bold"
+                >
+                  <option value="none">✅ خالص (تم دفع كامل المبلغ)</option>
+                  <option value="customer_owes">🔴 الزبون عليه دين (نطلبه باقي)</option>
+                  <option value="we_owe">🔵 دين لنا للزبون (يطلبنا باقي)</option>
+                </select>
               </div>
-              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl flex justify-center items-center gap-2 transition">
-                حفظ وإنهاء
+
+              {settleDebtType !== "none" && (
+                <div className="animate-fade-in-up">
+                  <label className={`block text-sm font-bold mb-2 ${settleDebtType === 'customer_owes' ? 'text-rose-600' : 'text-blue-600'}`}>
+                    المبلغ الباقي (د.ع)
+                  </label>
+                  <input 
+                    type="number" 
+                    required 
+                    value={settleRemainingAmount} 
+                    onChange={e => setSettleRemainingAmount(e.target.value)}
+                    className={`w-full bg-white dark:bg-zinc-800 border-2 rounded-xl px-4 py-3 focus:outline-none font-black text-lg ${settleDebtType === 'customer_owes' ? 'border-rose-300 focus:border-rose-500 text-rose-600' : 'border-blue-300 focus:border-blue-500 text-blue-600'}`} 
+                    placeholder="أدخل المبلغ الباقي فقط..." 
+                  />
+                  <p className="text-xs text-gray-400 mt-2">
+                    {settleDebtType === 'customer_owes' 
+                      ? "سيتم تسجيل هذا المبلغ كدين مطلوب من الزبون، وسيظهر الطلب في أعلى القائمة بإشارة حمراء."
+                      : "سيتم تسجيل هذا المبلغ كأمانة أو دين للزبون بذمتكم، وسيظهر بإشارة زرقاء."}
+                  </p>
+                </div>
+              )}
+
+              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl flex justify-center items-center gap-2 transition mt-6 shadow-md shadow-emerald-500/20">
+                تأكيد التسليم
               </button>
             </form>
           </div>
