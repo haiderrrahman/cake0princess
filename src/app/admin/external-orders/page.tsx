@@ -460,67 +460,146 @@ export default function ExternalOrdersAdmin() {
         <div className="space-y-3">
           
           {(() => {
-            const debts = filteredOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled);
+            const allDebts = filteredOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled);
+            const customersOweUs = allDebts.filter(o => o.paidAmount < o.price);
+            const weOweCustomers = allDebts.filter(o => o.paidAmount > o.price);
+            const totalOwedToUs = customersOweUs.reduce((s, o) => s + (o.price - o.paidAmount), 0);
+            const totalWeOwe = weOweCustomers.reduce((s, o) => s + (o.paidAmount - o.price), 0);
+            
             const normals = filteredOrders.filter(o => !(o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled));
             return (
               <>
-                {debts.length > 0 && (
-                  <div className="mb-6 space-y-3">
-                    <h3 className="font-black text-rose-600 dark:text-rose-400 mb-2 flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                      الديون المعلقة (يتطلب تسوية)
-                    </h3>
-                    {debts.map(order => {
-                      const customerOwesUs = order.price > (order.paidAmount || 0);
-                      const diff = Math.abs(order.price - (order.paidAmount || 0));
-                      return (
-                        <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
-                          <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
-                            {order.imageUrl ? (
-                              <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                <Smartphone className="w-8 h-8" />
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="flex-1 flex flex-col justify-between">
-                            <div>
-                              <div className="flex justify-between items-start mb-1">
-                                <div>
-                                  <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
-                                  <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1.5">
-                                    <User className="w-3.5 h-3.5" /> {order.customerName}
-                                  </p>
-                                </div>
-                                <div className="flex gap-2 items-center">
-                                  <div className={`px-3 py-1 rounded-lg text-xs font-black ${customerOwesUs ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {customerOwesUs ? 'نطلبه' : 'يطلبنا'}: {diff.toLocaleString()} د.ع
-                                  </div>
-                                  <button onClick={() => openEditModal(order)} className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center transition hover:bg-blue-100">
-                                    <Edit3 className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => handleDelete(order.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center transition hover:bg-red-100">
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 pt-3 border-t border-gray-50 dark:border-zinc-800/50">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-gray-400 font-bold">الإجمالي</span>
-                                <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.price).toLocaleString()} د.ع</span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-gray-400 font-bold">الواصل</span>
-                                <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.paidAmount || 0).toLocaleString()} د.ع</span>
-                              </div>
-                            </div>
-                          </div>
+                {allDebts.length > 0 && (
+                  <div className="mb-6 space-y-6 border-b-2 border-gray-100 dark:border-zinc-800 pb-6">
+                    {customersOweUs.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-black text-rose-600 dark:text-rose-400 flex items-center gap-2 text-sm">
+                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                            زبائن المديون (نطلبهم)
+                          </h3>
+                          <span className="bg-rose-100 text-rose-700 px-3 py-1 rounded-xl text-xs font-black shadow-sm">
+                            مجموع الباقي: {totalOwedToUs.toLocaleString()} د.ع
+                          </span>
                         </div>
-                      );
-                    })}
+                        {customersOweUs.map(order => {
+                          const diff = Math.abs(order.price - (order.paidAmount || 0));
+                          return (
+                            <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 border-rose-400 dark:border-rose-800/50 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition">
+                              <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
+                                {order.imageUrl ? (
+                                  <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                    <Smartphone className="w-8 h-8" />
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="flex-1 flex flex-col justify-between">
+                                <div>
+                                  <div className="flex justify-between items-start mb-1">
+                                    <div>
+                                      <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
+                                      <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1.5">
+                                        <User className="w-3.5 h-3.5" /> {order.customerName}
+                                      </p>
+                                    </div>
+                                    <div className="flex gap-2 items-center">
+                                      <div className="px-3 py-1 rounded-lg text-xs font-black bg-rose-100 text-rose-700 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                        نطلبه (المبلغ الباقي): {diff.toLocaleString()} د.ع
+                                      </div>
+                                      <button onClick={() => openEditModal(order)} className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center transition hover:bg-blue-100">
+                                        <Edit3 className="w-4 h-4" />
+                                      </button>
+                                      <button onClick={() => handleDelete(order.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center transition hover:bg-red-100">
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 pt-3 border-t border-gray-50 dark:border-zinc-800/50">
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] text-gray-400 font-bold">الإجمالي</span>
+                                    <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.price).toLocaleString()} د.ع</span>
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] text-gray-400 font-bold">الواصل</span>
+                                    <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.paidAmount || 0).toLocaleString()} د.ع</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {weOweCustomers.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-black text-blue-600 dark:text-blue-400 flex items-center gap-2 text-sm">
+                            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                            زبائن المدان (يطلبونا)
+                          </h3>
+                          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-xl text-xs font-black shadow-sm">
+                            مجموع الباقي: {totalWeOwe.toLocaleString()} د.ع
+                          </span>
+                        </div>
+                        {weOweCustomers.map(order => {
+                          const diff = Math.abs(order.price - (order.paidAmount || 0));
+                          return (
+                            <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 border-blue-400 dark:border-blue-800/50 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition">
+                              <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
+                                {order.imageUrl ? (
+                                  <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                    <Smartphone className="w-8 h-8" />
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="flex-1 flex flex-col justify-between">
+                                <div>
+                                  <div className="flex justify-between items-start mb-1">
+                                    <div>
+                                      <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
+                                      <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1.5">
+                                        <User className="w-3.5 h-3.5" /> {order.customerName}
+                                      </p>
+                                    </div>
+                                    <div className="flex gap-2 items-center">
+                                      <div className="px-3 py-1 rounded-lg text-xs font-black bg-blue-100 text-blue-700 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                        يطلبنا (المبلغ الباقي): {diff.toLocaleString()} د.ع
+                                      </div>
+                                      <button onClick={() => openEditModal(order)} className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center transition hover:bg-blue-100">
+                                        <Edit3 className="w-4 h-4" />
+                                      </button>
+                                      <button onClick={() => handleDelete(order.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center transition hover:bg-red-100">
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 pt-3 border-t border-gray-50 dark:border-zinc-800/50">
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] text-gray-400 font-bold">الإجمالي</span>
+                                    <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.price).toLocaleString()} د.ع</span>
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] text-gray-400 font-bold">الواصل</span>
+                                    <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.paidAmount || 0).toLocaleString()} د.ع</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="space-y-3">
