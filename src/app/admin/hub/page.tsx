@@ -15,6 +15,7 @@ import InventoryDeductModal from "@/components/InventoryDeductModal";
 import EditExternalOrderModal from "@/components/EditExternalOrderModal";
 import EditInventoryModal from "@/components/EditInventoryModal";
 import AdminQuickEntry from "@/components/AdminQuickEntry";
+import { customConfirm } from '@/lib/customConfirm';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   pending:    { label: "بانتظار الدفع", color: "text-gray-500", bg: "bg-gray-100 dark:bg-zinc-800" },
@@ -463,7 +464,7 @@ function AdminHubContent() {
   };
 
   const handleSettleDebt = async (order: any, diffAmt: number, customerOwesUs: boolean) => {
-    if (!window.confirm("هل تم تسديد هذا المبلغ بالكامل؟")) return;
+    if (!(await customConfirm("هل تم تسديد هذا المبلغ بالكامل؟"))) return;
     try {
       setUpdatingOrder(order.id);
       
