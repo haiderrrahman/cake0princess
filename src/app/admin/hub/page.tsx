@@ -556,8 +556,15 @@ function AdminHubContent() {
     const isDeliveredA = a.status === 'delivered' || a.status === 'completed';
     const isDeliveredB = b.status === 'delivered' || b.status === 'completed';
     
-    if (isDeliveredA && !isDeliveredB) return 1;
-    if (!isDeliveredA && isDeliveredB) return -1;
+    const isDebtA = isDeliveredA && a.paidAmount !== undefined && Number(a.paidAmount) !== Number(a.price) && !a.isDebtSettled;
+    const isDebtB = isDeliveredB && b.paidAmount !== undefined && Number(b.paidAmount) !== Number(b.price) && !b.isDebtSettled;
+
+    if (isDebtA && !isDebtB) return -1; // Debt goes up
+    if (!isDebtA && isDebtB) return 1;
+
+    // normal delivered (without debt) goes down
+    if (isDeliveredA && !isDebtA && (!isDeliveredB || isDebtB)) return 1;
+    if (isDeliveredB && !isDebtB && (!isDeliveredA || isDebtA)) return -1;
 
     const parseDate = (d: any) => {
       if (!d) return new Date(8640000000000000);
@@ -908,9 +915,14 @@ function AdminHubContent() {
                       const statusKey = order.status || "pending";
                       const extCfg = EXTERNAL_STATUS_CONFIG[statusKey] || EXTERNAL_STATUS_CONFIG["pending"];
                       const isUpdating = updatingOrder === order.id;
+                      
+                      const isDebt = order.status === "delivered" && order.paidAmount !== undefined && Number(order.paidAmount) !== Number(order.price) && !order.isDebtSettled;
+                      const customerOwesUs = isDebt && Number(order.price) > Number(order.paidAmount || 0);
+                      const weOweCustomer = isDebt && Number(order.price) < Number(order.paidAmount || 0);
+                      const diffAmt = isDebt ? Math.abs(Number(order.price) - Number(order.paidAmount || 0)) : 0;
 
                       return (
-                        <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-3xl p-3 flex flex-col gap-3 border border-gray-100 dark:border-zinc-800 shadow-sm relative group">
+                        <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-3xl p-3 flex flex-col gap-3 shadow-sm relative group border-2 ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : weOweCustomer ? 'border-blue-400 dark:border-blue-800/50' : 'border-gray-100 dark:border-zinc-800'}`}>
                           
                           {/* Image Top */}
                           <div className="w-full aspect-square rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 border border-gray-100 dark:border-zinc-700 relative">
@@ -943,6 +955,12 @@ function AdminHubContent() {
                                 <span className="text-gray-400 font-bold">المبلغ:</span>
                                 <span className="font-black text-emerald-600 dark:text-emerald-400">{Number(order.price || 0).toLocaleString()} د.ع</span>
                               </div>
+                              {isDebt && (
+                                <div className={`flex justify-between items-center text-[10px] font-black px-2 py-1 rounded-lg ${customerOwesUs ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'}`}>
+                                  <span>{customerOwesUs ? 'الباقي نطلبه:' : 'أمانة يطلبنا:'}</span>
+                                  <span>{diffAmt.toLocaleString()} د.ع</span>
+                                </div>
+                              )}
                               <div className="relative w-full">
                                 <select
                                   value={statusKey}
