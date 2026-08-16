@@ -300,20 +300,8 @@ export default function ExternalOrdersAdmin() {
     const isDeliveredA = a.status === 'delivered' || a.status === 'completed';
     const isDeliveredB = b.status === 'delivered' || b.status === 'completed';
     
-    // Check if debt
-    const isDebtA = isDeliveredA && a.paidAmount !== undefined && a.paidAmount !== a.price && !a.isDebtSettled;
-    const isDebtB = isDeliveredB && b.paidAmount !== undefined && b.paidAmount !== b.price && !b.isDebtSettled;
-
-    // Debt orders MUST be at the top, even above pending orders!
-    if (isDebtA && !isDebtB) return -1;
-    if (!isDebtA && isDebtB) return 1;
-
-    // Then, normal delivered orders sink to bottom
-    const shouldSinkA = isDeliveredA && !isDebtA;
-    const shouldSinkB = isDeliveredB && !isDebtB;
-    
-    if (shouldSinkA && !shouldSinkB) return 1;
-    if (!shouldSinkA && shouldSinkB) return -1;
+    if (isDeliveredA && !isDeliveredB) return 1;
+    if (!isDeliveredA && isDeliveredB) return -1;
     
     const parseDate = (d: any) => {
       if (!d) return new Date(8640000000000000); // push to bottom if no date
@@ -417,6 +405,7 @@ export default function ExternalOrdersAdmin() {
         })()}
       </div>
 
+
       {/* ═══════════════ TABS ═══════════════ */}
       <div className="px-5 mb-4">
         <div className="flex bg-white dark:bg-zinc-900 rounded-2xl p-1.5 shadow-sm border border-gray-100 dark:border-zinc-800">
@@ -437,7 +426,6 @@ export default function ExternalOrdersAdmin() {
 
       {activeTab === "orders" && (
         <>
-
       {/* Visible Filter Grid (No Horizontal Scroll / Swipe) */}
       <div className="px-5 mb-6">
         <div className="flex flex-wrap gap-2 bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm">
@@ -474,35 +462,26 @@ export default function ExternalOrdersAdmin() {
           {(() => {
             const debts = filteredOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled);
             const normals = filteredOrders.filter(o => !(o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled));
-            
-            const weDemandTotal = debts.reduce((sum, o) => o.price > (o.paidAmount || 0) ? sum + (o.price - (o.paidAmount || 0)) : sum, 0);
-            const theyDemandTotal = debts.reduce((sum, o) => (o.paidAmount || 0) > o.price ? sum + ((o.paidAmount || 0) - o.price) : sum, 0);
-
             return (
               <>
                 {debts.length > 0 && (
                   <div className="mb-6 space-y-3">
-                    <h3 className="font-black text-rose-600 dark:text-rose-400 mb-2 flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                      الديون المعلقة (يتطلب تسوية)
-                    </h3>
-
-                    {/* Summary Totals Banner */}
-                    <div className="flex gap-3 mb-4">
-                      {weDemandTotal > 0 && (
-                        <div className="bg-rose-50 border border-rose-200 dark:bg-rose-900/20 dark:border-rose-800/50 p-3 rounded-2xl flex-1 flex flex-col justify-center items-center text-center shadow-sm">
-                          <span className="text-xs font-bold text-rose-600/80 dark:text-rose-400/80 mb-1">مجموع نطلبه (لنا)</span>
-                          <span className="text-lg font-black text-rose-700 dark:text-rose-300">{weDemandTotal.toLocaleString()} د.ع</span>
-                        </div>
-                      )}
-                      {theyDemandTotal > 0 && (
-                        <div className="bg-blue-50 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-800/50 p-3 rounded-2xl flex-1 flex flex-col justify-center items-center text-center shadow-sm">
-                          <span className="text-xs font-bold text-blue-600/80 dark:text-blue-400/80 mb-1">مجموع يطلبونا (علينا)</span>
-                          <span className="text-lg font-black text-blue-700 dark:text-blue-300">{theyDemandTotal.toLocaleString()} د.ع</span>
-                        </div>
-                      )}
+                    <div className="flex flex-col gap-2 mb-4">
+                      <h3 className="font-black text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                        سجل الديون (طلبات السوشيال)
+                      </h3>
+                      {(() => {
+                        const sumOweUs = debts.filter(o => o.price > (o.paidAmount || 0)).reduce((s, o) => s + (o.price - (o.paidAmount || 0)), 0);
+                        const sumWeOwe = debts.filter(o => o.price < (o.paidAmount || 0)).reduce((s, o) => s + ((o.paidAmount || 0) - o.price), 0);
+                        return (
+                          <div className="flex gap-3">
+                            {sumOweUs > 0 && <span className="bg-rose-100 text-rose-800 text-xs font-black px-3 py-1.5 rounded-lg border border-rose-200">مجموع نطلبهم: {sumOweUs.toLocaleString()} د.ع</span>}
+                            {sumWeOwe > 0 && <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1.5 rounded-lg border border-blue-200">مجموع يطلبونا: {sumWeOwe.toLocaleString()} د.ع</span>}
+                          </div>
+                        );
+                      })()}
                     </div>
-
                     {debts.map(order => {
                       const customerOwesUs = order.price > (order.paidAmount || 0);
                       const diff = Math.abs(order.price - (order.paidAmount || 0));
@@ -718,67 +697,50 @@ export default function ExternalOrdersAdmin() {
       })()}
 
       
-      {settleOrder && (() => {
-        const total = Number(settleOrder.price) || 0;
-        const paid = Number(settlePaidAmount) || 0;
-        const diff = Math.abs(total - paid);
-        const customerOwesUs = total > paid;
-
-        return (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden animate-scale-in">
-              <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center">
-                <h3 className="font-bold text-lg">تسوية الطلب</h3>
-                <button onClick={() => setSettleOrder(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+      {settleOrder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center">
+              <h3 className="font-bold text-lg">تسوية الطلب</h3>
+              <button onClick={() => setSettleOrder(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <form onSubmit={submitSettlement} className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-2">المبلغ الإجمالي</label>
+                <div className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-gray-500 font-bold">
+                  {Number(settleOrder.price).toLocaleString()} د.ع
+                </div>
               </div>
-              <form onSubmit={submitSettlement} className="p-5 space-y-4">
-                <div>
-                  <label className="block text-sm font-bold mb-2">المبلغ الإجمالي</label>
-                  <div className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-gray-500 font-bold">
-                    {total.toLocaleString()} د.ع
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2 text-emerald-600">المبلغ الواصل من الزبون (د.ع)</label>
-                  <input 
-                    type="number" 
-                    required 
-                    value={settlePaidAmount} 
-                    onChange={e => setSettlePaidAmount(e.target.value)}
-                    className="w-full bg-white dark:bg-zinc-800 border-2 border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none font-black text-lg" 
-                    placeholder="أدخل المبلغ الواصل" 
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 text-emerald-600">المبلغ الواصل من الزبون (د.ع)</label>
+                <input 
+                  type="number" 
+                  required 
+                  value={settlePaidAmount} 
+                  onChange={e => setSettlePaidAmount(e.target.value)}
+                  className="w-full bg-white dark:bg-zinc-800 border-2 border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none font-black text-lg mb-3" 
+                  placeholder="أدخل المبلغ الواصل" 
+                />
                 
-                {/* Dynamic Remaining Amount Section */}
-                {diff > 0 ? (
-                  <div className={`p-4 rounded-xl border-2 ${customerOwesUs ? 'bg-rose-50 border-rose-200 dark:bg-rose-900/10 dark:border-rose-800/50' : 'bg-blue-50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800/50'}`}>
-                    <label className={`block text-xs font-black mb-1 ${customerOwesUs ? 'text-rose-600 dark:text-rose-400' : 'text-blue-600 dark:text-blue-400'}`}>
-                      المبلغ الباقي الدَين ({customerOwesUs ? 'نطلبه' : 'يطلبنا'})
-                    </label>
-                    <div className={`text-xl font-black ${customerOwesUs ? 'text-rose-700 dark:text-rose-300' : 'text-blue-700 dark:text-blue-300'}`}>
-                      {diff.toLocaleString()} د.ع
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4 rounded-xl border-2 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800/50">
-                    <label className="block text-xs font-black mb-1 text-emerald-600 dark:text-emerald-400">
-                      حالة الدفع
-                    </label>
-                    <div className="text-lg font-black text-emerald-700 dark:text-emerald-300">
-                      تم الدفع بالكامل ✅
+                {settleOrder && settlePaidAmount !== "" && (
+                  <div className={"p-3 rounded-xl border " + (Number(settlePaidAmount) < Number(settleOrder.price) ? "bg-rose-50 border-rose-200" : Number(settlePaidAmount) > Number(settleOrder.price) ? "bg-blue-50 border-blue-200" : "bg-emerald-50 border-emerald-200")}>
+                    <label className="block text-xs font-bold mb-1 text-gray-600">المبلغ الباقي (الفرق):</label>
+                    <div className={"text-lg font-black " + (Number(settlePaidAmount) < Number(settleOrder.price) ? "text-rose-600" : Number(settlePaidAmount) > Number(settleOrder.price) ? "text-blue-600" : "text-emerald-600")}>
+                      {Math.abs(Number(settleOrder.price) - Number(settlePaidAmount)).toLocaleString()} د.ع
+                      <span className="text-sm ml-2">
+                        {Number(settlePaidAmount) < Number(settleOrder.price) ? "(دين عليه - نطلبه 🔴)" : Number(settlePaidAmount) > Number(settleOrder.price) ? "(دين لنا - يطلبنا 🔵)" : "(الواصل يطابق السعر ✅)"}
+                      </span>
                     </div>
                   </div>
                 )}
-
-                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl flex justify-center items-center gap-2 transition">
-                  حفظ وإنهاء
-                </button>
-              </form>
-            </div>
+              </div>
+              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl flex justify-center items-center gap-2 transition">
+                حفظ وإنهاء
+              </button>
+            </form>
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {/* Add Order Modal */}
       {isModalOpen && (
