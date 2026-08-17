@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, ShoppingBag, Loader2, CheckCircle, Clock, MapPin, Search } from "lucide-react";
-import { collection, query, orderBy, getDocs, updateDoc, doc } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, updateDoc, doc, addDoc } from "firebase/firestore";
+import { customConfirm } from "@/lib/customConfirm";
 import { db } from "@/lib/firebase";
 
 export default function AdminOrders() {
@@ -10,6 +11,10 @@ export default function AdminOrders() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
+  const [settleOrder, setSettleOrder] = useState<any | null>(null);
+  const [settleDebtType, setSettleDebtType] = useState<"none" | "customer_owes" | "we_owe">("none");
+  const [settleRemainingAmount, setSettleRemainingAmount] = useState("");
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -36,11 +41,86 @@ export default function AdminOrders() {
   }, []);
 
   const updateOrderStatus = async (id: string, newStatus: string) => {
+    if (newStatus === "delivered" || newStatus === "completed") {
+      const order = orders.find(o => o.id === id);
+      if (order) {
+        setSettleOrder(order);
+        setSettleDebtType("none");
+        setSettleRemainingAmount("");
+      }
+      return;
+    }
     try {
+      setUpdatingOrder(id);
       await updateDoc(doc(db, "orders", id), { status: newStatus });
       setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
     } catch (error) {
       console.error("Error updating status:", error);
+    } finally {
+      setUpdatingOrder(null);
+    }
+  };
+
+  const submitSettlement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!settleOrder) return;
+    
+    const basePrice = Number(settleOrder.toPayNow || settleOrder.total || 0);
+    let finalPaidAmount = basePrice;
+    const remAmt = Number(settleRemainingAmount) || 0;
+    
+    if (settleDebtType === "customer_owes") {
+      finalPaidAmount = basePrice - remAmt;
+    } else if (settleDebtType === "we_owe") {
+      finalPaidAmount = basePrice + remAmt;
+    }
+    
+    try {
+      setUpdatingOrder(settleOrder.id);
+      await updateDoc(doc(db, "orders", settleOrder.id), { 
+        status: "delivered", 
+        paidAmount: finalPaidAmount,
+        isDebtSettled: finalPaidAmount === basePrice
+      });
+      setOrders(orders.map(o => o.id === settleOrder.id ? { ...o, status: "delivered", paidAmount: finalPaidAmount, isDebtSettled: finalPaidAmount === basePrice } : o));
+      setSettleOrder(null);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setUpdatingOrder(null);
+    }
+  };
+
+  const handleSettleDebt = async (order: any, diffAmt: number, customerOwesUs: boolean) => {
+    if (!(await customConfirm("هل تم تسديد هذا المبلغ بالكامل؟"))) return;
+    try {
+      setUpdatingOrder(order.id);
+      const basePrice = Number(order.toPayNow || order.total || 0);
+      await updateDoc(doc(db, "orders", order.id), { 
+        paidAmount: basePrice,
+        isDebtSettled: true 
+      });
+      
+      if (customerOwesUs) {
+        await addDoc(collection(db, "store_sales"), {
+          itemName: "تسديد دين تطبيق - " + (order.userName || ""),
+          price: diffAmt,
+          profit: 0,
+          createdAt: new Date()
+        });
+      } else {
+        await addDoc(collection(db, "expenses"), {
+          description: "تسديد أمانة لتطبيق - " + (order.userName || ""),
+          amount: diffAmt,
+          date: new Date().toISOString()
+        });
+      }
+      
+      setOrders(orders.map(o => o.id === order.id ? { ...o, paidAmount: basePrice, isDebtSettled: true } : o));
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setUpdatingOrder(null);
     }
   };
 
@@ -53,6 +133,7 @@ export default function AdminOrders() {
   });
 
   return (
+    <>
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 pb-24 animate-slide-up">
       {/* ═══════════════ LUXURY HEADER BANNER ═══════════════ */}
       <div className="bg-gradient-to-l from-pink-900 via-rose-900 to-purple-950 pt-16 pb-8 px-5 rounded-b-[40px] shadow-lg relative overflow-hidden mb-6 text-white">
@@ -157,8 +238,21 @@ export default function AdminOrders() {
       ) : (
         <div className="px-5">
           <div className="space-y-4">
-            {filteredOrders.map(order => (
-            <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[24px] p-4 sm:p-5 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col lg:flex-row gap-5 relative group hover:shadow-md transition">
+            {filteredOrders.map(order => {
+              const amount = order.toPayNow || order.total || 0;
+              const isDebt = (order.status === "delivered" || order.status === "completed") && order.paidAmount !== undefined && Number(order.paidAmount) !== Number(amount) && !order.isDebtSettled;
+              const customerOwesUs = isDebt && Number(amount) > Number(order.paidAmount || 0);
+              const weOweCustomer = isDebt && Number(amount) < Number(order.paidAmount || 0);
+              const fullyPaidDelivered = (order.status === "delivered" || order.status === "completed") && !isDebt;
+              const diffAmt = isDebt ? Math.abs(Number(amount) - Number(order.paidAmount || 0)) : 0;
+
+              return (
+            <div key={order.id} className={`rounded-[24px] p-4 sm:p-5 border-2 shadow-sm flex flex-col lg:flex-row gap-5 relative group hover:shadow-md transition-all ${
+              customerOwesUs ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-400 dark:border-rose-800' : 
+              weOweCustomer ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-400 dark:border-blue-800' : 
+              fullyPaidDelivered ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-400 dark:border-purple-800' :
+              'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800'
+            }`}>
               
               {/* Order Info & Items */}
               <div className="flex-1">
@@ -283,12 +377,96 @@ export default function AdminOrders() {
                     إلغاء ورفض الطلب
                   </button>
                 </div>
+                {isDebt && (
+                  <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-zinc-700">
+                    <div className={`flex justify-between items-center text-sm font-black px-3 py-2 rounded-xl ${customerOwesUs ? 'bg-rose-100/50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-blue-100/50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                      <span>{customerOwesUs ? '🔴 الباقي نطلبه:' : '🔵 أمانة يطلبنا:'}</span>
+                      <span>{diffAmt.toLocaleString()} د.ع</span>
+                    </div>
+                    <button 
+                      onClick={() => handleSettleDebt(order, diffAmt, customerOwesUs)}
+                      disabled={updatingOrder === order.id}
+                      className={`w-full text-center text-sm font-black py-2.5 rounded-xl transition-all ${customerOwesUs ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'}`}
+                    >
+                      تأكيد التسديد
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-          ))}
+            );
+          })}
+          </div>
+        </div>
+      )}
+      {settleOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md shadow-2xl p-6 overflow-hidden animate-slide-up-scale relative border border-gray-100 dark:border-zinc-800">
+            <div className="absolute -top-16 -right-16 w-32 h-32 bg-[#e8456b]/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-16 -left-16 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+            
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 bg-[#e8456b]/10 dark:bg-[#e8456b]/20 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <CheckCircle className="w-6 h-6 text-[#e8456b]" />
+              </div>
+              <h2 className="text-xl font-black text-gray-900 dark:text-white">تأكيد تسليم الطلب</h2>
+              <p className="text-sm text-gray-500 mt-1">يرجى تأكيد تفاصيل الدفع</p>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-2xl p-4 mb-5 border border-gray-100 dark:border-zinc-800">
+              <p className="text-xs text-gray-500 mb-1">المبلغ الكلي للطلب</p>
+              <p className="text-2xl font-black text-gray-900 dark:text-white">
+                {Number(settleOrder.toPayNow || settleOrder.total || 0).toLocaleString()} <span className="text-xs text-gray-500 font-normal">د.ع</span>
+              </p>
+            </div>
+
+            <form onSubmit={submitSettlement} className="space-y-4 relative z-10">
+              <div className="grid grid-cols-3 gap-2 p-1 bg-gray-100 dark:bg-zinc-800 rounded-xl">
+                <button type="button" onClick={() => { setSettleDebtType("none"); setSettleRemainingAmount(""); }}
+                  className={`py-2 rounded-lg text-xs font-bold transition ${settleDebtType === "none" ? "bg-white dark:bg-zinc-700 shadow-sm text-gray-900 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+                  دفع كامل
+                </button>
+                <button type="button" onClick={() => setSettleDebtType("customer_owes")}
+                  className={`py-2 rounded-lg text-xs font-bold transition ${settleDebtType === "customer_owes" ? "bg-rose-50 dark:bg-rose-900/30 text-rose-600 shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+                  باقي يمنا دين
+                </button>
+                <button type="button" onClick={() => setSettleDebtType("we_owe")}
+                  className={`py-2 rounded-lg text-xs font-bold transition ${settleDebtType === "we_owe" ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+                  باقي يمه أمانة
+                </button>
+              </div>
+
+              {settleDebtType !== "none" && (
+                <div className="animate-fade-in">
+                  <label className="text-xs font-bold text-gray-500 mb-1.5 block">
+                    {settleDebtType === "customer_owes" ? "المبلغ المتبقي ديون علينا (د.ع):" : "المبلغ المتبقي أمانة لدينا (د.ع):"}
+                  </label>
+                  <input 
+                    required 
+                    type="number" 
+                    value={settleRemainingAmount} 
+                    onChange={e => setSettleRemainingAmount(e.target.value)}
+                    className={`w-full bg-white dark:bg-zinc-800 border ${settleDebtType === "customer_owes" ? "border-rose-200 dark:border-rose-900/50 focus:border-rose-500" : "border-blue-200 dark:border-blue-900/50 focus:border-blue-500"} rounded-xl px-4 py-3 text-lg font-bold text-center focus:outline-none transition shadow-sm`}
+                    placeholder="مثال: 5000"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setSettleOrder(null)}
+                  className="flex-1 py-3 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-bold transition">
+                  إلغاء
+                </button>
+                <button type="submit" disabled={updatingOrder === settleOrder.id}
+                  className="flex-1 py-3 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-pink-500/20 disabled:opacity-50">
+                  تأكيد الحفظ
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
     </div>
+    </>
   );
 }

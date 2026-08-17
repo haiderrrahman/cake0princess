@@ -87,6 +87,7 @@ function AdminHubContent() {
   });
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
   const [settleOrder, setSettleOrder] = useState<any>(null);
+  const [settleOrderType, setSettleOrderType] = useState<"external" | "app" | null>(null);
   const [settleDebtType, setSettleDebtType] = useState<"none" | "customer_owes" | "we_owe">("none");
   const [settleRemainingAmount, setSettleRemainingAmount] = useState<string>("");
   const searchParams = useSearchParams();
@@ -379,6 +380,16 @@ function AdminHubContent() {
   }, [fetchAll]);
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    if (newStatus === "delivered" || newStatus === "completed") {
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        setSettleOrder(order);
+        setSettleOrderType("app");
+        setSettleDebtType("none");
+        setSettleRemainingAmount("");
+      }
+      return;
+    }
     try {
       setUpdatingOrder(orderId);
       const orderRef = doc(db, "orders", orderId);
@@ -398,6 +409,7 @@ function AdminHubContent() {
       const order = externalOrders.find(o => o.id === orderId);
       if (order) {
         setSettleOrder(order);
+        setSettleOrderType("external");
         setSettleDebtType("none");
         setSettleRemainingAmount("");
       }
@@ -437,18 +449,20 @@ function AdminHubContent() {
     e.preventDefault();
     if (!settleOrder) return;
     
-    let finalPaidAmount = Number(settleOrder.price);
+    const basePrice = settleOrderType === "external" ? Number(settleOrder.price || 0) : Number(settleOrder.toPayNow || settleOrder.total || 0);
+    let finalPaidAmount = basePrice;
     const remAmt = Number(settleRemainingAmount) || 0;
     
     if (settleDebtType === "customer_owes") {
-      finalPaidAmount = settleOrder.price - remAmt; // They paid less
+      finalPaidAmount = basePrice - remAmt; // They paid less
     } else if (settleDebtType === "we_owe") {
-      finalPaidAmount = settleOrder.price + remAmt; // They paid more
+      finalPaidAmount = basePrice + remAmt; // They paid more
     }
     
     try {
       setUpdatingOrder(settleOrder.id);
-      await updateDoc(doc(db, "external_orders", settleOrder.id), { 
+      const collectionName = settleOrderType === "external" ? "external_orders" : "orders";
+      await updateDoc(doc(db, collectionName, settleOrder.id), { 
         status: "delivered", 
         paidAmount: finalPaidAmount 
       });
@@ -463,21 +477,24 @@ function AdminHubContent() {
     }
   };
 
-  const handleSettleDebt = async (order: any, diffAmt: number, customerOwesUs: boolean) => {
+  const handleSettleDebt = async (order: any, diffAmt: number, customerOwesUs: boolean, type: "external" | "app" = "external") => {
     if (!(await customConfirm("هل تم تسديد هذا المبلغ بالكامل؟"))) return;
     try {
       setUpdatingOrder(order.id);
       
+      const collectionName = type === "external" ? "external_orders" : "orders";
+      const basePrice = type === "external" ? Number(order.price || 0) : Number(order.toPayNow || order.total || 0);
+      
       // Update the order
-      await updateDoc(doc(db, "external_orders", order.id), { 
-        paidAmount: order.price,
+      await updateDoc(doc(db, collectionName, order.id), { 
+        paidAmount: basePrice,
         isDebtSettled: true 
       });
       
       // Add to sales or expenses
       if (customerOwesUs) {
         await addDoc(collection(db, "store_sales"), {
-          itemName: "تسديد دين سوشيال - " + (order.customerName || ""),
+          itemName: (type === "external" ? "تسديد دين سوشيال - " : "تسديد دين تطبيق - ") + (order.customerName || order.userName || ""),
           price: diffAmt,
           profit: diffAmt,
           quantity: 1,
@@ -960,12 +977,14 @@ function AdminHubContent() {
                       const isDebt = order.status === "delivered" && order.paidAmount !== undefined && Number(order.paidAmount) !== Number(order.price) && !order.isDebtSettled;
                       const customerOwesUs = isDebt && Number(order.price) > Number(order.paidAmount || 0);
                       const weOweCustomer = isDebt && Number(order.price) < Number(order.paidAmount || 0);
+                      const fullyPaidDelivered = order.status === "delivered" && !isDebt;
                       const diffAmt = isDebt ? Math.abs(Number(order.price) - Number(order.paidAmount || 0)) : 0;
 
                       return (
                         <div key={order.id} className={`rounded-3xl p-3 flex flex-col gap-3 shadow-sm relative group border-2 transition-all ${
                           customerOwesUs ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-400 dark:border-rose-800' : 
                           weOweCustomer ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-400 dark:border-blue-800' : 
+                          fullyPaidDelivered ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-400 dark:border-purple-800' :
                           'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800'
                         }`}>
                           
@@ -1060,9 +1079,20 @@ function AdminHubContent() {
                       const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
                       const isUpdating = updatingOrder === order.id;
                       const amount = order.toPayNow || order.total || 0;
+                      
+                      const isDebt = (order.status === "delivered" || order.status === "completed") && order.paidAmount !== undefined && Number(order.paidAmount) !== Number(amount) && !order.isDebtSettled;
+                      const customerOwesUs = isDebt && Number(amount) > Number(order.paidAmount || 0);
+                      const weOweCustomer = isDebt && Number(amount) < Number(order.paidAmount || 0);
+                      const fullyPaidDelivered = (order.status === "delivered" || order.status === "completed") && !isDebt;
+                      const diffAmt = isDebt ? Math.abs(Number(amount) - Number(order.paidAmount || 0)) : 0;
 
                       return (
-                        <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-3xl p-3 sm:p-4 flex gap-4 border border-gray-100 dark:border-zinc-800 shadow-sm">
+                        <div key={order.id} className={`rounded-3xl p-3 sm:p-4 flex gap-4 shadow-sm border-2 transition-all ${
+                          customerOwesUs ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-400 dark:border-rose-800' : 
+                          weOweCustomer ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-400 dark:border-blue-800' : 
+                          fullyPaidDelivered ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-400 dark:border-purple-800' :
+                          'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800'
+                        }`}>
                           <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 border border-gray-100 dark:border-zinc-700 flex items-center justify-center">
                             {order.items && order.items.length > 0 && (order.items[0].imageUrl || order.items[0].tempImageUrl) ? (
                               <img src={order.items[0].imageUrl || order.items[0].tempImageUrl} alt={order.items[0].name} className="w-full h-full object-cover" />
