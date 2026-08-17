@@ -988,10 +988,16 @@ function AdminHubContent() {
                               <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base leading-tight line-clamp-1">{order.customerName}</h3>
                               <p className="text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1 font-bold">{order.cakeName}</p>
                               
-                              <div className="flex justify-center gap-1 mt-1.5 text-[9px] sm:text-[10px]">
+                              <div className="flex flex-col items-center gap-1 mt-1.5 text-[9px] sm:text-[10px]">
                                 <span className="bg-gray-50 dark:bg-zinc-800 px-1.5 py-0.5 rounded-lg text-gray-600 dark:text-gray-300 flex items-center gap-0.5 font-bold">
                                   {order.platform === "انستغرام" ? "📸" : order.platform === "واتساب" ? "💬" : "📱"} {order.platform}
                                 </span>
+                                {order.deliveryDate && (
+                                  <span className="text-amber-600 dark:text-amber-500 font-bold bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-lg flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {new Date(order.deliveryDate).toLocaleDateString('ar-IQ')} - {new Date(order.deliveryDate).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
                               </div>
                             </div>
 
