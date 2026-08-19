@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { customConfirm } from "@/lib/customConfirm";
 import { db, storage } from "@/lib/firebase";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -728,12 +729,15 @@ export default function HomeFinanceDashboard() {
     
     setFuturePlans(updatedList);
     syncToFirebase("futurePlans", updatedList);
-    setShowFuturePlanModal(false);
-    setEditFuturePlan(null);
+    setTimeout(() => {
+      setShowFuturePlanModal(false);
+        }, 2000);
+setEditFuturePlan(null);
     setFuturePlanSteps([]);
   };
 
-  const handleDeleteFuturePlan = (id: string) => {
+  const handleDeleteFuturePlan = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     showConfirm("حذف الخطة", () => {
       const updatedList = futurePlans.filter(p => p.id !== id);
       setFuturePlans(updatedList);
@@ -847,9 +851,11 @@ export default function HomeFinanceDashboard() {
       syncToFirebase("installments", updated);
       toast.success("تم إضافة القسط");
     }
-    setShowInstallmentModal(false);
+    setTimeout(() => {
+      setShowInstallmentModal(false);
     setEditInstallment(null);
-  };
+      }, 2000);
+};
 
   const handlePayInstallment = (inst: Installment) => {
     // احسب المتبقي الحقيقي ديناميكياً
@@ -916,7 +922,8 @@ export default function HomeFinanceDashboard() {
     toast.success("تم التراجع عن آخر دفعة");
   };
 
-  const handleDeleteInstallment = (id: string) => {
+  const handleDeleteInstallment = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     const updated = installments.filter(x => x.id !== id);
     setInstallments(updated);
     syncToFirebase("installments", updated);
@@ -950,9 +957,11 @@ export default function HomeFinanceDashboard() {
       syncToFirebase("bills", updated);
       toast.success("تم إضافة الفاتورة");
     }
-    setShowBillModal(false);
+    setTimeout(() => {
+      setShowBillModal(false);
     setEditBill(null);
-  };
+      }, 2000);
+};
 
   const handlePayBill = (bill: Bill) => {
     setPayBillData({ bill, amount: bill.amount.toString() });
@@ -1011,7 +1020,8 @@ export default function HomeFinanceDashboard() {
     toast.success("تم التراجع عن دفع الفاتورة");
   };
 
-  const handleDeleteBill = (id: string) => {
+  const handleDeleteBill = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     const updated = bills.filter(x => x.id !== id);
     setBills(updated);
     syncToFirebase("bills", updated);
@@ -1046,11 +1056,14 @@ export default function HomeFinanceDashboard() {
     }
     e.currentTarget.reset();
     setExpNameInput("");
-    setShowExpenseModal(false);
+    setTimeout(() => {
+      setShowExpenseModal(false);
     setEditExpense(null);
-  };
+      }, 2000);
+};
 
-  const handleDeleteExpense = (id: string) => {
+  const handleDeleteExpense = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     const updated = expenses.filter(x => x.id !== id);
     setExpenses(updated);
     syncToFirebase("expenses", updated);
@@ -1083,11 +1096,14 @@ export default function HomeFinanceDashboard() {
       toast.success("تم تسجيل الدخل");
     }
     e.currentTarget.reset();
-    setShowIncomeModal(false);
+    setTimeout(() => {
+      setShowIncomeModal(false);
     setEditIncome(null);
-  };
+      }, 2000);
+};
 
-  const handleDeleteIncome = (id: string) => {
+  const handleDeleteIncome = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     const updated = incomes.filter(x => x.id !== id);
     setIncomes(updated);
     syncToFirebase("incomes", updated);
@@ -1102,7 +1118,8 @@ export default function HomeFinanceDashboard() {
     return { data: inventory, setter: setInventory, key: "inventory" };
   };
 
-  const handleDeleteInventoryItem = (id: string) => {
+  const handleDeleteInventoryItem = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     const { data: currentInv, setter: setCurrentInv, key: syncKey } = getActiveInventory();
     const updated = currentInv.filter(x => x.id !== id);
     setCurrentInv(updated);
@@ -1166,8 +1183,10 @@ export default function HomeFinanceDashboard() {
     }
     e.currentTarget.reset();
     setInvNameInput("");
-    setShowInventoryModal(false);
-    setEditInventory(null);
+    setTimeout(() => {
+      setShowInventoryModal(false);
+        }, 2000);
+setEditInventory(null);
     setImageFile(null);
   };
 
@@ -1300,12 +1319,15 @@ export default function HomeFinanceDashboard() {
     }
     
     e.currentTarget.reset();
-    setShowNeedModal(false);
+    setTimeout(() => {
+      setShowNeedModal(false);
     setEditNeed(null);
-    setNeedNameInput("");
+        }, 2000);
+setNeedNameInput("");
   };
 
-  const handleDeleteNeed = (id: string) => {
+  const handleDeleteNeed = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     const updated = needs.filter(x => x.id !== id);
     setNeeds(updated);
     syncToFirebase("needs", updated);
@@ -1511,7 +1533,8 @@ export default function HomeFinanceDashboard() {
     setFulfillModal(null);
   };
 
-  const handleDeleteFamilyNeed = (id: string) => {
+  const handleDeleteFamilyNeed = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     showConfirm("تأكيد الحذف", () => {
       const updated = familyNeeds.filter(n => n.id !== id);
       setFamilyNeeds(updated);
@@ -1575,11 +1598,14 @@ export default function HomeFinanceDashboard() {
     }
     e.currentTarget.reset();
     setDebtNameInput("");
-    setShowDebtModal(false);
+    setTimeout(() => {
+      setShowDebtModal(false);
     setEditDebt(null);
-  };
+      }, 2000);
+};
 
-  const handleDeleteDebt = (id: string) => {
+  const handleDeleteDebt = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     const updated = debts.filter(x => x.id !== id);
     setDebts(updated);
     syncToFirebase("debts", updated);
@@ -1718,11 +1744,14 @@ export default function HomeFinanceDashboard() {
       syncToFirebase("travelTrips", updated);
       toast.success("تم إنشاء الرحلة بنجاح");
     }
-    setShowTripModal(false);
-    setEditTrip(null);
+    setTimeout(() => {
+      setShowTripModal(false);
+        }, 2000);
+setEditTrip(null);
   };
 
-  const handleDeleteTrip = (id: string) => {
+  const handleDeleteTrip = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     showConfirm("حذف رحلة السفر", () => {
       const updatedTrips = travelTrips.filter(t => t.id !== id);
       setTravelTrips(updatedTrips);
@@ -1778,7 +1807,8 @@ export default function HomeFinanceDashboard() {
     setShowTripExpenseModal(false);
   };
 
-  const handleDeleteTripExpense = (id: string) => {
+  const handleDeleteTripExpense = async (id: string) => {
+    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
     showConfirm("حذف مصروف الرحلة", () => {
       const updated = travelExpenses.filter(e => e.id !== id);
       setTravelExpenses(updated);
@@ -4857,7 +4887,9 @@ export default function HomeFinanceDashboard() {
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">{editInstallment ? "تعديل" : "إضافة قسط / سلفة"}</h3>
-              <button onClick={() => { setShowInstallmentModal(false); setEditInstallment(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
+              <button onClick={() => { setTimeout(() => {
+      setShowInstallmentModal(false); setEditInstallment(null);     }, 2000);
+}} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
@@ -4976,7 +5008,9 @@ export default function HomeFinanceDashboard() {
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">{editBill ? "تعديل الفاتورة" : "إضافة فاتورة"}</h3>
-              <button onClick={() => { setShowBillModal(false); setEditBill(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
+              <button onClick={() => { setTimeout(() => {
+      setShowBillModal(false); setEditBill(null);     }, 2000);
+}} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
@@ -5015,7 +5049,9 @@ export default function HomeFinanceDashboard() {
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">{editExpense ? "تعديل المصروف" : "تسجيل مصروف"}</h3>
-              <button onClick={() => { setShowExpenseModal(false); setEditExpense(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
+              <button onClick={() => { setTimeout(() => {
+      setShowExpenseModal(false); setEditExpense(null);     }, 2000);
+}} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
@@ -5072,7 +5108,9 @@ export default function HomeFinanceDashboard() {
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">{editIncome ? "تعديل الدخل" : "تسجيل دخل"}</h3>
-              <button onClick={() => { setShowIncomeModal(false); setEditIncome(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
+              <button onClick={() => { setTimeout(() => {
+      setShowIncomeModal(false); setEditIncome(null);     }, 2000);
+}} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
@@ -5167,7 +5205,9 @@ export default function HomeFinanceDashboard() {
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">{editInventory ? "تعديل المادة" : "إضافة مادة"}</h3>
-              <button onClick={() => { setShowInventoryModal(false); setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
+              <button onClick={() => { setTimeout(() => {
+      setShowInventoryModal(false);     }, 2000);
+setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
@@ -5316,7 +5356,9 @@ export default function HomeFinanceDashboard() {
             <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gray-50/50 dark:bg-zinc-800/50">
                 <h3 className="font-black text-gray-800 dark:text-white text-lg">{editNeed ? "تعديل احتياج" : "إضافة احتياج"}</h3>
-                <button onClick={() => { setShowNeedModal(false); setEditNeed(null); }} className="p-2 bg-white dark:bg-zinc-800 rounded-full text-gray-400 hover:text-gray-600 transition shadow-sm">
+                <button onClick={() => { setTimeout(() => {
+      setShowNeedModal(false); setEditNeed(null);     }, 2000);
+}} className="p-2 bg-white dark:bg-zinc-800 rounded-full text-gray-400 hover:text-gray-600 transition shadow-sm">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -5388,7 +5430,9 @@ export default function HomeFinanceDashboard() {
             <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gray-50/50 dark:bg-zinc-800/50">
                 <h3 className="font-black text-gray-800 dark:text-white text-lg">{editDebt ? "تعديل سجل" : "إضافة سجل"}</h3>
-                <button onClick={() => { setShowDebtModal(false); setEditDebt(null); }} className="p-2 bg-white dark:bg-zinc-800 rounded-full text-gray-400 hover:text-gray-600 transition shadow-sm">
+                <button onClick={() => { setTimeout(() => {
+      setShowDebtModal(false); setEditDebt(null);     }, 2000);
+}} className="p-2 bg-white dark:bg-zinc-800 rounded-full text-gray-400 hover:text-gray-600 transition shadow-sm">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -5835,7 +5879,9 @@ export default function HomeFinanceDashboard() {
                 <Target className="w-5 h-5 text-violet-500" />
                 {editFuturePlan ? 'تعديل الخطة' : 'إضافة خطة جديدة'}
               </h3>
-              <button onClick={() => { setShowFuturePlanModal(false); setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 bg-gray-100 dark:bg-zinc-800 rounded-full p-1.5 transition">
+              <button onClick={() => { setTimeout(() => {
+      setShowFuturePlanModal(false);     }, 2000);
+setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 bg-gray-100 dark:bg-zinc-800 rounded-full p-1.5 transition">
                 <X className="w-5 h-5" />
               </button>
             </div>
