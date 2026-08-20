@@ -661,48 +661,69 @@ function AdminHubContent() {
 
   const auditData = useMemo(() => {
     const result = {
-      social: { totalExpected: 0, totalReceived: 0, totalDebt: 0, totalWeOwe: 0, ordersCount: 0 },
+      social:   { totalExpected: 0, totalReceived: 0, totalDebt: 0, totalWeOwe: 0, ordersCount: 0 },
       appCakes: { totalExpected: 0, totalReceived: 0, totalDebt: 0, totalWeOwe: 0, ordersCount: 0 },
       supplies: { totalExpected: 0, totalReceived: 0, totalDebt: 0, totalWeOwe: 0, ordersCount: 0 },
     };
 
-    const processOrder = (order: any, category: "social" | "appCakes" | "supplies") => {
-      if (order.status === 'rejected') return;
-      
-      result[category].ordersCount++;
-      const total = Number(order.total) || 0;
-      let paid = Number(order.toPayNow) || 0;
-      const isDebt = order.isDebt === true;
-      const debtAmount = Number(order.debtAmount) || 0;
-      const customerOwesUs = order.customerOwesUs !== false; // Default true
+    // ── Social Orders (external_orders): uses `price` and `paidAmount` ──
+    externalOrders.forEach((order: any) => {
+      if (order.status === 'rejected' || order.status === 'cancelled') return;
+      result.social.ordersCount++;
 
-      result[category].totalExpected += total;
+      const price = Number(order.price || 0);
+      const paid  = Number(order.paidAmount ?? price); // if paidAmount missing → fully paid
+      result.social.totalExpected += price;
 
-      if (isDebt && debtAmount > 0) {
-        if (customerOwesUs) {
-          result[category].totalReceived += (total - debtAmount);
-          result[category].totalDebt += debtAmount;
+      const isDebt = order.status === 'delivered'
+        && order.paidAmount !== undefined
+        && paid !== price
+        && !order.isDebtSettled;
+
+      if (isDebt) {
+        const diff = price - paid;
+        if (diff > 0) {
+          // Customer owes us (red)
+          result.social.totalReceived += paid;
+          result.social.totalDebt     += diff;
         } else {
-          result[category].totalReceived += total;
-          result[category].totalWeOwe += debtAmount;
+          // We owe customer (blue)
+          result.social.totalReceived += price;
+          result.social.totalWeOwe    += Math.abs(diff);
         }
       } else {
-        result[category].totalReceived += total;
+        result.social.totalReceived += price;
       }
-    };
+    });
 
-    externalOrders.forEach((o: any) => processOrder(o, 'social'));
-    
-    orders.forEach((o: any) => {
-      const hasSupplies = o.items?.some((i: any) => i.isSupply || i.category === 'supplies' || i.id?.includes('supply'));
-      const hasCourses = o.items?.some((i: any) => i.type === 'course');
-      
-      if (hasCourses && !hasSupplies && o.items?.length === 1) return; // Skip pure academy
-      
-      if (hasSupplies) {
-        processOrder(o, 'supplies');
+    // ── App Orders (orders): uses `total`, `toPayNow`, `isDebt`, `debtAmount` ──
+    orders.forEach((order: any) => {
+      if (order.status === 'rejected' || order.status === 'cancelled') return;
+
+      const hasSupplies = order.items?.some((i: any) => i.isSupply || i.category === 'supplies' || i.id?.includes('supply'));
+      const hasCourses  = order.items?.some((i: any) => i.type === 'course');
+      if (hasCourses && !hasSupplies && order.items?.length === 1) return; // Skip pure academy
+
+      const cat: 'supplies' | 'appCakes' = hasSupplies ? 'supplies' : 'appCakes';
+      result[cat].ordersCount++;
+
+      const total      = Number(order.total || order.toPayNow || 0);
+      const isDebt     = order.isDebt === true;
+      const debtAmount = Number(order.debtAmount || 0);
+      const weOwe      = order.customerOwesUs === false; // blue: we owe
+
+      result[cat].totalExpected += total;
+
+      if (isDebt && debtAmount > 0) {
+        if (weOwe) {
+          result[cat].totalReceived += total;
+          result[cat].totalWeOwe    += debtAmount;
+        } else {
+          result[cat].totalReceived += (total - debtAmount);
+          result[cat].totalDebt     += debtAmount;
+        }
       } else {
-        processOrder(o, 'appCakes');
+        result[cat].totalReceived += total;
       }
     });
 
