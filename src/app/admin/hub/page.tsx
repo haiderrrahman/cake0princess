@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, Suspense, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   ShoppingBag, CheckCircle, XCircle, Clock, Loader2, Package, Plus,
   DollarSign, AlertTriangle, TrendingUp, Smartphone, Receipt,
@@ -94,8 +94,21 @@ function AdminHubContent() {
   const [settleDebtType, setSettleDebtType] = useState<"none" | "customer_owes" | "we_owe">("none");
   const [settleRemainingAmount, setSettleRemainingAmount] = useState<string>("");
   const searchParams = useSearchParams();
+  const router = useRouter();
   const defaultTab = searchParams.get('tab') as any || "external";
-  const [activeTab, setActiveTab] = useState<"orders" | "external" | "supplies_orders" | "courses" | "inventory" | "audit">(defaultTab === "stats" ? "audit" : defaultTab);
+  const [activeTab, setActiveTabState] = useState<"orders" | "external" | "supplies_orders" | "courses" | "inventory" | "audit">(defaultTab === "stats" ? "audit" : defaultTab);
+
+  const setActiveTab = (tab: "orders" | "external" | "supplies_orders" | "courses" | "inventory" | "audit") => {
+    setActiveTabState(tab);
+    router.replace(`/admin/hub?tab=${tab}`, { scroll: false });
+  };
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) {
+      setActiveTabState(tab === "stats" ? "audit" : tab as any);
+    }
+  }, [searchParams]);
   const [orderFilter, setOrderFilter] = useState<"all" | "pending" | "processing" | "delivering">("all");
   
   // External Orders filter and sort state
