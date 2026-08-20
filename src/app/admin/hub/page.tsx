@@ -79,6 +79,8 @@ function AdminHubContent() {
   const [customOrders, setCustomOrders] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [homeDebts, setHomeDebts] = useState<any[]>([]);
+  const [homeExpenses, setHomeExpenses] = useState<any[]>([]);
+  const [homeIncomes, setHomeIncomes] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('cache_inventory');
@@ -373,13 +375,15 @@ function AdminHubContent() {
       }));
     });
 
-    // Real-time listener for home debts
+    // Real-time listener for home debts, expenses, and incomes
     const unsubHomeDebts = onSnapshot(doc(db, "home_finance", "debts"), (snap) => {
-      if (snap.exists() && snap.data().data) {
-        setHomeDebts(snap.data().data);
-      } else {
-        setHomeDebts([]);
-      }
+      if (snap.exists() && snap.data().data) setHomeDebts(snap.data().data); else setHomeDebts([]);
+    });
+    const unsubHomeExpenses = onSnapshot(doc(db, "home_finance", "expenses"), (snap) => {
+      if (snap.exists() && snap.data().data) setHomeExpenses(snap.data().data); else setHomeExpenses([]);
+    });
+    const unsubHomeIncomes = onSnapshot(doc(db, "home_finance", "incomes"), (snap) => {
+      if (snap.exists() && snap.data().data) setHomeIncomes(snap.data().data); else setHomeIncomes([]);
     });
 
     return () => {
@@ -387,6 +391,8 @@ function AdminHubContent() {
       unsubExpenses();
       unsubInventory();
       unsubHomeDebts();
+      unsubHomeExpenses();
+      unsubHomeIncomes();
     };
   }, [fetchAll]);
 
@@ -1567,6 +1573,65 @@ function AdminHubContent() {
                     )}
                   </div>
                 </div>
+
+                {/* ── Home Financial Log ── */}
+                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-xl border border-gray-100 dark:border-zinc-800 relative overflow-hidden">
+                  <h3 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2 mb-4">
+                    <Receipt className="w-6 h-6 text-indigo-500" />
+                    السجل المالي لإدارة المنزل (أحدث 10 حركات)
+                  </h3>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-right whitespace-nowrap">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-zinc-800 text-sm text-gray-500 dark:text-gray-400">
+                          <th className="py-3 px-4 font-bold">التاريخ والوقت</th>
+                          <th className="py-3 px-4 font-bold">الوصف</th>
+                          <th className="py-3 px-4 font-bold">الفئة</th>
+                          <th className="py-3 px-4 font-bold">المبلغ</th>
+                          <th className="py-3 px-4 font-bold">النوع</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          ...homeExpenses.map(e => ({ ...e, logType: "مصروف", typeColor: "text-rose-500", bg: "bg-rose-50 dark:bg-rose-900/10" })),
+                          ...homeIncomes.map(i => ({ ...i, logType: "مدخول", typeColor: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-900/10" }))
+                        ]
+                        .sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime())
+                        .slice(0, 10)
+                        .map((log: any, idx: number) => (
+                          <tr key={`${log.id}-${idx}`} className="border-b border-gray-50 dark:border-zinc-800/50 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition">
+                            <td className="py-3 px-4 text-sm text-gray-500">
+                              {new Date(log.createdAt || log.date).toLocaleString('ar-IQ')}
+                            </td>
+                            <td className="py-3 px-4 text-sm font-bold text-gray-900 dark:text-white">
+                              {log.name}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-300">
+                              <span className="px-2 py-1 bg-gray-100 dark:bg-zinc-800 rounded-md text-xs">{log.category || log.type}</span>
+                            </td>
+                            <td className={`py-3 px-4 font-black ${log.typeColor}`}>
+                              {log.logType === "مصروف" ? "-" : "+"}{Number(log.amount).toLocaleString()} د.ع
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${log.bg} ${log.typeColor}`}>
+                                {log.logType}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        {homeExpenses.length === 0 && homeIncomes.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="py-6 text-center text-gray-500 font-bold text-sm">
+                              لا توجد حركات مالية مسجلة بعد
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
               </div>
             )}
           </>
