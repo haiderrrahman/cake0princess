@@ -375,15 +375,23 @@ function AdminHubContent() {
       }));
     });
 
-    // Real-time listener for home debts, expenses, and incomes
+    // Real-time listener for home debts
     const unsubHomeDebts = onSnapshot(doc(db, "home_finance", "debts"), (snap) => {
-      if (snap.exists() && snap.data().data) setHomeDebts(snap.data().data); else setHomeDebts([]);
+      if (snap.exists() && snap.data().data) {
+        setHomeDebts(snap.data().data);
+      } else {
+        setHomeDebts([]);
+      }
     });
+
     const unsubHomeExpenses = onSnapshot(doc(db, "home_finance", "expenses"), (snap) => {
-      if (snap.exists() && snap.data().data) setHomeExpenses(snap.data().data); else setHomeExpenses([]);
+      if (snap.exists() && snap.data().data) setHomeExpenses(snap.data().data);
+      else setHomeExpenses([]);
     });
+
     const unsubHomeIncomes = onSnapshot(doc(db, "home_finance", "incomes"), (snap) => {
-      if (snap.exists() && snap.data().data) setHomeIncomes(snap.data().data); else setHomeIncomes([]);
+      if (snap.exists() && snap.data().data) setHomeIncomes(snap.data().data);
+      else setHomeIncomes([]);
     });
 
     return () => {
@@ -751,6 +759,14 @@ function AdminHubContent() {
 
     return { ...result, totalHomeDebtsForMe, totalHomeDebtsOnMe, salaryDebtsForMe, salaryDebtsOnMe };
   }, [externalOrders, orders, homeDebts]);
+
+  const financialLog = useMemo(() => {
+    const all = [
+      ...homeExpenses.map(e => ({ ...e, type: "expense", amount: Number(e.amount), date: e.date || e.createdAt?.split("T")[0] })),
+      ...homeIncomes.map(i => ({ ...i, type: "income", amount: Number(i.amount), date: i.date || i.createdAt?.split("T")[0] }))
+    ];
+    return all.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0, 50); // Get last 50
+  }, [homeExpenses, homeIncomes]);
 
   const currentTabInfo = tabTitles[activeTab] || { title: "القسم", subtitle: "إدارة القسم" };
 
@@ -1574,64 +1590,33 @@ function AdminHubContent() {
                   </div>
                 </div>
 
-                {/* ── Home Financial Log ── */}
-                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-xl border border-gray-100 dark:border-zinc-800 relative overflow-hidden">
-                  <h3 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2 mb-4">
-                    <Receipt className="w-6 h-6 text-indigo-500" />
-                    السجل المالي لإدارة المنزل (أحدث 10 حركات)
-                  </h3>
+                {/* ── Financial Log ── */}
+                <div className="bg-white/5 backdrop-blur-md rounded-3xl p-6 shadow-2xl border border-white/10 relative overflow-hidden">
+                  <h3 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2 mb-6"><Receipt className="w-6 h-6 text-indigo-500" /> السجل المالي (آخر الحركات في المنزل)</h3>
                   
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-right whitespace-nowrap">
-                      <thead>
-                        <tr className="border-b border-gray-200 dark:border-zinc-800 text-sm text-gray-500 dark:text-gray-400">
-                          <th className="py-3 px-4 font-bold">التاريخ والوقت</th>
-                          <th className="py-3 px-4 font-bold">الوصف</th>
-                          <th className="py-3 px-4 font-bold">الفئة</th>
-                          <th className="py-3 px-4 font-bold">المبلغ</th>
-                          <th className="py-3 px-4 font-bold">النوع</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[
-                          ...homeExpenses.map(e => ({ ...e, logType: "مصروف", typeColor: "text-rose-500", bg: "bg-rose-50 dark:bg-rose-900/10" })),
-                          ...homeIncomes.map(i => ({ ...i, logType: "مدخول", typeColor: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-900/10" }))
-                        ]
-                        .sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime())
-                        .slice(0, 10)
-                        .map((log: any, idx: number) => (
-                          <tr key={`${log.id}-${idx}`} className="border-b border-gray-50 dark:border-zinc-800/50 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition">
-                            <td className="py-3 px-4 text-sm text-gray-500">
-                              {new Date(log.createdAt || log.date).toLocaleString('ar-IQ')}
-                            </td>
-                            <td className="py-3 px-4 text-sm font-bold text-gray-900 dark:text-white">
-                              {log.name}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-300">
-                              <span className="px-2 py-1 bg-gray-100 dark:bg-zinc-800 rounded-md text-xs">{log.category || log.type}</span>
-                            </td>
-                            <td className={`py-3 px-4 font-black ${log.typeColor}`}>
-                              {log.logType === "مصروف" ? "-" : "+"}{Number(log.amount).toLocaleString()} د.ع
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${log.bg} ${log.typeColor}`}>
-                                {log.logType}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                        {homeExpenses.length === 0 && homeIncomes.length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="py-6 text-center text-gray-500 font-bold text-sm">
-                              لا توجد حركات مالية مسجلة بعد
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    {financialLog.length === 0 ? (
+                      <p className="text-center text-gray-400 py-4">لا توجد حركات مالية مسجلة بعد</p>
+                    ) : (
+                      financialLog.map((log, idx) => (
+                        <div key={log.id || idx} className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all hover:-translate-y-0.5">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${log.type === 'income' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'}`}>
+                              {log.type === 'income' ? <Plus className="w-4 h-4" /> : <DollarSign className="w-4 h-4" />}
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-900 dark:text-white text-sm">{log.name}</p>
+                              <p className="text-[10px] text-gray-500">{log.category} • {log.date}</p>
+                            </div>
+                          </div>
+                          <div className={`font-black ${log.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                            {log.type === 'income' ? '+' : '-'}{log.amount.toLocaleString()} د.ع
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
-
               </div>
             )}
           </>
