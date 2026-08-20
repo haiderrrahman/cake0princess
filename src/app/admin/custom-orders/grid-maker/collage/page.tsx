@@ -462,10 +462,54 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
   onRemove: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const touchDistanceRef = useRef<number | null>(null);
 
   const handleDrag = (e: any, info: any) => {
     e.stopPropagation();
     onTransform({ x: data.x + info.delta.x, y: data.y + info.delta.y });
+  };
+
+  useEffect(() => {
+    const el = imgRef.current;
+    if (!el || !isActive) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const zoomFactor = -e.deltaY * 0.002;
+      const newScale = Math.min(Math.max(0.2, data.scale + zoomFactor), 5);
+      onTransform({ scale: newScale });
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [isActive, data.scale, onTransform]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      touchDistanceRef.current = Math.hypot(dx, dy);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && touchDistanceRef.current !== null) {
+      e.stopPropagation();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const delta = dist - touchDistanceRef.current;
+      touchDistanceRef.current = dist;
+      
+      const newScale = Math.min(Math.max(0.2, data.scale + delta * 0.01), 5);
+      onTransform({ scale: newScale });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchDistanceRef.current = null;
   };
 
   return (
@@ -478,7 +522,7 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
       {!data.url ? (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors border-2 border-dashed border-white/20"
-          style={{ backgroundColor: "rgba(30, 41, 59, 0.6)" }} // dark slate background
+          style={{ backgroundColor: "rgba(30, 41, 59, 0.6)" }}
           onClick={e => { e.stopPropagation(); fileRef.current?.click(); }}
         >
           <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center shadow-inner">
@@ -490,14 +534,15 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
       ) : (
         <>
           <motion.img
+            ref={imgRef as any}
             src={data.url}
             className="absolute inset-0 w-full h-full object-cover select-none touch-none"
             style={{
-              scale: data.scale,
               x: data.x,
               y: data.y,
               rotate: data.rotation || 0,
               scaleX: data.flipH ? -data.scale : data.scale,
+              scaleY: data.scale,
               cursor: "move",
             }}
             drag
@@ -505,6 +550,9 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
             dragMomentum={false}
             onDrag={handleDrag}
             onDragStart={e => e.stopPropagation()}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           />
           {isActive && (
             <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-black/70 backdrop-blur-md rounded-full px-2 py-1 z-20 shadow-xl border border-white/10">

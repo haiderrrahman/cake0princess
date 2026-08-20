@@ -205,35 +205,35 @@ export default function PhotoEditorHub() {
       </div>
 
       {/* Tools Grid */}
-      <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 md:gap-4">
+      <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2 sm:gap-3 md:gap-4">
         {TOOLS.map((tool, i) => (
           <Link
             key={i}
             href={tool.href}
             className={`
-              relative group overflow-hidden rounded-2xl p-4 flex flex-col items-center justify-center gap-3
-              ${tool.bg} shadow-lg hover:shadow-xl ${tool.shadow}
+              relative group overflow-hidden rounded-xl sm:rounded-2xl p-2 sm:p-3 flex flex-col items-center justify-center gap-1.5 sm:gap-2
+              ${tool.bg} shadow-md hover:shadow-lg ${tool.shadow}
               active:scale-95 hover:-translate-y-1 transition-all duration-200
               aspect-square
             `}
           >
             {/* Glass shimmer */}
-            <div className="absolute top-0 right-0 w-10 h-10 bg-white/15 rounded-full blur-xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+            <div className="absolute top-0 right-0 w-8 h-8 bg-white/15 rounded-full blur-lg -translate-y-1/2 translate-x-1/2 pointer-events-none" />
             <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
 
             {/* Badge */}
             {tool.badge && (
-              <span className="absolute top-1.5 left-1.5 bg-white/90 text-violet-700 text-[8px] font-black px-1.5 py-0.5 rounded-full leading-none z-10">
+              <span className="absolute top-1 left-1 bg-white/90 text-violet-700 text-[7px] sm:text-[8px] font-black px-1.5 py-0.5 rounded-full leading-none z-10">
                 {tool.badge}
               </span>
             )}
 
             <tool.icon
-              className={`w-6 h-6 md:w-7 md:h-7 z-10 ${tool.textColor || "text-white"}`}
-              strokeWidth={2}
+              className={`w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 z-10 ${tool.textColor || "text-white"}`}
+              strokeWidth={1.5}
             />
 
-            <span className={`font-black text-[9px] md:text-[10px] text-center leading-tight z-10 ${tool.textColor || "text-white"}`}>
+            <span className={`font-black text-[8px] sm:text-[9px] md:text-[10px] text-center leading-tight z-10 ${tool.textColor || "text-white"}`}>
               {tool.title}
             </span>
           </Link>
