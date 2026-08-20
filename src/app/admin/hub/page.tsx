@@ -15,6 +15,7 @@ import InventoryDeductModal from "@/components/InventoryDeductModal";
 import EditExternalOrderModal from "@/components/EditExternalOrderModal";
 import EditInventoryModal from "@/components/EditInventoryModal";
 import AdminQuickEntry from "@/components/AdminQuickEntry";
+import CustomerProfileModal from "@/components/CustomerProfileModal";
 import { customConfirm } from '@/lib/customConfirm';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -115,6 +116,7 @@ function AdminHubContent() {
   const [showAddSocial, setShowAddSocial] = useState(false);
   const [showAddInventory, setShowAddInventory] = useState(false);
   const [showEditInventory, setShowEditInventory] = useState<any>(null);
+  const [customerProfile, setCustomerProfile] = useState<{name: string, phone?: string} | null>(null);
   // Track purchase source per item: 'haider' | 'cake'
   const [purchaseSource, setPurchaseSource] = useState<Record<string, 'salary' | 'cake'>>({});
   const [invExpSummary, setInvExpSummary] = useState({ haider: 0, cake: 0 });
@@ -986,7 +988,11 @@ function AdminHubContent() {
                           <div className="flex-1 flex flex-col justify-between py-0.5">
                             <div>
                               <div className="flex justify-between items-start mb-1">
-                                <h3 className="font-black text-gray-900 dark:text-white text-base sm:text-lg leading-tight">{order.userName || "ضيف"}</h3>
+                              <button onClick={() => setCustomerProfile({ name: order.shippingAddress?.name || order.userName || "ضيف", phone: order.shippingAddress?.phone })} className="text-right group">
+                                <h3 className="font-black text-gray-900 dark:text-white text-base sm:text-lg leading-tight group-hover:text-[#FF3366] transition underline decoration-transparent group-hover:decoration-[#FF3366] underline-offset-4 flex items-center gap-1.5">
+                                  {order.shippingAddress?.name || order.userName || "ضيف"}
+                                </h3>
+                              </button>
                                 <span className={`text-[10px] font-black px-2 py-1 rounded-xl shrink-0 ml-1 ${cfg.bg} ${cfg.color}`}>
                                   {cfg.label}
                                 </span>
@@ -1120,7 +1126,11 @@ function AdminHubContent() {
 
                           <div className="flex-1 flex flex-col justify-between">
                             <div className="text-center">
-                              <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base leading-tight line-clamp-1">{order.customerName}</h3>
+                              <button onClick={() => setCustomerProfile({ name: order.customerName, phone: order.customerPhone })} className="text-center group mx-auto block">
+                                <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base leading-tight line-clamp-1 group-hover:text-[#FF3366] transition underline decoration-transparent group-hover:decoration-[#FF3366] underline-offset-4 inline-flex items-center gap-1">
+                                  {order.customerName}
+                                </h3>
+                              </button>
                               <p className="text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1 font-bold">{order.cakeName}</p>
                               
                               <div className="flex justify-center mt-1.5 text-[9px] sm:text-[10px]">
@@ -1230,7 +1240,11 @@ function AdminHubContent() {
                           <div className="flex-1 flex flex-col justify-between py-0.5">
                             <div>
                               <div className="flex justify-between items-start mb-1">
-                                <h3 className="font-black text-gray-900 dark:text-white text-base leading-tight">{order.userName || "بدون اسم"}</h3>
+                              <button onClick={() => setCustomerProfile({ name: order.shippingAddress?.name || order.userName || "بدون اسم", phone: order.shippingAddress?.phone })} className="text-right group">
+                                <h3 className="font-black text-gray-900 dark:text-white text-base leading-tight group-hover:text-[#FF3366] transition underline decoration-transparent group-hover:decoration-[#FF3366] underline-offset-4 flex items-center gap-1.5">
+                                  {order.shippingAddress?.name || order.userName || "بدون اسم"}
+                                </h3>
+                              </button>
                                 <span className={`text-[10px] font-black px-2 py-1 rounded-xl shrink-0 ml-1 ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
                               </div>
                               <p className="text-[11px] text-gray-500 line-clamp-1 mb-2 font-bold">
@@ -1718,6 +1732,15 @@ function AdminHubContent() {
             </form>
           </div>
         </div>
+      )}
+
+      {customerProfile && (
+        <CustomerProfileModal
+          isOpen={true}
+          onClose={() => setCustomerProfile(null)}
+          customerName={customerProfile.name}
+          customerPhone={customerProfile.phone}
+        />
       )}
     </div>
   );
