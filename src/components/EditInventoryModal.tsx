@@ -132,7 +132,7 @@ export default function EditInventoryModal({ isOpen, onClose, item, onEditSucces
           secondary: '#10B981',
         },
       });
-      if(onEditSuccess) onEditSuccess();
+      if (onEditSuccess) onEditSuccess({ ...item, ...updateData });
       onClose();
     } catch (err) {
       console.error(err);

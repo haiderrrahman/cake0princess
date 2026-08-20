@@ -427,8 +427,9 @@ function AdminHubContent() {
       setUpdatingOrder(orderId);
       const orderRef = doc(db, "orders", orderId);
       await updateDoc(orderRef, { status: newStatus });
+      // Optimistic update
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
       toast.success("تم تحديث حالة الطلب");
-      fetchAll();
     } catch (error) {
       console.error(error);
       toast.error("حدث خطأ أثناء التحديث");
@@ -453,8 +454,9 @@ function AdminHubContent() {
       setUpdatingOrder(orderId);
       const orderRef = doc(db, "external_orders", orderId);
       await updateDoc(orderRef, { status: newStatus });
+      // Optimistic update
+      setExternalOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
       toast.success("تم تحديث حالة طلب السوشيال ميديا");
-      fetchAll();
     } catch (error) {
       console.error(error);
       toast.error("حدث خطأ أثناء التحديث");
@@ -468,8 +470,9 @@ function AdminHubContent() {
       setUpdatingOrder(orderId);
       const orderRef = doc(db, "custom_orders", orderId);
       await updateDoc(orderRef, { status: newStatus });
+      // Optimistic update
+      setCustomOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
       toast.success("تم تحديث حالة طلب الكيك الخاص");
-      fetchAll();
     } catch (error) {
       console.error(error);
       toast.error("حدث خطأ أثناء التحديث");
@@ -487,21 +490,27 @@ function AdminHubContent() {
     const remAmt = Number(settleRemainingAmount) || 0;
     
     if (settleDebtType === "customer_owes") {
-      finalPaidAmount = basePrice - remAmt; // They paid less
+      finalPaidAmount = basePrice - remAmt;
     } else if (settleDebtType === "we_owe") {
-      finalPaidAmount = basePrice + remAmt; // They paid more
+      finalPaidAmount = basePrice + remAmt;
     }
     
     try {
       setUpdatingOrder(settleOrder.id);
       const collectionName = settleOrderType === "external" ? "external_orders" : "orders";
-      await updateDoc(doc(db, collectionName, settleOrder.id), { 
+      const orderId = settleOrder.id;
+      await updateDoc(doc(db, collectionName, orderId), { 
         status: "delivered", 
         paidAmount: finalPaidAmount 
       });
+      // Optimistic update
+      if (settleOrderType === "external") {
+        setExternalOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "delivered", paidAmount: finalPaidAmount } : o));
+      } else {
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "delivered", paidAmount: finalPaidAmount } : o));
+      }
       toast.success("تم تأكيد التسليم وتحديث الحساب");
       setSettleOrder(null);
-      fetchAll();
     } catch (error) {
       console.error(error);
       toast.error("حدث خطأ أثناء الحفظ");
@@ -518,13 +527,17 @@ function AdminHubContent() {
       const collectionName = type === "external" ? "external_orders" : "orders";
       const basePrice = type === "external" ? Number(order.price || 0) : Number(order.toPayNow || order.total || 0);
       
-      // Update the order
       await updateDoc(doc(db, collectionName, order.id), { 
         paidAmount: basePrice,
         isDebtSettled: true 
       });
+      // Optimistic update
+      if (type === "external") {
+        setExternalOrders(prev => prev.map(o => o.id === order.id ? { ...o, paidAmount: basePrice, isDebtSettled: true } : o));
+      } else {
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, paidAmount: basePrice, isDebtSettled: true } : o));
+      }
       
-      // Add to sales or expenses
       if (customerOwesUs) {
         await addDoc(collection(db, "store_sales"), {
           itemName: (type === "external" ? "تسديد دين سوشيال - " : "تسديد دين تطبيق - ") + (order.customerName || order.userName || ""),
@@ -545,7 +558,6 @@ function AdminHubContent() {
       }
       
       toast.success("تم التسديد بنجاح وتم تسجيلها في الحسابات");
-      fetchAll();
     } catch (e) {
       toast.error("خطأ أثناء التسديد");
     } finally {
@@ -557,15 +569,25 @@ function AdminHubContent() {
     try {
       const neededQty = Number(item.neededQuantity || 1);
 
+      // Optimistic update: immediately reflect in UI
+      setInventory(prev => prev.map(i => i.id === item.id 
+        ? { ...i, quantity: Number(i.quantity || 0) + neededQty, neededQuantity: 0 }
+        : i
+      ));
+
       await updateDoc(doc(db, "cake_inventory", item.id), {
         quantity: increment(neededQty),
         neededQuantity: 0,
         lastUpdated: serverTimestamp()
       });
       
-      fetchAll();
       toast.success(`✅ تم توفير ${item.name} وإضافته للمخزن`, { duration: 3000 });
     } catch (e) {
+      // Revert on failure
+      setInventory(prev => prev.map(i => i.id === item.id 
+        ? { ...i, quantity: Number(i.quantity || 0) - Number(item.neededQuantity || 1), neededQuantity: item.neededQuantity }
+        : i
+      ));
       toast.error("فشل التحديث");
     }
   };
@@ -936,7 +958,12 @@ function AdminHubContent() {
           isOpen={true}
           onClose={() => setShowEditInventory(null)}
           item={showEditInventory}
-          onEditSuccess={() => { fetchAll(); }}
+          onEditSuccess={(updatedItem: any) => {
+            if (updatedItem) {
+              setInventory(prev => prev.map(i => i.id === updatedItem.id ? { ...i, ...updatedItem } : i));
+            }
+            setShowEditInventory(null);
+          }}
         />
       )}
 
@@ -1398,17 +1425,27 @@ function AdminHubContent() {
                                 {/* Quantity controls */}
                                 <div className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800 rounded-xl px-2 py-1 border border-gray-100 dark:border-zinc-700">
                                   <button onClick={async () => {
+                                    const newVal = neededQty + 1;
+                                    // Optimistic
+                                    setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: newVal } : x));
                                     try {
-                                      await updateDoc(doc(db, "cake_inventory", i.id), { neededQuantity: neededQty + 1 });
-                                      fetchAll();
-                                    } catch (e) { toast.error("فشل التحديث"); }
+                                      await updateDoc(doc(db, "cake_inventory", i.id), { neededQuantity: newVal });
+                                    } catch (e) {
+                                      setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: neededQty } : x));
+                                      toast.error("فشل التحديث");
+                                    }
                                   }} className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-700 text-emerald-600 font-bold text-base flex items-center justify-center shadow-sm hover:bg-emerald-50 transition">+</button>
                                   <span className="text-xs font-black text-gray-700 dark:text-gray-200">{neededQty}</span>
                                   <button onClick={async () => {
+                                    const newVal = Math.max(0, neededQty - 1);
+                                    // Optimistic
+                                    setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: newVal } : x));
                                     try {
-                                      await updateDoc(doc(db, "cake_inventory", i.id), { neededQuantity: Math.max(0, neededQty - 1) });
-                                      fetchAll();
-                                    } catch (e) { toast.error("فشل التحديث"); }
+                                      await updateDoc(doc(db, "cake_inventory", i.id), { neededQuantity: newVal });
+                                    } catch (e) {
+                                      setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: neededQty } : x));
+                                      toast.error("فشل التحديث");
+                                    }
                                   }} className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-700 text-red-500 font-bold text-base flex items-center justify-center shadow-sm hover:bg-red-50 transition">−</button>
                                 </div>
                                 <div className="mt-auto flex flex-col gap-1.5 w-full">
@@ -1671,8 +1708,11 @@ function AdminHubContent() {
           isOpen={true}
           onClose={() => setShowEditExternal(null)}
           order={showEditExternal}
-          onEditSuccess={() => {
-            fetchAll();
+          onEditSuccess={(updatedOrder: any) => {
+            if (updatedOrder) {
+              setExternalOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o));
+              setShowEditExternal(null);
+            }
           }}
         />
       )}

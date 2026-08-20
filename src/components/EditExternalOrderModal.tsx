@@ -117,17 +117,22 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       }
 
       toast.success("تم التعديل بنجاح", {
-        style: {
-          background: '#10B981',
-          color: '#fff',
-          borderRadius: '16px',
-        },
-        iconTheme: {
-          primary: '#fff',
-          secondary: '#10B981',
-        },
+        style: { background: '#10B981', color: '#fff', borderRadius: '16px' },
+        iconTheme: { primary: '#fff', secondary: '#10B981' },
       });
-      onEditSuccess();
+      onEditSuccess({
+        ...order,
+        customerName,
+        customerPhone,
+        cakeName,
+        price: numPrice,
+        paidAmount: numPaidAmount,
+        isDebtSettled,
+        cost: numCost,
+        profit: numCost > 0 ? numPrice - numCost : numPrice,
+        deliveryDate,
+        ...(tempImageUrl ? { tempImageUrl } : {})
+      });
       onClose();
     } catch (err) {
       console.error(err);
