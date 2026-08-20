@@ -479,27 +479,26 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
     if (!data.url) return;
     e.stopPropagation();
     onActivate();
-    if (e.pointerType === "mouse" || e.pointerType === "touch") {
-      isDragging.current = true;
-      lastPos.current = { x: e.clientX, y: e.clientY };
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    }
+    if (e.pointerType === "touch") return; // Handled by touch events
+    isDragging.current = true;
+    lastPos.current = { x: e.clientX, y: e.clientY };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return; // Handled by touch events
     if (!isDragging.current) return;
     e.stopPropagation();
     const dx = e.clientX - lastPos.current.x;
     const dy = e.clientY - lastPos.current.y;
     lastPos.current = { x: e.clientX, y: e.clientY };
-    
-    // Scale down the drag amount slightly if zoomed out, or keep it 1:1
     onTransform({ x: data.x + dx, y: data.y + dy });
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return;
     isDragging.current = false;
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
   };
 
   const handleWheel = (e: WheelEvent) => {
@@ -519,8 +518,14 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
   }, [isActive, data.scale, onTransform]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      e.stopPropagation();
+    if (!data.url) return;
+    e.stopPropagation();
+    onActivate();
+    
+    if (e.touches.length === 1) {
+      isDragging.current = true;
+      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
       isDragging.current = false; // Cancel pan if pinch starts
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -529,8 +534,15 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && touchDistance.current !== null) {
-      e.stopPropagation();
+    if (!data.url) return;
+    e.stopPropagation();
+
+    if (e.touches.length === 1 && isDragging.current) {
+      const dx = e.touches[0].clientX - lastPos.current.x;
+      const dy = e.touches[0].clientY - lastPos.current.y;
+      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      onTransform({ x: data.x + dx, y: data.y + dy });
+    } else if (e.touches.length === 2 && touchDistance.current !== null) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.hypot(dx, dy);
@@ -542,8 +554,9 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
     }
   };
 
-  const handleTouchEnd = () => {
-    touchDistance.current = null;
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) touchDistance.current = null;
+    if (e.touches.length === 0) isDragging.current = false;
   };
 
   return (
