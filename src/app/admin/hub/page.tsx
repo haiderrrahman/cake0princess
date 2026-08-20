@@ -1597,39 +1597,17 @@ function AdminHubContent() {
                   </div>
                 ))}
 
-                {/* ── Inventory and Home Debts Overview ── */}
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-3xl p-6 shadow-xl border border-indigo-500/20">
-                    <h3 className="text-lg font-black text-white flex items-center gap-2 mb-4"><Package className="w-5 h-5 text-indigo-400" /> مطابقة المخزن</h3>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl">
-                        <span className="text-gray-300 text-sm font-bold">قيمة البضاعة في المخزن:</span>
-                        <span className="text-indigo-300 font-black">{stats.inventoryValue.toLocaleString()} د.ع</span>
-                      </div>
-                      <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl border border-rose-500/20">
-                        <span className="text-gray-300 text-sm font-bold">نواقص المخزن (مواد تحت الصفر):</span>
-                        <span className="text-rose-400 font-black">{stats.inventoryLow} مادة</span>
-                      </div>
+                {/* ── Inventory Overview ── */}
+                <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-3xl p-6 shadow-xl border border-indigo-500/20">
+                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-4"><Package className="w-5 h-5 text-indigo-400" /> مطابقة المخزن</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl col-span-2">
+                      <span className="text-gray-300 text-sm font-bold">قيمة البضاعة في المخزن:</span>
+                      <span className="text-indigo-300 font-black">{stats.inventoryValue.toLocaleString()} د.ع</span>
                     </div>
-                  </div>
-
-                  <div className="bg-gradient-to-br from-purple-900 to-slate-900 rounded-3xl p-6 shadow-xl border border-purple-500/20">
-                    <h3 className="text-lg font-black text-white flex items-center gap-2 mb-4"><Banknote className="w-5 h-5 text-purple-400" /> ديون الرواتب والمنزل</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-black/20 p-3 rounded-xl border border-emerald-500/20">
-                        <p className="text-[10px] text-gray-400 font-bold mb-1">ديون لك (تطلب الناس)</p>
-                        <p className="text-sm text-emerald-400 font-black">{auditData.totalHomeDebtsForMe.toLocaleString()} د.ع</p>
-                      </div>
-                      <div className="bg-black/20 p-3 rounded-xl border border-rose-500/20">
-                        <p className="text-[10px] text-gray-400 font-bold mb-1">ديون عليك (يطلبك الناس)</p>
-                        <p className="text-sm text-rose-400 font-black">{auditData.totalHomeDebtsOnMe.toLocaleString()} د.ع</p>
-                      </div>
-                      <div className="col-span-2 bg-black/30 p-3 rounded-xl border border-white/5 flex justify-between items-center mt-1">
-                        <p className="text-xs text-gray-300 font-bold">منها ديون متعلقة بالرواتب (لك/عليك):</p>
-                        <p className="text-xs font-black text-white">
-                          <span className="text-emerald-400">{auditData.salaryDebtsForMe.toLocaleString()}</span> / <span className="text-rose-400">{auditData.salaryDebtsOnMe.toLocaleString()}</span>
-                        </p>
-                      </div>
+                    <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl border border-rose-500/20 col-span-2">
+                      <span className="text-gray-300 text-sm font-bold">نواقص المخزن (مواد تحت الصفر):</span>
+                      <span className="text-rose-400 font-black">{stats.inventoryLow} مادة</span>
                     </div>
                   </div>
                 </div>
