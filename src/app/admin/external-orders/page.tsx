@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowRight, Search, Plus, Loader2, Image as ImageIcon, Trash2, Calendar, Smartphone, DollarSign, Calculator, User, Edit3 } from "lucide-react";
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit, onSnapshot } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import Image from "next/image";
@@ -44,36 +44,7 @@ export default function ExternalOrdersAdmin() {
   const [customers, setCustomers] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchOrdersAndCustomers = async () => {
-    try {
-      // ⚡ 1. Fast network query with limit(150)
-      let fetchedOrders: any[] = [];
-      try {
-        const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
-        const snap = await getDocs(q);
-        fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      } catch (err) {
-        // Fallback if index fails or orderBy error
-        const snap = await getDocs(collection(db, "external_orders"));
-        fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
-        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime());
-        fetchedOrders = fetchedOrders.slice(0, 150);
-      }
-      
-      setOrders(fetchedOrders);
-      setLoading(false); // ⚡ Turn off loading immediately once orders arrive!
-      try { localStorage.setItem("cache_external_orders", JSON.stringify(fetchedOrders)); } catch (e) {}
-
-      // ⚡ 2. Fetch customers in the background without blocking the UI
-      getDocs(collection(db, "customers")).then(custSnap => {
-        setCustomers(custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      }).catch(e => console.error("Error fetching customers:", e));
-
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      setLoading(false);
-    }
-  };
+  const fetchOrdersAndCustomers = async () => {};
 
   useEffect(() => {
     // ⚡ Instant load from cache (0ms perceived latency)
@@ -88,7 +59,34 @@ export default function ExternalOrdersAdmin() {
       }
     } catch (e) {}
 
-    fetchOrdersAndCustomers();
+    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
+    
+    // onSnapshot is much faster and gives real-time updates directly from local cache first
+    const unsubscribeOrders = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
+      const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setOrders(fetchedOrders);
+      setLoading(false);
+      try { localStorage.setItem("cache_external_orders", JSON.stringify(fetchedOrders)); } catch (e) {}
+    }, (err) => {
+      console.error("Error fetching external orders, falling back to unordered:", err);
+      // Fallback if index fails
+      getDocs(collection(db, "external_orders")).then(snap => {
+        let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime());
+        fetchedOrders = fetchedOrders.slice(0, 150);
+        setOrders(fetchedOrders);
+        setLoading(false);
+      });
+    });
+
+    const unsubscribeCustomers = onSnapshot(collection(db, "customers"), (snap) => {
+      setCustomers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    return () => {
+      unsubscribeOrders();
+      unsubscribeCustomers();
+    };
   }, []);
 
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
