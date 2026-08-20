@@ -9,18 +9,26 @@ import { db } from "@/lib/firebase";
 import AdminQuickEntry from "./AdminQuickEntry";
 
 export default function AdminDashboard() {
-  const [data, setData] = useState({
-    todaySales: 0,
-    weekSales: 0,
-    monthSales: 0,
-    totalRevenue: 0,
-    netProfit: 0,
-    totalExpenses: 0,
-    totalSalaryDebt: 0,
-    cakeMaterialsExpense: 0,
-    breakdown: { social: 0, appCakes: 0, appAcademy: 0, storeSupplies: 0 },
+  const CACHE_KEY = 'admin_quick_dashboard';
+
+  const [data, setData] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return {
+      todaySales: 0, weekSales: 0, monthSales: 0,
+      totalRevenue: 0, netProfit: 0, totalExpenses: 0,
+      totalSalaryDebt: 0, cakeMaterialsExpense: 0,
+      breakdown: { social: 0, appCakes: 0, appAcademy: 0, storeSupplies: 0 },
+    };
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') return !localStorage.getItem(CACHE_KEY);
+    return true;
+  });
   const [showEntry, setShowEntry] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -109,12 +117,14 @@ export default function AdminDashboard() {
       }).reduce((s, e: any) => s + (Number(e.amount) || 0), 0);
       const netProfit = totalRevenue - totalExpenses - totalSalaryDebt;
 
-      setData({ 
+      const result = { 
         todaySales, weekSales, monthSales, 
         totalRevenue, netProfit, totalExpenses, 
         totalSalaryDebt, cakeMaterialsExpense,
         breakdown: { social, appCakes, appAcademy, storeSupplies } 
-      });
+      };
+      setData(result);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(result)); } catch {}
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     }
@@ -244,7 +254,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="bg-gray-50 dark:bg-zinc-800 rounded-xl p-2 text-center">
                    <p className="text-[8px] text-gray-500 dark:text-gray-400 mb-0.5">مواد كيك</p>
-                   <p className="text-[10px] font-black text-gray-800 dark:text-gray-200">{loading ? "..." : data.cakeMaterialsExpense.toLocaleString()}</p>
+                   <p className="text-[10px] font-black text-gray-800 dark:text-gray-200">{loading ? "..." : data.breakdown.storeSupplies.toLocaleString()}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-zinc-800 rounded-xl p-2 text-center">
                    <p className="text-[8px] text-gray-500 dark:text-gray-400 mb-0.5">أكاديمية</p>
