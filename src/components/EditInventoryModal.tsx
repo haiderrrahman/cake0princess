@@ -53,6 +53,8 @@ export default function EditInventoryModal({ isOpen, onClose, item, onEditSucces
       // Auto-set needed if quantity drops below threshold and needed wasn't explicitly set higher
       if (newQty <= minAlertVal && newNeeded === 0) {
         newNeeded = 1;
+      } else if (newQty > minAlertVal && newNeeded === Number(item?.neededQuantity || 0)) {
+        newNeeded = 0;
       }
 
       const updateData: any = {
