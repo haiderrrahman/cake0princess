@@ -211,7 +211,13 @@ export default function CollagePage() {
               const rI = img.width / img.height;
               const rB = cw / ch;
               let dw = cw, dh = ch;
-              if (rI > rB) dw = ch * rI; else dh = cw / rI;
+              if (rI > rB) {
+                dw = cw;
+                dh = cw / rI;
+              } else {
+                dh = ch;
+                dw = ch * rI;
+              }
 
               ctx.translate(cx + cw / 2 + data.x * scaleX, cy + ch / 2 + data.y * scaleY);
               ctx.rotate((data.rotation * Math.PI) / 180);
@@ -462,46 +468,74 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
   onRemove: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
-  const touchDistanceRef = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const handleDrag = (e: any, info: any) => {
+  // Pan and Zoom state for interaction
+  const isDragging = useRef(false);
+  const lastPos = useRef({ x: 0, y: 0 });
+  const touchDistance = useRef<number | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!data.url) return;
     e.stopPropagation();
-    onTransform({ x: data.x + info.delta.x, y: data.y + info.delta.y });
+    onActivate();
+    if (e.pointerType === "mouse" || e.pointerType === "touch") {
+      isDragging.current = true;
+      lastPos.current = { x: e.clientX, y: e.clientY };
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    e.stopPropagation();
+    const dx = e.clientX - lastPos.current.x;
+    const dy = e.clientY - lastPos.current.y;
+    lastPos.current = { x: e.clientX, y: e.clientY };
+    
+    // Scale down the drag amount slightly if zoomed out, or keep it 1:1
+    onTransform({ x: data.x + dx, y: data.y + dy });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    isDragging.current = false;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  };
+
+  const handleWheel = (e: WheelEvent) => {
+    if (!isActive) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const zoomFactor = -e.deltaY * 0.002;
+    const newScale = Math.min(Math.max(0.2, data.scale + zoomFactor), 5);
+    onTransform({ scale: newScale });
   };
 
   useEffect(() => {
-    const el = imgRef.current;
+    const el = containerRef.current;
     if (!el || !isActive) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const zoomFactor = -e.deltaY * 0.002;
-      const newScale = Math.min(Math.max(0.2, data.scale + zoomFactor), 5);
-      onTransform({ scale: newScale });
-    };
-
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);
   }, [isActive, data.scale, onTransform]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
+      e.stopPropagation();
+      isDragging.current = false; // Cancel pan if pinch starts
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
-      touchDistanceRef.current = Math.hypot(dx, dy);
+      touchDistance.current = Math.hypot(dx, dy);
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && touchDistanceRef.current !== null) {
+    if (e.touches.length === 2 && touchDistance.current !== null) {
       e.stopPropagation();
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.hypot(dx, dy);
-      const delta = dist - touchDistanceRef.current;
-      touchDistanceRef.current = dist;
+      const delta = dist - touchDistance.current;
+      touchDistance.current = dist;
       
       const newScale = Math.min(Math.max(0.2, data.scale + delta * 0.01), 5);
       onTransform({ scale: newScale });
@@ -509,11 +543,12 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
   };
 
   const handleTouchEnd = () => {
-    touchDistanceRef.current = null;
+    touchDistance.current = null;
   };
 
   return (
     <div
+      ref={containerRef}
       data-cell={cell.id}
       className={`relative overflow-hidden transition-all duration-200 ${isActive ? "ring-2 ring-indigo-400 ring-offset-1 ring-offset-transparent z-10" : ""}`}
       style={{ gridArea: cell.gridArea, borderRadius: cornerRadius > 0 ? `${cornerRadius}px` : undefined }}
@@ -533,27 +568,28 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
         </div>
       ) : (
         <>
-          <motion.img
-            ref={imgRef as any}
-            src={data.url}
-            className="absolute inset-0 w-full h-full object-cover select-none touch-none"
-            style={{
-              x: data.x,
-              y: data.y,
-              rotate: data.rotation || 0,
-              scaleX: data.flipH ? -data.scale : data.scale,
-              scaleY: data.scale,
-              cursor: "move",
-            }}
-            drag
-            dragConstraints={{ left: -800, right: 800, top: -800, bottom: 800 }}
-            dragMomentum={false}
-            onDrag={handleDrag}
-            onDragStart={e => e.stopPropagation()}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-          />
+          <div className="absolute inset-0 w-full h-full flex items-center justify-center">
+            <motion.img
+              src={data.url}
+              className="w-full h-full object-contain select-none touch-none"
+              style={{
+                x: data.x,
+                y: data.y,
+                rotate: data.rotation || 0,
+                scaleX: data.flipH ? -data.scale : data.scale,
+                scaleY: data.scale,
+                cursor: "move",
+              }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              draggable={false}
+            />
+          </div>
           {isActive && (
             <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-black/70 backdrop-blur-md rounded-full px-2 py-1 z-20 shadow-xl border border-white/10">
               <button onClick={e => { e.stopPropagation(); onTransform({ scale: Math.max(0.2, data.scale - 0.15) }); }} className="p-1 text-white hover:bg-white/20 rounded-full transition-colors"><ZoomOut className="w-3 h-3" /></button>
