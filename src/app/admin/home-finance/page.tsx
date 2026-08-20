@@ -193,6 +193,7 @@ const EXPENSE_CATEGORIES = [
   { label: "عطور", icon: "🌸", color: "from-purple-400 to-pink-500" },
   { label: "ألعاب", icon: "🧸", color: "from-amber-400 to-yellow-500" },
   { label: "مفروشات", icon: "🛏️", color: "from-teal-400 to-emerald-500" },
+  { label: "ألعاب ويانصيب", icon: "🎲", color: "from-indigo-500 to-purple-500" },
 ];
 
 const BILL_CATEGORIES = ["كهرباء", "ماء", "إنترنت", "إيجار", "هاتف", "تنظيف", "غاز"];
@@ -656,17 +657,20 @@ export default function HomeFinanceDashboard() {
 
   const isBillPaidThisCycle = (bill: Bill) => bill.paidDates && bill.paidDates.some(p => isInCycle(p.date));
   
-  const isInstallmentOwedThisCycle = (i: Installment) => {
-    if (i.remainingAmount <= 0) return false;
-    if (i.payments.some(p => isInCycle(p.date))) return false;
-    if (!i.startDate) return true;
+  const getInstallmentDelayMonths = (i: Installment) => {
+    if (i.remainingAmount <= 0) return 0;
+    if (!i.startDate) {
+      return i.payments.some(p => isInCycle(p.date)) ? 0 : 1;
+    }
     const start = new Date(i.startDate);
     const now = new Date();
     const monthsElapsed = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
     const requiredPayments = monthsElapsed + 1;
     const paidMonths = (i.initialPaidMonths || 0) + i.payments.length;
-    return paidMonths < requiredPayments;
+    return Math.max(0, requiredPayments - paidMonths);
   };
+
+  const isInstallmentOwedThisCycle = (i: Installment) => getInstallmentDelayMonths(i) > 0;
 
   const unpaidBillsAmt = bills.filter(b => !isBillPaidThisCycle(b)).reduce((s, b) => s + b.amount, 0);
   const unpaidInstallmentsMonthly = installments.filter(i => isInstallmentOwedThisCycle(i)).reduce((s, i) => s + i.monthlyInstallment, 0);
@@ -3344,7 +3348,7 @@ setEditTrip(null);
                 const monthsLeft = inst.totalMonths 
                   ? Math.max(0, inst.totalMonths - paidMonths)
                   : (inst.monthlyInstallment > 0 ? Math.ceil(computedRemaining / inst.monthlyInstallment) : 0);
-                const delayMonths = isInstallmentOwedThisCycle(inst) ? 1 : 0;
+                const delayMonths = getInstallmentDelayMonths(inst);
                 const gradients = [
                   "from-indigo-600 to-violet-700",
                   "from-blue-600 to-cyan-700",

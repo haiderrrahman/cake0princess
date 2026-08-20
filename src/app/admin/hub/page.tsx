@@ -6,7 +6,7 @@ import {
   ShoppingBag, CheckCircle, XCircle, Clock, Loader2, Package, Plus,
   DollarSign, AlertTriangle, TrendingUp, Smartphone, Receipt,
   BarChart3, RefreshCw, ChevronRight, User, Phone, MapPin,
-  Calendar, ArrowRight, Search, Filter, Edit, ChevronDown, GraduationCap, PlayCircle, Image as ImageIcon, Check, MessageCircle, Sparkles, PackageCheck
+  Calendar, ArrowRight, Search, Filter, Edit, ChevronDown, GraduationCap, PlayCircle, Image as ImageIcon, Check, MessageCircle, Sparkles, PackageCheck, Banknote
 } from "lucide-react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit, onSnapshot, increment, where } from "firebase/firestore";
 import toast from 'react-hot-toast';
@@ -78,6 +78,7 @@ function AdminHubContent() {
   });
   const [customOrders, setCustomOrders] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
+  const [homeDebts, setHomeDebts] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('cache_inventory');
@@ -372,10 +373,20 @@ function AdminHubContent() {
       }));
     });
 
+    // Real-time listener for home debts
+    const unsubHomeDebts = onSnapshot(doc(db, "home_finance", "debts"), (snap) => {
+      if (snap.exists() && snap.data().data) {
+        setHomeDebts(snap.data().data);
+      } else {
+        setHomeDebts([]);
+      }
+    });
+
     return () => {
       window.removeEventListener('backgroundUploadSuccess', handleBackgroundUpload);
       unsubExpenses();
       unsubInventory();
+      unsubHomeDebts();
     };
   }, [fetchAll]);
 
@@ -727,8 +738,13 @@ function AdminHubContent() {
       }
     });
 
-    return result;
-  }, [externalOrders, orders]);
+    const totalHomeDebtsForMe = homeDebts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - (d.payments || []).reduce((ps:any, p:any) => ps + p.amount, 0)), 0);
+    const totalHomeDebtsOnMe = homeDebts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - (d.payments || []).reduce((ps:any, p:any) => ps + p.amount, 0)), 0);
+    const salaryDebtsForMe = homeDebts.filter(d => d.type === "دين لي" && (String(d.name).includes("راتب") || String(d.category).includes("راتب"))).reduce((s, d) => s + (d.amount - (d.payments || []).reduce((ps:any, p:any) => ps + p.amount, 0)), 0);
+    const salaryDebtsOnMe = homeDebts.filter(d => d.type === "دين علي" && (String(d.name).includes("راتب") || String(d.category).includes("راتب"))).reduce((s, d) => s + (d.amount - (d.payments || []).reduce((ps:any, p:any) => ps + p.amount, 0)), 0);
+
+    return { ...result, totalHomeDebtsForMe, totalHomeDebtsOnMe, salaryDebtsForMe, salaryDebtsOnMe };
+  }, [externalOrders, orders, homeDebts]);
 
   const currentTabInfo = tabTitles[activeTab] || { title: "القسم", subtitle: "إدارة القسم" };
 
@@ -1482,6 +1498,75 @@ function AdminHubContent() {
                     </div>
                   </div>
                 ))}
+
+                {/* ── Inventory and Home Debts Overview ── */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-3xl p-6 shadow-xl border border-indigo-500/20">
+                    <h3 className="text-lg font-black text-white flex items-center gap-2 mb-4"><Package className="w-5 h-5 text-indigo-400" /> مطابقة المخزن</h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl">
+                        <span className="text-gray-300 text-sm font-bold">قيمة البضاعة في المخزن:</span>
+                        <span className="text-indigo-300 font-black">{stats.inventoryValue.toLocaleString()} د.ع</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl border border-rose-500/20">
+                        <span className="text-gray-300 text-sm font-bold">نواقص المخزن (مواد تحت الصفر):</span>
+                        <span className="text-rose-400 font-black">{stats.inventoryLow} مادة</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-purple-900 to-slate-900 rounded-3xl p-6 shadow-xl border border-purple-500/20">
+                    <h3 className="text-lg font-black text-white flex items-center gap-2 mb-4"><Banknote className="w-5 h-5 text-purple-400" /> ديون الرواتب والمنزل</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-black/20 p-3 rounded-xl border border-emerald-500/20">
+                        <p className="text-[10px] text-gray-400 font-bold mb-1">ديون لك (تطلب الناس)</p>
+                        <p className="text-sm text-emerald-400 font-black">{auditData.totalHomeDebtsForMe.toLocaleString()} د.ع</p>
+                      </div>
+                      <div className="bg-black/20 p-3 rounded-xl border border-rose-500/20">
+                        <p className="text-[10px] text-gray-400 font-bold mb-1">ديون عليك (يطلبك الناس)</p>
+                        <p className="text-sm text-rose-400 font-black">{auditData.totalHomeDebtsOnMe.toLocaleString()} د.ع</p>
+                      </div>
+                      <div className="col-span-2 bg-black/30 p-3 rounded-xl border border-white/5 flex justify-between items-center mt-1">
+                        <p className="text-xs text-gray-300 font-bold">منها ديون متعلقة بالرواتب (لك/عليك):</p>
+                        <p className="text-xs font-black text-white">
+                          <span className="text-emerald-400">{auditData.salaryDebtsForMe.toLocaleString()}</span> / <span className="text-rose-400">{auditData.salaryDebtsOnMe.toLocaleString()}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Smart Advisor ── */}
+                <div className="bg-gradient-to-r from-emerald-900/50 to-teal-900/50 rounded-3xl p-6 shadow-2xl border border-emerald-500/30 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 blur-[50px] rounded-full pointer-events-none" />
+                  <h3 className="text-xl font-black text-white flex items-center gap-2 mb-4"><TrendingUp className="w-6 h-6 text-emerald-400" /> المستشار الذكي للمركز (تحليل وتنبؤ)</h3>
+                  
+                  <div className="space-y-4 relative z-10">
+                    <div className="bg-black/20 p-4 rounded-xl border-r-4 border-emerald-500">
+                      <p className="text-sm text-emerald-100 font-bold leading-relaxed">
+                        {auditData.social.totalReceived > auditData.appCakes.totalReceived 
+                          ? "📈 طلبات السوشيال ميديا تحقق أرباحاً أعلى من التطبيق حالياً. يُنصح بزيادة الحملات الإعلانية على السوشيال ميديا لاستغلال هذا الزخم، مع الاحتفاظ بأسعار تنافسية."
+                          : "📈 طلبات كيك التطبيق تحقق أرباحاً أعلى من السوشيال ميديا. هذا مؤشر جيد على ولاء العملاء للتطبيق. استمر في تقديم عروض حصرية داخل التطبيق لزيادة المبيعات."}
+                      </p>
+                    </div>
+
+                    {(auditData.social.totalDebt + auditData.appCakes.totalDebt + auditData.supplies.totalDebt) > 100000 && (
+                      <div className="bg-rose-950/40 p-4 rounded-xl border-r-4 border-rose-500">
+                        <p className="text-sm text-rose-200 font-bold leading-relaxed">
+                          ⚠️ هنالك ديون متراكمة (أنت تطلبها) تتجاوز 100,000 د.ع. لزيادة هامش الربح والسيولة النقدية لديك، ننصح بالتواصل مع المندوبين والعملاء لتحصيل هذه الديون في أسرع وقت وتجنب تراكمها.
+                        </p>
+                      </div>
+                    )}
+
+                    {stats.inventoryValue > (auditData.supplies.totalReceived * 2) && auditData.supplies.totalReceived > 0 && (
+                      <div className="bg-amber-950/40 p-4 rounded-xl border-r-4 border-amber-500">
+                        <p className="text-sm text-amber-200 font-bold leading-relaxed">
+                          💡 قيمة المخزون الحالي ({stats.inventoryValue.toLocaleString()} د.ع) عالية جداً مقارنة بمبيعات مواد الكيك المستلمة. ننصح بعمل عروض ترويجية لمواد الكيك لتحريك المخزون وتجنب تلف المواد (خاصة ذات الصلاحية المحدودة).
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </>
