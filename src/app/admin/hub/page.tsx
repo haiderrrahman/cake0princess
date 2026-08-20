@@ -1471,13 +1471,13 @@ function AdminHubContent() {
                 )}
 
                 <div className="flex justify-between items-center mt-6">
-                  <h3 className="font-black text-gray-800 dark:text-gray-200">المواد المتوفرة ({filteredInventory.filter(i => Number(i.quantity) > 0).length})</h3>
+                  <h3 className="font-black text-gray-800 dark:text-gray-200">سجل المخزن (جميع المواد) ({filteredInventory.length})</h3>
                   <button onClick={() => setShowAddInventory(true)} className="text-xs font-bold bg-blue-500 text-white px-3 py-1.5 rounded-lg hover:bg-blue-600 flex items-center gap-1 transition shadow-sm">
                     <Plus className="w-3 h-3" /> إضافة مادة
                   </button>
                 </div>
 
-                {filteredInventory.filter(i => Number(i.quantity) > 0).length === 0 ? (
+                {filteredInventory.length === 0 ? (
                   <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
                     <Package className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                     <p className="text-gray-500 font-bold">لا توجد مواد في المخزن بعد</p>
@@ -1489,7 +1489,7 @@ function AdminHubContent() {
                       const catItems = filteredInventory.filter(item => {
                         const itemCat = item.category || "أخرى";
                         const matchesCat = itemCat === cat || (cat === "أخرى" && !INVENTORY_CATEGORIES.includes(itemCat));
-                        return matchesCat && Number(item.quantity) > 0;
+                        return matchesCat;
                       });
                       if (catItems.length === 0) return null;
                       return (
@@ -1500,19 +1500,20 @@ function AdminHubContent() {
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {catItems.map(item => {
                               const isLow = Number(item.quantity) <= Number(item.minAlert);
+                              const isZero = Number(item.quantity) <= 0;
                               return (
-                                <div key={item.id} className={`bg-white dark:bg-zinc-900 rounded-2xl border shadow-sm overflow-hidden flex flex-col relative ${isLow ? "border-orange-300 dark:border-orange-800/60" : "border-gray-100 dark:border-zinc-800"}`}>
+                                <div key={item.id} className={`bg-white dark:bg-zinc-900 rounded-2xl border shadow-sm overflow-hidden flex flex-col relative ${isZero ? "border-red-300 dark:border-red-800/60" : isLow ? "border-orange-300 dark:border-orange-800/60" : "border-gray-100 dark:border-zinc-800"}`}>
                                   <button onClick={() => setShowEditInventory(item)} className="absolute top-1.5 left-1.5 z-10 w-6 h-6 bg-white/80 dark:bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-blue-500 transition">
                                     <Edit className="w-3 h-3" />
                                   </button>
                                   
-                                  <div className={`h-24 flex items-center justify-center text-4xl relative ${isLow ? 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-zinc-800 dark:to-zinc-700' : 'bg-gradient-to-br from-gray-50 to-slate-50 dark:from-zinc-800 dark:to-zinc-700'}`}>
+                                  <div className={`h-24 flex items-center justify-center text-4xl relative ${isZero ? 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-zinc-800 dark:to-zinc-700' : isLow ? 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-zinc-800 dark:to-zinc-700' : 'bg-gradient-to-br from-gray-50 to-slate-50 dark:from-zinc-800 dark:to-zinc-700'}`}>
                                     {(item.imageUrl || item.tempImageUrl) ? (
                                       <img src={item.imageUrl || item.tempImageUrl} alt={item.name} className="w-full h-full object-cover" />
                                     ) : (
                                       <span>{item.category === "كريمات" ? "🧁" : item.category === "حشوات" ? "🍫" : item.category === "طحين وسكر" ? "🌾" : item.category === "ألوان وإضافات" ? "🎨" : item.category === "تغليف وزينة" ? "🎀" : item.category === "أدوات" ? "🔧" : "📦"}</span>
                                     )}
-                                    <span className={`absolute top-1.5 right-1.5 text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg ${isLow ? 'bg-orange-500' : 'bg-emerald-500'}`}>
+                                    <span className={`absolute top-1.5 right-1.5 text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg ${Number(item.quantity) <= 0 ? 'bg-red-500' : isLow ? 'bg-orange-500' : 'bg-emerald-500'}`}>
                                       {item.quantity} {item.unit}
                                     </span>
                                   </div>
@@ -1522,7 +1523,11 @@ function AdminHubContent() {
                                       <p className="font-black text-gray-900 dark:text-white text-sm leading-tight line-clamp-2 mb-1">{item.name}</p>
                                       <p className="text-[11px] text-gray-600 dark:text-gray-400 font-bold">المفرد: <span className="font-black">{item.price ? Number(item.price).toLocaleString() : '0'}</span> د.ع</p>
                                       <p className="text-xs text-emerald-600 dark:text-emerald-400 font-black mt-0.5">الإجمالي: {item.price ? (Number(item.price) * Number(item.quantity)).toLocaleString() : '0'} د.ع</p>
-                                      {isLow && <span className="inline-flex mt-1 bg-orange-100 text-orange-600 text-[9px] px-1.5 py-0.5 rounded-md font-bold items-center gap-1"><AlertTriangle className="w-2.5 h-2.5" /> نقص</span>}
+                                      {Number(item.quantity) <= 0 ? (
+                                        <span className="inline-flex mt-1 bg-red-100 text-red-600 text-[9px] px-1.5 py-0.5 rounded-md font-bold items-center gap-1"><AlertTriangle className="w-2.5 h-2.5" /> نفدت الكمية</span>
+                                      ) : isLow ? (
+                                        <span className="inline-flex mt-1 bg-orange-100 text-orange-600 text-[9px] px-1.5 py-0.5 rounded-md font-bold items-center gap-1"><AlertTriangle className="w-2.5 h-2.5" /> نقص</span>
+                                      ) : null}
                                     </div>
                                     
                                     <div className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800 rounded-xl px-1.5 py-1 border border-gray-100 dark:border-zinc-700 mt-1">
