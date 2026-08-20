@@ -135,7 +135,9 @@ export default function GlobalActions() {
         await Promise.all(keys.map(key => caches.delete(key)));
       }
     } catch (e) {}
-    window.location.href = window.location.pathname + '?refresh=' + Date.now();
+    const params = new URLSearchParams(window.location.search);
+    params.set('refresh', Date.now().toString());
+    window.location.href = window.location.pathname + '?' + params.toString();
   };
 
   return (
