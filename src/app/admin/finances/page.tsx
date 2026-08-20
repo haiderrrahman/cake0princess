@@ -398,7 +398,7 @@ export default function FinancesAdmin() {
           </div>
           <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-3 text-center hover:bg-white/10 transition">
              <p className="text-[9px] text-purple-200 mb-1">مواد الكيك</p>
-             <p className="text-xs font-black text-white">{(stats.cakeMaterialsExpense || 0).toLocaleString()} <span className="text-[8px] font-normal">د.ع</span></p>
+             <p className="text-xs font-black text-white">{(stats.breakdown.storeSupplies || 0).toLocaleString()} <span className="text-[8px] font-normal">د.ع</span></p>
           </div>
           <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-3 text-center hover:bg-white/10 transition">
              <p className="text-[9px] text-purple-200 mb-1">الأكاديمية</p>
