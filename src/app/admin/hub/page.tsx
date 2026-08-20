@@ -1,12 +1,12 @@
 "use client";
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   ShoppingBag, CheckCircle, XCircle, Clock, Loader2, Package, Plus,
   DollarSign, AlertTriangle, TrendingUp, Smartphone, Receipt,
   BarChart3, RefreshCw, ChevronRight, User, Phone, MapPin,
-  Calendar, ArrowRight, Search, Filter, Edit, ChevronDown, GraduationCap, PlayCircle, Image as ImageIcon, Check
+  Calendar, ArrowRight, Search, Filter, Edit, ChevronDown, GraduationCap, PlayCircle, Image as ImageIcon, Check, MessageCircle, Sparkles, PackageCheck
 } from "lucide-react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit, onSnapshot, increment, where } from "firebase/firestore";
 import toast from 'react-hot-toast';
@@ -92,7 +92,7 @@ function AdminHubContent() {
   const [settleRemainingAmount, setSettleRemainingAmount] = useState<string>("");
   const searchParams = useSearchParams();
   const defaultTab = searchParams.get('tab') as any || "external";
-  const [activeTab, setActiveTab] = useState<"orders" | "external" | "supplies_orders" | "courses" | "inventory" | "stats">(defaultTab);
+  const [activeTab, setActiveTab] = useState<"orders" | "external" | "supplies_orders" | "courses" | "inventory" | "audit">(defaultTab === "stats" ? "audit" : defaultTab);
   const [orderFilter, setOrderFilter] = useState<"all" | "pending" | "processing" | "delivering">("all");
   
   // External Orders filter and sort state
@@ -655,9 +655,60 @@ function AdminHubContent() {
     supplies_orders: { title: "طلبات مواد الكيك", subtitle: "إدارة المواد الخام والطلبيات" },
     inventory: { title: "إدارة المخزن", subtitle: "جرد الكيك والمواد الأولية" },
     courses: { title: "الأكاديمية", subtitle: "إدارة دورات المبيعات والمشتركين" },
-    stats: { title: "التقارير", subtitle: "تحليلات وإحصائيات مفصلة" }
+    audit: { title: "مطابقة وكشف", subtitle: "التدقيق المالي ومطابقة الحسابات والديون" }
   };
   
+
+  const auditData = useMemo(() => {
+    const result = {
+      social: { totalExpected: 0, totalReceived: 0, totalDebt: 0, totalWeOwe: 0, ordersCount: 0 },
+      appCakes: { totalExpected: 0, totalReceived: 0, totalDebt: 0, totalWeOwe: 0, ordersCount: 0 },
+      supplies: { totalExpected: 0, totalReceived: 0, totalDebt: 0, totalWeOwe: 0, ordersCount: 0 },
+    };
+
+    const processOrder = (order: any, category: "social" | "appCakes" | "supplies") => {
+      if (order.status === 'rejected') return;
+      
+      result[category].ordersCount++;
+      const total = Number(order.total) || 0;
+      let paid = Number(order.toPayNow) || 0;
+      const isDebt = order.isDebt === true;
+      const debtAmount = Number(order.debtAmount) || 0;
+      const customerOwesUs = order.customerOwesUs !== false; // Default true
+
+      result[category].totalExpected += total;
+
+      if (isDebt && debtAmount > 0) {
+        if (customerOwesUs) {
+          result[category].totalReceived += (total - debtAmount);
+          result[category].totalDebt += debtAmount;
+        } else {
+          result[category].totalReceived += total;
+          result[category].totalWeOwe += debtAmount;
+        }
+      } else {
+        result[category].totalReceived += total;
+      }
+    };
+
+    externalOrders.forEach((o: any) => processOrder(o, 'social'));
+    
+    orders.forEach((o: any) => {
+      const hasSupplies = o.items?.some((i: any) => i.isSupply || i.category === 'supplies' || i.id?.includes('supply'));
+      const hasCourses = o.items?.some((i: any) => i.type === 'course');
+      
+      if (hasCourses && !hasSupplies && o.items?.length === 1) return; // Skip pure academy
+      
+      if (hasSupplies) {
+        processOrder(o, 'supplies');
+      } else {
+        processOrder(o, 'appCakes');
+      }
+    });
+
+    return result;
+  }, [externalOrders, orders]);
+
   const currentTabInfo = tabTitles[activeTab] || { title: "القسم", subtitle: "إدارة القسم" };
 
   return (
@@ -1359,119 +1410,57 @@ function AdminHubContent() {
               </div>
             )}
 
-            {/* === STATS TAB === */}
-            {activeTab === "stats" && (
-              <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
+            {/* === AUDIT TAB === */}
+            {activeTab === "audit" && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="text-center mb-6">
+                  <h2 className="text-2xl font-black text-gray-900 dark:text-white">مطابقة وكشف حسابات المركز</h2>
+                  <p className="text-sm text-gray-500 mt-1">يتم عرض المبالغ المتوقعة مقابل المبالغ المستلمة فعلياً والديون والأمانات</p>
+                </div>
                 
-                {/* ── 1. Master Financial Card (Dark Gradient) ── */}
-                <div className="relative bg-gradient-to-br from-[#1a0533] via-[#2d1060] to-[#0f3460] rounded-3xl p-6 overflow-hidden shadow-xl border border-purple-500/20">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/20 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/4 pointer-events-none" />
-                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/20 blur-[60px] rounded-full translate-y-1/2 -translate-x-1/4 pointer-events-none" />
-                  
-                  <div className="relative z-10">
-                    <div className="flex justify-between items-start mb-6">
-                      <div>
-                        <p className="text-purple-200 text-sm font-bold flex items-center gap-1.5"><TrendingUp className="w-4 h-4 text-emerald-400" /> إجمالي الإيرادات (كل الوقت)</p>
-                        <p className="text-3xl font-black text-white mt-1">{(stats.allTimeSales + stats.allTimeExtSales).toLocaleString()} <span className="text-xs font-normal text-purple-300">د.ع</span></p>
+                {[
+                  { id: "social", label: "طلبات كيك السوشيال", data: auditData.social, icon: <MessageCircle className="w-6 h-6 text-emerald-400" />, colors: "from-emerald-900 via-teal-900 to-slate-950", border: "border-emerald-500/20", glow: "bg-emerald-500/20" },
+                  { id: "appCakes", label: "طلبات كيك التطبيق", data: auditData.appCakes, icon: <Sparkles className="w-6 h-6 text-pink-400" />, colors: "from-pink-900 via-rose-900 to-purple-950", border: "border-pink-500/20", glow: "bg-pink-500/20" },
+                  { id: "supplies", label: "طلبات مواد الكيك", data: auditData.supplies, icon: <PackageCheck className="w-6 h-6 text-amber-400" />, colors: "from-orange-900 via-amber-900 to-red-950", border: "border-amber-500/20", glow: "bg-amber-500/20" }
+                ].map(section => (
+                  <div key={section.id} className={`relative bg-gradient-to-br ${section.colors} rounded-3xl p-6 overflow-hidden shadow-2xl border ${section.border}`}>
+                    <div className={`absolute top-0 right-0 w-64 h-64 ${section.glow} blur-[80px] rounded-full -translate-y-1/2 translate-x-1/4 pointer-events-none`} />
+                    <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/40 blur-[60px] rounded-full translate-y-1/2 -translate-x-1/4 pointer-events-none" />
+                    
+                    <div className="relative z-10">
+                      <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10">
+                            {section.icon}
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-black text-white">{section.label}</h3>
+                            <p className="text-sm text-gray-300">{section.data.ordersCount} طلب مكتمل أو قيد التنفيذ</p>
+                          </div>
+                        </div>
                       </div>
-                      <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10">
-                        <DollarSign className="w-6 h-6 text-emerald-400" />
-                      </div>
-                    </div>
 
-                    {/* Revenue Breakdown */}
-                    <div className="bg-black/20 backdrop-blur-sm rounded-2xl p-4 border border-white/5 mb-4">
-                      <p className="text-xs text-purple-200 font-bold mb-3 flex items-center justify-between">
-                        <span>تحليل ومطابقة الإيرادات</span>
-                        <span className="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-md text-[9px] flex items-center gap-1 border border-emerald-500/30"><Check className="w-3 h-3" /> متزامن 100%</span>
-                      </p>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        <div className="text-center bg-white/5 rounded-xl p-2 border border-white/5">
-                          <p className="text-[10px] text-purple-300 mb-1">السوشيال ميديا</p>
-                          <p className="text-sm font-black text-white">{stats.breakdown.social.toLocaleString()}</p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-black/30 backdrop-blur-sm rounded-2xl p-4 border border-white/5">
+                          <p className="text-xs text-gray-300 font-bold mb-1">المبلغ الإجمالي (المتوقع)</p>
+                          <p className="text-lg font-black text-white">{section.data.totalExpected.toLocaleString()} <span className="text-[10px] font-normal text-gray-400">د.ع</span></p>
                         </div>
-                        <div className="text-center bg-white/5 rounded-xl p-2 border border-white/5">
-                          <p className="text-[10px] text-purple-300 mb-1">المتجر (مواد الكيك)</p>
-                          <p className="text-sm font-black text-white">{stats.breakdown.storeSupplies.toLocaleString()}</p>
+                        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+                          <p className="text-xs text-emerald-200 font-bold mb-1 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> المُستلم الفعلي</p>
+                          <p className="text-lg font-black text-emerald-400">{section.data.totalReceived.toLocaleString()} <span className="text-[10px] font-normal opacity-70">د.ع</span></p>
                         </div>
-                        <div className="text-center bg-white/5 rounded-xl p-2 border border-white/5">
-                          <p className="text-[10px] text-purple-300 mb-1">التطبيق (أكاديمية)</p>
-                          <p className="text-sm font-black text-white">{stats.breakdown.appAcademy.toLocaleString()}</p>
+                        <div className={`bg-rose-950/40 backdrop-blur-sm rounded-2xl p-4 border ${section.data.totalDebt > 0 ? 'border-rose-500/50' : 'border-rose-900/30'}`}>
+                          <p className="text-xs text-rose-300 font-bold mb-1 flex items-center gap-1">🔴 ديون (نطلبهم)</p>
+                          <p className="text-lg font-black text-rose-400">{section.data.totalDebt.toLocaleString()} <span className="text-[10px] font-normal opacity-70">د.ع</span></p>
                         </div>
-                        <div className="text-center bg-white/5 rounded-xl p-2 border border-white/5">
-                          <p className="text-[10px] text-purple-300 mb-1">التطبيق (مواد كيك)</p>
-                          <p className="text-sm font-black text-white">{stats.breakdown.appSupplies.toLocaleString()}</p>
-                        </div>
-                        <div className="text-center bg-white/5 rounded-xl p-2 border border-white/5">
-                          <p className="text-[10px] text-purple-300 mb-1">التطبيق (كيك طلب)</p>
-                          <p className="text-sm font-black text-white">{stats.breakdown.appCakes.toLocaleString()}</p>
+                        <div className={`bg-blue-950/40 backdrop-blur-sm rounded-2xl p-4 border ${section.data.totalWeOwe > 0 ? 'border-blue-500/50' : 'border-blue-900/30'}`}>
+                          <p className="text-xs text-blue-300 font-bold mb-1 flex items-center gap-1">🔵 أمانات (يطلبونا)</p>
+                          <p className="text-lg font-black text-blue-400">{section.data.totalWeOwe.toLocaleString()} <span className="text-[10px] font-normal opacity-70">د.ع</span></p>
                         </div>
                       </div>
                     </div>
-
-                    <div className="flex justify-between items-center pt-2 border-t border-white/10">
-                      <div>
-                        <p className="text-[10px] text-purple-300">صافي الربح التقديري (بعد المصاريف)</p>
-                        <p className="text-lg font-black text-emerald-400">{stats.netProfit.toLocaleString()} <span className="text-[10px]">د.ع</span></p>
-                      </div>
-                      <div className="text-left">
-                        <p className="text-[10px] text-rose-300">إجمالي المصاريف</p>
-                        <p className="text-sm font-black text-rose-400">{stats.expenses.toLocaleString()} <span className="text-[10px]">د.ع</span></p>
-                      </div>
-                    </div>
                   </div>
-                </div>
-
-                {/* ── 2. Time-based Performance KPIs ── */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-gray-100 dark:border-zinc-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute -right-4 -top-4 w-16 h-16 bg-blue-500/10 rounded-full blur-xl group-hover:bg-blue-500/20 transition-colors" />
-                    <p className="text-xs text-gray-500 font-bold mb-1 flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-blue-500" /> مبيعات اليوم</p>
-                    <p className="text-xl font-black text-blue-600 dark:text-blue-400">{(stats.todaySales + stats.todayExtSales).toLocaleString()} <span className="text-[10px] text-gray-400 font-normal">د.ع</span></p>
-                  </div>
-                  
-                  <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-gray-100 dark:border-zinc-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute -right-4 -top-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition-colors" />
-                    <p className="text-xs text-gray-500 font-bold mb-1 flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-indigo-500" /> الأسبوع الماضي</p>
-                    <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">{(stats.weekSales + stats.weekExtSales).toLocaleString()} <span className="text-[10px] text-gray-400 font-normal">د.ع</span></p>
-                  </div>
-
-                  <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-gray-100 dark:border-zinc-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute -right-4 -top-4 w-16 h-16 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition-colors" />
-                    <p className="text-xs text-gray-500 font-bold mb-1 flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-purple-500" /> الشهر الماضي</p>
-                    <p className="text-xl font-black text-purple-600 dark:text-purple-400">{(stats.monthSales + stats.monthExtSales).toLocaleString()} <span className="text-[10px] text-gray-400 font-normal">د.ع</span></p>
-                  </div>
-
-                  <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-gray-100 dark:border-zinc-800 shadow-sm relative overflow-hidden group">
-                    <div className="absolute -right-4 -top-4 w-16 h-16 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition-colors" />
-                    <p className="text-xs text-gray-500 font-bold mb-1 flex items-center gap-1"><Package className="w-3.5 h-3.5 text-amber-500" /> قيمة المخزون الحالي</p>
-                    <p className="text-xl font-black text-amber-600 dark:text-amber-500">{stats.inventoryValue.toLocaleString()} <span className="text-[10px] text-gray-400 font-normal">د.ع</span></p>
-                  </div>
-                </div>
-
-                {/* ── 3. Quick Action Links ── */}
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <Link href="/admin/finances" className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4 flex items-center gap-3 hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900 transition-all group">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
-                      <BarChart3 className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="font-black text-sm text-gray-900 dark:text-white">التقارير الكاملة</p>
-                      <p className="text-[10px] text-gray-500">مع رسوم بيانية مفصلة</p>
-                    </div>
-                  </Link>
-                  <Link href="/admin/inventory" className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4 flex items-center gap-3 hover:shadow-md hover:border-amber-200 dark:hover:border-amber-900/50 transition-all group">
-                    <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-500 group-hover:scale-110 transition-transform">
-                      <Package className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="font-black text-sm text-gray-900 dark:text-white">إدارة المخزون</p>
-                      <p className={`text-[10px] font-bold ${stats.inventoryLow > 0 ? "text-orange-500" : "text-gray-500"}`}>
-                        {stats.inventoryLow > 0 ? `⚠️ ${stats.inventoryLow} مواد تنقص` : "المخزون كافٍ وممتاز"}
-                      </p>
-                    </div>
-                  </Link>
-                </div>
+                ))}
               </div>
             )}
           </>
