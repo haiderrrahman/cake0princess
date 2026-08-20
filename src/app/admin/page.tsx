@@ -155,7 +155,7 @@ export default function AdminDashboard() {
   const mainIcons = [
     { title: "المستخدمين والزبائن", icon: "👥", href: "/admin/customers", bg: "bg-violet-500", shadow: "shadow-violet-500/30", badge: null },
     { title: "الجرد المالي", icon: "💰", href: "/admin/finances", bg: "bg-teal-500", shadow: "shadow-teal-500/30", badge: null },
-    { title: "التقارير", icon: "📊", href: "/admin/hub?tab=stats", bg: "bg-indigo-500", shadow: "shadow-indigo-500/30", badge: null },
+    { title: "المطابقة والكشف", icon: "📊", href: "/admin/hub?tab=audit", bg: "bg-indigo-500", shadow: "shadow-indigo-500/30", badge: null },
     { title: "منتجات الكيك", icon: "🎂", href: "/admin/products", bg: "bg-rose-500", shadow: "shadow-rose-500/30", badge: null },
     { title: "الأكاديمية", icon: "🎓", href: "/admin/courses", bg: "bg-cyan-500", shadow: "shadow-cyan-500/30", badge: null },
     { title: "العروض", icon: "🏷️", href: "/admin/offers", bg: "bg-amber-500", shadow: "shadow-amber-500/30", badge: null },
