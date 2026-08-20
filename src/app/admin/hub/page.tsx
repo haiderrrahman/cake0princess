@@ -62,7 +62,15 @@ export default function AdminHub() {
 }
 
 function AdminHubContent() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const hasOrders = localStorage.getItem('cache_orders');
+      const hasExt = localStorage.getItem('cache_external_orders');
+      const hasInv = localStorage.getItem('cache_inventory');
+      return !(hasOrders && hasExt && hasInv);
+    }
+    return true;
+  });
   const [orders, setOrders] = useState<any[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('cache_orders');

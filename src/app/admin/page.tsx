@@ -14,18 +14,27 @@ import AdminQuickEntry from "@/components/AdminQuickEntry";
 
 export default function AdminDashboard() {
   const { user, isAdmin } = useAuth();
-  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !localStorage.getItem('admin_dashboard_stats');
+    }
+    return true;
+  });
   const [showQuickEntry, setShowQuickEntry] = useState(false);
-  const [realStats, setRealStats] = useState({
-    todaySales: 0,
-    weekSales: 0,
-    monthSales: 0,
-    totalRevenue: 0,
-    netProfit: 0,
-    totalExpenses: 0,
-    totalSalaryDebt: 0,
-    cakeMaterialsExpense: 0,
-    breakdown: { social: 0, appCakes: 0, appAcademy: 0, storeSupplies: 0 },
+  const [realStats, setRealStats] = useState(() => {
+    // Load from cache for instant display
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('admin_dashboard_stats');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return {
+      todaySales: 0, weekSales: 0, monthSales: 0,
+      totalRevenue: 0, netProfit: 0, totalExpenses: 0,
+      totalSalaryDebt: 0, cakeMaterialsExpense: 0,
+      breakdown: { social: 0, appCakes: 0, appAcademy: 0, storeSupplies: 0 },
+    };
   });
 
   useEffect(() => {
@@ -127,12 +136,15 @@ export default function AdminDashboard() {
         }).reduce((s, e: any) => s + (Number(e.amount) || 0), 0);
         const netProfit = totalRevenue - totalExpenses - totalSalaryDebt;
 
-        setRealStats({ 
+        const result = { 
           todaySales, weekSales, monthSales, 
           totalRevenue, netProfit, totalExpenses, 
           totalSalaryDebt, cakeMaterialsExpense,
           breakdown: { social, appCakes, appAcademy, storeSupplies } 
-        });
+        };
+        setRealStats(result);
+        // Cache for instant next load
+        try { localStorage.setItem('admin_dashboard_stats', JSON.stringify(result)); } catch {}
       } catch (e) {
         console.error("Stats fetch error:", e);
       }
@@ -234,7 +246,7 @@ export default function AdminDashboard() {
             </div>
             <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-2.5 text-center hover:bg-white/10 transition">
                <p className="text-[9px] text-purple-200 mb-1">مواد الكيك</p>
-               <p className="text-xs font-black text-white">{statsLoading ? "…" : fmt(realStats.cakeMaterialsExpense)} <span className="text-[8px] font-normal">د.ع</span></p>
+               <p className="text-xs font-black text-white">{statsLoading ? "…" : fmt(realStats.breakdown.storeSupplies)} <span className="text-[8px] font-normal">د.ع</span></p>
             </div>
             <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-2.5 text-center hover:bg-white/10 transition">
                <p className="text-[9px] text-purple-200 mb-1">الأكاديمية</p>
