@@ -1665,34 +1665,6 @@ function AdminHubContent() {
                     )}
                   </div>
                 </div>
-
-                {/* ── Financial Log ── */}
-                <div className="bg-white/5 backdrop-blur-md rounded-3xl p-6 shadow-2xl border border-white/10 relative overflow-hidden">
-                  <h3 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2 mb-6"><Receipt className="w-6 h-6 text-indigo-500" /> السجل المالي (آخر الحركات في المنزل)</h3>
-                  
-                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                    {financialLog.length === 0 ? (
-                      <p className="text-center text-gray-400 py-4">لا توجد حركات مالية مسجلة بعد</p>
-                    ) : (
-                      financialLog.map((log, idx) => (
-                        <div key={log.id || idx} className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all hover:-translate-y-0.5">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${log.type === 'income' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'}`}>
-                              {log.type === 'income' ? <Plus className="w-4 h-4" /> : <DollarSign className="w-4 h-4" />}
-                            </div>
-                            <div>
-                              <p className="font-bold text-gray-900 dark:text-white text-sm">{log.name}</p>
-                              <p className="text-[10px] text-gray-500">{log.category} • {log.date}</p>
-                            </div>
-                          </div>
-                          <div className={`font-black ${log.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                            {log.type === 'income' ? '+' : '-'}{log.amount.toLocaleString()} د.ع
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
               </div>
             )}
           </>
