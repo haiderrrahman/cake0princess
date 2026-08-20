@@ -670,6 +670,17 @@ export default function HomeFinanceDashboard() {
     return Math.max(0, requiredPayments - paidMonths);
   };
 
+  const getInstallmentAdvanceMonths = (i: Installment) => {
+    if (i.remainingAmount <= 0) return 0;
+    if (!i.startDate) return 0;
+    const start = new Date(i.startDate);
+    const now = new Date();
+    const monthsElapsed = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+    const requiredPayments = monthsElapsed + 1;
+    const paidMonths = (i.initialPaidMonths || 0) + i.payments.length;
+    return Math.max(0, paidMonths - requiredPayments);
+  };
+
   const isInstallmentOwedThisCycle = (i: Installment) => getInstallmentDelayMonths(i) > 0;
 
   const unpaidBillsAmt = bills.filter(b => !isBillPaidThisCycle(b)).reduce((s, b) => s + b.amount, 0);
@@ -804,15 +815,14 @@ setEditFuturePlan(null);
     
     const monthlyInstallment = Number(fd.get("monthly")) || 0;
     const totalAmount = Number(fd.get("total")) || 0;
-    
-    let remainingAmount = Number(fd.get("remaining"));
-    if (isNaN(remainingAmount) || (fd.get("remaining") as string).trim() === "") {
-        remainingAmount = totalAmount; // Default to total if empty
-    }
-
     const totalMonths = Number(fd.get("totalMonths")) || undefined;
     const initialPaidMonths = Number(fd.get("initialPaidMonths")) || 0;
     const downPayment = Number(fd.get("downPayment")) || 0;
+
+    const paymentsActualTotal = isEdit ? editInstallment!.payments.reduce((s, p) => s + p.amount, 0) : 0;
+    const initialPaidAmount = initialPaidMonths * monthlyInstallment;
+    let computedRemaining = Math.max(0, totalAmount - (paymentsActualTotal + initialPaidAmount + downPayment));
+    let remainingAmount = computedRemaining;
     
     let startDate = fd.get("startDate") as string;
     
@@ -3441,6 +3451,20 @@ setEditTrip(null);
                         <span className="text-red-200 text-xs font-black">حالة تلكؤ: {delayMonths} شهر غير مدفوع!</span>
                       </div>
                     )}
+                    
+                    {/* Advance Alert */}
+                    {(() => {
+                      const advanceMonths = getInstallmentAdvanceMonths(inst);
+                      if (advanceMonths > 0) {
+                        return (
+                          <div className="relative z-10 bg-emerald-500/30 border border-emerald-400/40 rounded-2xl p-2.5 mb-3 flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4 text-emerald-300 flex-shrink-0" />
+                            <span className="text-emerald-200 text-xs font-black">حالة متقدمة: دفعة مقدمة لـ {advanceMonths} شهر!</span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
 
                     {/* Progress */}
                     <div className="relative z-10 mb-4">
