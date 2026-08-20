@@ -95,20 +95,13 @@ function AdminHubContent() {
   const [settleRemainingAmount, setSettleRemainingAmount] = useState<string>("");
   const searchParams = useSearchParams();
   const router = useRouter();
-  const defaultTab = searchParams.get('tab') as any || "external";
-  const [activeTab, setActiveTabState] = useState<"orders" | "external" | "supplies_orders" | "courses" | "inventory" | "audit">(defaultTab === "stats" ? "audit" : defaultTab);
+  const rawTab = searchParams.get('tab') as string;
+  const defaultTab = rawTab || "external";
+  const activeTab = (defaultTab === "stats" ? "audit" : defaultTab) as "orders" | "external" | "supplies_orders" | "courses" | "inventory" | "audit";
 
   const setActiveTab = (tab: "orders" | "external" | "supplies_orders" | "courses" | "inventory" | "audit") => {
-    setActiveTabState(tab);
     router.replace(`/admin/hub?tab=${tab}`, { scroll: false });
   };
-
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab) {
-      setActiveTabState(tab === "stats" ? "audit" : tab as any);
-    }
-  }, [searchParams]);
   const [orderFilter, setOrderFilter] = useState<"all" | "pending" | "processing" | "delivering">("all");
   
   // External Orders filter and sort state
