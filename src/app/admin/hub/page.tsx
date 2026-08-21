@@ -494,6 +494,12 @@ function AdminHubContent() {
     if (!settleOrder) return;
     
     const basePrice = settleOrderType === "external" ? Number(settleOrder.price || 0) : Number(settleOrder.toPayNow || settleOrder.total || 0);
+    
+    if (settleDebtType !== "none" && !settleRemainingAmount) {
+      toast.error("يرجى إدخال المبلغ الباقي");
+      return;
+    }
+
     let finalPaidAmount = basePrice;
     const remAmt = Number(settleRemainingAmount) || 0;
     

@@ -475,29 +475,64 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
   const lastPos = useRef({ x: 0, y: 0 });
   const touchDistance = useRef<number | null>(null);
 
+  const activePointers = useRef(new Map<number, { x: number, y: number }>());
+
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!data.url) return;
     e.stopPropagation();
     onActivate();
-    if (e.pointerType === "touch") return; // Handled by touch events
-    isDragging.current = true;
-    lastPos.current = { x: e.clientX, y: e.clientY };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch {}
+
+    if (activePointers.current.size === 1) {
+      isDragging.current = true;
+      lastPos.current = { x: e.clientX, y: e.clientY };
+    } else if (activePointers.current.size === 2) {
+      isDragging.current = false;
+      const pts = Array.from(activePointers.current.values());
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      touchDistance.current = Math.hypot(dx, dy);
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (e.pointerType === "touch") return; // Handled by touch events
-    if (!isDragging.current) return;
+    if (!data.url || !activePointers.current.has(e.pointerId)) return;
     e.stopPropagation();
-    const dx = e.clientX - lastPos.current.x;
-    const dy = e.clientY - lastPos.current.y;
-    lastPos.current = { x: e.clientX, y: e.clientY };
-    onTransform({ x: data.x + dx, y: data.y + dy });
+
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.current.size === 1 && isDragging.current) {
+      const dx = e.clientX - lastPos.current.x;
+      const dy = e.clientY - lastPos.current.y;
+      lastPos.current = { x: e.clientX, y: e.clientY };
+      onTransform({ x: data.x + dx, y: data.y + dy });
+    } else if (activePointers.current.size === 2 && touchDistance.current !== null) {
+      const pts = Array.from(activePointers.current.values());
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      const dist = Math.hypot(dx, dy);
+      const delta = dist - touchDistance.current;
+      touchDistance.current = dist;
+      
+      const newScale = Math.min(Math.max(0.2, data.scale + (delta * 0.01)), 5);
+      onTransform({ scale: newScale });
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (e.pointerType === "touch") return;
-    isDragging.current = false;
+    if (!activePointers.current.has(e.pointerId)) return;
+    activePointers.current.delete(e.pointerId);
+    
+    if (activePointers.current.size < 2) touchDistance.current = null;
+    if (activePointers.current.size === 0) {
+      isDragging.current = false;
+    } else if (activePointers.current.size === 1) {
+      const remaining = Array.from(activePointers.current.values())[0];
+      lastPos.current = { x: remaining.x, y: remaining.y };
+      isDragging.current = true;
+    }
     try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
   };
 
@@ -516,48 +551,6 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);
   }, [isActive, data.scale, onTransform]);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (!data.url) return;
-    e.stopPropagation();
-    onActivate();
-    
-    if (e.touches.length === 1) {
-      isDragging.current = true;
-      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    } else if (e.touches.length === 2) {
-      isDragging.current = false; // Cancel pan if pinch starts
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      touchDistance.current = Math.hypot(dx, dy);
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!data.url) return;
-    e.stopPropagation();
-
-    if (e.touches.length === 1 && isDragging.current) {
-      const dx = e.touches[0].clientX - lastPos.current.x;
-      const dy = e.touches[0].clientY - lastPos.current.y;
-      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      onTransform({ x: data.x + dx, y: data.y + dy });
-    } else if (e.touches.length === 2 && touchDistance.current !== null) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      const delta = dist - touchDistance.current;
-      touchDistance.current = dist;
-      
-      const newScale = Math.min(Math.max(0.2, data.scale + delta * 0.01), 5);
-      onTransform({ scale: newScale });
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (e.touches.length < 2) touchDistance.current = null;
-    if (e.touches.length === 0) isDragging.current = false;
-  };
 
   return (
     <div

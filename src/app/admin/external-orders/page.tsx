@@ -267,6 +267,11 @@ export default function ExternalOrdersAdmin() {
     e.preventDefault();
     if (!settleOrder) return;
     
+    if (settleDebtType !== "none" && !settleRemainingAmount) {
+      toast.error("يرجى إدخال المبلغ الباقي");
+      return;
+    }
+
     let finalPaidAmount = Number(settleOrder.price);
     const remAmt = Number(settleRemainingAmount) || 0;
     
