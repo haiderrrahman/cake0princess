@@ -224,7 +224,6 @@ export default function ExternalOrdersAdmin() {
       setIsModalOpen(false);
       setIsEditMode(false);
       setEditOrderId(null);
-      fetchOrdersAndCustomers();
     } catch (error) {
       console.error("Error adding order:", error);
       toast.error("حدث خطأ أثناء إضافة الطلب");
@@ -241,7 +240,6 @@ export default function ExternalOrdersAdmin() {
           isDebtSettled: true 
         });
         toast.success("تم تسديد الدين بنجاح");
-        fetchOrdersAndCustomers();
       } catch (e) {
         toast.error("خطأ أثناء التسديد");
       }
@@ -257,7 +255,6 @@ export default function ExternalOrdersAdmin() {
     } else {
       await updateDoc(doc(db, "external_orders", order.id), { status: newStatus });
       toast.success("تم تحديث الحالة");
-      fetchOrdersAndCustomers();
     }
   };
 
@@ -282,7 +279,6 @@ export default function ExternalOrdersAdmin() {
       });
       toast.success("تم تحديث الطلب بنجاح");
       setSettleOrder(null);
-      fetchOrdersAndCustomers();
     } catch (e) {
       toast.error("حدث خطأ");
     }
