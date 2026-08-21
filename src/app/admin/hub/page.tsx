@@ -500,8 +500,16 @@ function AdminHubContent() {
       return;
     }
 
+    const parseNumber = (val: any) => {
+      if (!val) return 0;
+      const str = String(val).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+                             .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                             .replace(/,/g, '');
+      return Number(str) || 0;
+    };
+
     let finalPaidAmount = basePrice;
-    const remAmt = Number(settleRemainingAmount) || 0;
+    const remAmt = parseNumber(settleRemainingAmount);
     
     if (settleDebtType === "customer_owes") {
       finalPaidAmount = basePrice - remAmt;

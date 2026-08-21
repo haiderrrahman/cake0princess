@@ -272,13 +272,21 @@ export default function ExternalOrdersAdmin() {
       return;
     }
 
+    const parseNumber = (val: any) => {
+      if (!val) return 0;
+      const str = String(val).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+                             .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                             .replace(/,/g, '');
+      return Number(str) || 0;
+    };
+
     let finalPaidAmount = Number(settleOrder.price);
-    const remAmt = Number(settleRemainingAmount) || 0;
+    const remAmt = parseNumber(settleRemainingAmount);
     
     if (settleDebtType === "customer_owes") {
-      finalPaidAmount = settleOrder.price - remAmt; // They paid less
+      finalPaidAmount = Number(settleOrder.price) - remAmt; // They paid less
     } else if (settleDebtType === "we_owe") {
-      finalPaidAmount = settleOrder.price + remAmt; // They paid more
+      finalPaidAmount = Number(settleOrder.price) + remAmt; // They paid more
     }
     
     try {
