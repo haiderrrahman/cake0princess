@@ -586,10 +586,6 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-              onTouchCancel={handleTouchEnd}
               draggable={false}
             />
           </div>
