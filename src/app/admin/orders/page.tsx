@@ -428,18 +428,18 @@ export default function AdminOrders() {
                 </button>
                 <button type="button" onClick={() => setSettleDebtType("customer_owes")}
                   className={`py-2 rounded-lg text-xs font-bold transition ${settleDebtType === "customer_owes" ? "bg-rose-50 dark:bg-rose-900/30 text-rose-600 shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
-                  باقي يمنا دين
+                  باقي يمه دين (نطلبه)
                 </button>
                 <button type="button" onClick={() => setSettleDebtType("we_owe")}
                   className={`py-2 rounded-lg text-xs font-bold transition ${settleDebtType === "we_owe" ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
-                  باقي يمه أمانة
+                  باقي يمنا أمانة (يطلبنا)
                 </button>
               </div>
 
               {settleDebtType !== "none" && (
                 <div className="animate-fade-in">
                   <label className="text-xs font-bold text-gray-500 mb-1.5 block">
-                    {settleDebtType === "customer_owes" ? "المبلغ المتبقي ديون علينا (د.ع):" : "المبلغ المتبقي أمانة لدينا (د.ع):"}
+                    {settleDebtType === "customer_owes" ? "المبلغ المتبقي ديون لنا بذمته (د.ع):" : "المبلغ المتبقي أمانة للزبون بذمتنا (د.ع):"}
                   </label>
                   <input 
                     required 

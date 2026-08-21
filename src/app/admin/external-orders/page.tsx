@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowRight, Search, Plus, Loader2, Image as ImageIcon, Trash2, Calendar, Smartphone, DollarSign, Calculator, User, Edit3 } from "lucide-react";
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit, onSnapshot } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import Image from "next/image";
@@ -44,7 +44,36 @@ export default function ExternalOrdersAdmin() {
   const [customers, setCustomers] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchOrdersAndCustomers = async () => {};
+  const fetchOrdersAndCustomers = async () => {
+    try {
+      // ⚡ 1. Fast network query with limit(150)
+      let fetchedOrders: any[] = [];
+      try {
+        const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
+        const snap = await getDocs(q);
+        fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      } catch (err) {
+        // Fallback if index fails or orderBy error
+        const snap = await getDocs(collection(db, "external_orders"));
+        fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime());
+        fetchedOrders = fetchedOrders.slice(0, 150);
+      }
+      
+      setOrders(fetchedOrders);
+      setLoading(false); // ⚡ Turn off loading immediately once orders arrive!
+      try { localStorage.setItem("cache_external_orders", JSON.stringify(fetchedOrders)); } catch (e) {}
+
+      // ⚡ 2. Fetch customers in the background without blocking the UI
+      getDocs(collection(db, "customers")).then(custSnap => {
+        setCustomers(custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }).catch(e => console.error("Error fetching customers:", e));
+
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     // ⚡ Instant load from cache (0ms perceived latency)
@@ -59,34 +88,7 @@ export default function ExternalOrdersAdmin() {
       }
     } catch (e) {}
 
-    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
-    
-    // onSnapshot is much faster and gives real-time updates directly from local cache first
-    const unsubscribeOrders = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
-      const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setOrders(fetchedOrders);
-      setLoading(false);
-      try { localStorage.setItem("cache_external_orders", JSON.stringify(fetchedOrders)); } catch (e) {}
-    }, (err) => {
-      console.error("Error fetching external orders, falling back to unordered:", err);
-      // Fallback if index fails
-      getDocs(collection(db, "external_orders")).then(snap => {
-        let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
-        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime());
-        fetchedOrders = fetchedOrders.slice(0, 150);
-        setOrders(fetchedOrders);
-        setLoading(false);
-      });
-    });
-
-    const unsubscribeCustomers = onSnapshot(collection(db, "customers"), (snap) => {
-      setCustomers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    return () => {
-      unsubscribeOrders();
-      unsubscribeCustomers();
-    };
+    fetchOrdersAndCustomers();
   }, []);
 
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -267,26 +269,14 @@ export default function ExternalOrdersAdmin() {
     e.preventDefault();
     if (!settleOrder) return;
     
-    if (settleDebtType !== "none" && !settleRemainingAmount) {
-      toast.error("يرجى إدخال المبلغ الباقي");
-      return;
-    }
-
-    const parseNumber = (val: any) => {
-      if (!val) return 0;
-      const str = String(val).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
-                             .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
-                             .replace(/,/g, '');
-      return Number(str) || 0;
-    };
-
-    let finalPaidAmount = Number(settleOrder.price);
-    const remAmt = parseNumber(settleRemainingAmount);
+    const basePrice = Number(settleOrder.price);
+    let finalPaidAmount = basePrice;
+    const remAmt = Number(settleRemainingAmount) || 0;
     
     if (settleDebtType === "customer_owes") {
-      finalPaidAmount = Number(settleOrder.price) - remAmt; // They paid less
+      finalPaidAmount = basePrice - remAmt; // They paid less
     } else if (settleDebtType === "we_owe") {
-      finalPaidAmount = Number(settleOrder.price) + remAmt; // They paid more
+      finalPaidAmount = basePrice + remAmt; // They paid more
     }
     
     try {
@@ -483,8 +473,8 @@ export default function ExternalOrdersAdmin() {
         <div className="space-y-3">
           
           {(() => {
-            const debts = filteredOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled);
-            const normals = filteredOrders.filter(o => !(o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled));
+            const debts = filteredOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled);
+            const normals = filteredOrders.filter(o => !(o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled));
             return (
               <>
                 {debts.length > 0 && (
@@ -495,8 +485,8 @@ export default function ExternalOrdersAdmin() {
                         سجل الديون (طلبات السوشيال)
                       </h3>
                       {(() => {
-                        const sumOweUs = debts.filter(o => o.price > (o.paidAmount || 0)).reduce((s, o) => s + (o.price - (o.paidAmount || 0)), 0);
-                        const sumWeOwe = debts.filter(o => o.price < (o.paidAmount || 0)).reduce((s, o) => s + ((o.paidAmount || 0) - o.price), 0);
+                        const sumOweUs = debts.filter(o => Number(o.price) > Number(o.paidAmount || 0)).reduce((s, o) => s + (Number(o.price) - Number(o.paidAmount || 0)), 0);
+                        const sumWeOwe = debts.filter(o => Number(o.price) < Number(o.paidAmount || 0)).reduce((s, o) => s + (Number(o.paidAmount || 0) - Number(o.price)), 0);
                         return (
                           <div className="flex gap-3">
                             {sumOweUs > 0 && <span className="bg-rose-100 text-rose-800 text-xs font-black px-3 py-1.5 rounded-lg border border-rose-200">مجموع نطلبهم: {sumOweUs.toLocaleString()} د.ع</span>}
@@ -506,8 +496,8 @@ export default function ExternalOrdersAdmin() {
                       })()}
                     </div>
                     {debts.map(order => {
-                      const customerOwesUs = order.price > (order.paidAmount || 0);
-                      const diff = Math.abs(order.price - (order.paidAmount || 0));
+                      const customerOwesUs = Number(order.price) > Number(order.paidAmount || 0);
+                      const diff = Math.abs(Number(order.price) - Number(order.paidAmount || 0));
                       return (
                         <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
                           <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
