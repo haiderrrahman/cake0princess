@@ -470,106 +470,91 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const imgRef = useRef<HTMLImageElement>(null);
+  // Pan and Zoom state for interaction
+  const isDragging = useRef(false);
+  const lastPos = useRef({ x: 0, y: 0 });
+  const touchDistance = useRef<number | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!data.url) return;
+    e.stopPropagation();
+    onActivate();
+    if (e.pointerType === "mouse" || e.pointerType === "touch") {
+      isDragging.current = true;
+      lastPos.current = { x: e.clientX, y: e.clientY };
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    e.stopPropagation();
+    const dx = e.clientX - lastPos.current.x;
+    const dy = e.clientY - lastPos.current.y;
+    lastPos.current = { x: e.clientX, y: e.clientY };
+    
+    // Scale down the drag amount slightly if zoomed out, or keep it 1:1
+    onTransform({ x: data.x + dx, y: data.y + dy });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    isDragging.current = false;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  };
+
+  const handleWheel = (e: WheelEvent) => {
+    if (!isActive) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const zoomFactor = -e.deltaY * 0.002;
+    const newScale = Math.min(Math.max(0.2, data.scale + zoomFactor), 5);
+    onTransform({ scale: newScale });
+  };
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !isActive) return;
-
-    el.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const zoomFactor = -e.deltaY * 0.002;
-      const newScale = Math.min(Math.max(0.2, data.scale + zoomFactor), 5);
-      onTransform({ scale: newScale });
-    }, { passive: false });
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
   }, [isActive, data.scale, onTransform]);
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || !isActive || !data.url) return;
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    onActivate();
+    if (e.touches.length === 1) {
+      isDragging.current = true;
+      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      isDragging.current = false; // Cancel pan if pinch starts
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      touchDistance.current = Math.hypot(dx, dy);
+    }
+  };
 
-    let isDragging = false;
-    let lastPos = { x: 0, y: 0 };
-    let touchDistance: number | null = null;
-
-    const onPointerDown = (e: PointerEvent) => {
-      e.stopPropagation();
-      if (e.pointerType === "mouse" || e.pointerType === "touch") {
-        isDragging = true;
-        lastPos = { x: e.clientX, y: e.clientY };
-        el.setPointerCapture(e.pointerId);
-      }
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!isDragging || touchDistance !== null) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const dx = e.clientX - lastPos.x;
-      const dy = e.clientY - lastPos.y;
-      lastPos = { x: e.clientX, y: e.clientY };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    if (e.touches.length === 1 && isDragging.current) {
+      const dx = e.touches[0].clientX - lastPos.current.x;
+      const dy = e.touches[0].clientY - lastPos.current.y;
+      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       onTransform({ x: data.x + dx, y: data.y + dy });
-    };
+    } else if (e.touches.length === 2 && touchDistance.current !== null) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const delta = dist - touchDistance.current;
+      touchDistance.current = dist;
+      
+      const newScale = Math.min(Math.max(0.2, data.scale + delta * 0.01), 5);
+      onTransform({ scale: newScale });
+    }
+  };
 
-    const onPointerUp = (e: PointerEvent) => {
-      isDragging = false;
-      el.releasePointerCapture(e.pointerId);
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        e.stopPropagation();
-        isDragging = false;
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        touchDistance = Math.hypot(dx, dy);
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && touchDistance !== null) {
-        e.preventDefault();
-        e.stopPropagation();
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const dist = Math.hypot(dx, dy);
-        const delta = dist - touchDistance;
-        touchDistance = dist;
-        const newScale = Math.min(Math.max(0.2, data.scale + delta * 0.01), 5);
-        onTransform({ scale: newScale });
-      } else if (e.touches.length === 1 && isDragging) {
-        // Prevent scrolling when dragging with one finger
-        e.preventDefault();
-      }
-    };
-
-    const onTouchEnd = () => {
-      touchDistance = null;
-    };
-
-    el.addEventListener("pointerdown", onPointerDown);
-    el.addEventListener("pointermove", onPointerMove, { passive: false });
-    el.addEventListener("pointerup", onPointerUp);
-    el.addEventListener("pointercancel", onPointerUp);
-
-    el.addEventListener("touchstart", onTouchStart, { passive: false });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd);
-    el.addEventListener("touchcancel", onTouchEnd);
-
-    return () => {
-      el.removeEventListener("pointerdown", onPointerDown);
-      el.removeEventListener("pointermove", onPointerMove);
-      el.removeEventListener("pointerup", onPointerUp);
-      el.removeEventListener("pointercancel", onPointerUp);
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, [isActive, data.url, data.x, data.y, data.scale, onTransform]);
+  const handleTouchEnd = () => {
+    isDragging.current = false;
+    touchDistance.current = null;
+  };
 
   return (
     <div
@@ -605,6 +590,13 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
                 scaleY: data.scale,
                 cursor: "move",
               }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
               draggable={false}
             />
           </div>

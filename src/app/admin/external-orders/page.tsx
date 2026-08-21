@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowRight, Search, Plus, Loader2, Image as ImageIcon, Trash2, Calendar, Smartphone, DollarSign, Calculator, User, Edit3 } from "lucide-react";
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit, onSnapshot } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import Image from "next/image";
@@ -44,37 +44,6 @@ export default function ExternalOrdersAdmin() {
   const [customers, setCustomers] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchOrdersAndCustomers = async () => {
-    try {
-      // ⚡ 1. Fast network query with limit(150)
-      let fetchedOrders: any[] = [];
-      try {
-        const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
-        const snap = await getDocs(q);
-        fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      } catch (err) {
-        // Fallback if index fails or orderBy error
-        const snap = await getDocs(collection(db, "external_orders"));
-        fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
-        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime());
-        fetchedOrders = fetchedOrders.slice(0, 150);
-      }
-      
-      setOrders(fetchedOrders);
-      setLoading(false); // ⚡ Turn off loading immediately once orders arrive!
-      try { localStorage.setItem("cache_external_orders", JSON.stringify(fetchedOrders)); } catch (e) {}
-
-      // ⚡ 2. Fetch customers in the background without blocking the UI
-      getDocs(collection(db, "customers")).then(custSnap => {
-        setCustomers(custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      }).catch(e => console.error("Error fetching customers:", e));
-
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     // ⚡ Instant load from cache (0ms perceived latency)
     try {
@@ -88,7 +57,34 @@ export default function ExternalOrdersAdmin() {
       }
     } catch (e) {}
 
-    fetchOrdersAndCustomers();
+    // 1. Fast network query with onSnapshot for real-time and local cache
+    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setOrders(fetchedOrders);
+      setLoading(false);
+      try { localStorage.setItem("cache_external_orders", JSON.stringify(fetchedOrders)); } catch (e) {}
+    }, (error) => {
+      console.error("Error fetching external orders:", error);
+      // Fallback if index fails
+      getDocs(collection(db, "external_orders")).then(snap => {
+        let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime());
+        fetchedOrders = fetchedOrders.slice(0, 150);
+        setOrders(fetchedOrders);
+        setLoading(false);
+      }).catch(e => {
+        console.error("Fallback error:", e);
+        setLoading(false);
+      });
+    });
+
+    // 2. Fetch customers in the background
+    getDocs(collection(db, "customers")).then(custSnap => {
+      setCustomers(custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }).catch(e => console.error("Error fetching customers:", e));
+
+    return () => unsubscribe();
   }, []);
 
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -269,14 +265,14 @@ export default function ExternalOrdersAdmin() {
     e.preventDefault();
     if (!settleOrder) return;
     
-    const basePrice = Number(settleOrder.price);
-    let finalPaidAmount = basePrice;
+    const orderPrice = Number(settleOrder.price);
+    let finalPaidAmount = orderPrice;
     const remAmt = Number(settleRemainingAmount) || 0;
     
     if (settleDebtType === "customer_owes") {
-      finalPaidAmount = basePrice - remAmt; // They paid less
+      finalPaidAmount = orderPrice - remAmt; // They paid less
     } else if (settleDebtType === "we_owe") {
-      finalPaidAmount = basePrice + remAmt; // They paid more
+      finalPaidAmount = orderPrice + remAmt; // They paid more
     }
     
     try {

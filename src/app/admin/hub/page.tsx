@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback, Suspense, useMemo } from "react";
+import { useState, useEffect, useCallback, Suspense, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -1126,7 +1126,7 @@ function AdminHubContent() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-2 max-w-4xl mx-auto w-full">
-                    {filteredExternalOrders.map((order, index) => {
+                    {filteredExternalOrders.map(order => {
                       const statusKey = order.status || "pending";
                       const extCfg = EXTERNAL_STATUS_CONFIG[statusKey] || EXTERNAL_STATUS_CONFIG["pending"];
                       const isUpdating = updatingOrder === order.id;
@@ -1137,43 +1137,8 @@ function AdminHubContent() {
                       const fullyPaidDelivered = order.status === "delivered" && !isDebt;
                       const diffAmt = isDebt ? Math.abs(Number(order.price) - Number(order.paidAmount || 0)) : 0;
 
-                      const prevOrder = index > 0 ? filteredExternalOrders[index - 1] : null;
-                      const prevIsDebt = prevOrder ? (prevOrder.status === "delivered" && prevOrder.paidAmount !== undefined && Number(prevOrder.paidAmount) !== Number(prevOrder.price) && !prevOrder.isDebtSettled) : false;
-                      
-                      const showDebtsHeader = index === 0 && isDebt;
-                      const showNormalsHeader = !isDebt && prevIsDebt && index > 0;
-
                       return (
-                        <React.Fragment key={order.id}>
-                          {showDebtsHeader && (
-                            <div className="col-span-2 mb-2 mt-1">
-                              <div className="flex flex-col gap-2">
-                                <h3 className="font-black text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                                  سجل الديون (طلبات السوشيال)
-                                </h3>
-                                {(() => {
-                                  const debts = filteredExternalOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled);
-                                  const sumOweUs = debts.filter(o => Number(o.price) > Number(o.paidAmount || 0)).reduce((s, o) => s + (Number(o.price) - Number(o.paidAmount || 0)), 0);
-                                  const sumWeOwe = debts.filter(o => Number(o.price) < Number(o.paidAmount || 0)).reduce((s, o) => s + (Number(o.paidAmount || 0) - Number(o.price)), 0);
-                                  return (
-                                    <div className="flex gap-2">
-                                      {sumOweUs > 0 && <span className="bg-rose-100 text-rose-800 text-[10px] sm:text-xs font-black px-2 sm:px-3 py-1.5 rounded-lg border border-rose-200">نطلبهم: {sumOweUs.toLocaleString()} د.ع</span>}
-                                      {sumWeOwe > 0 && <span className="bg-blue-100 text-blue-800 text-[10px] sm:text-xs font-black px-2 sm:px-3 py-1.5 rounded-lg border border-blue-200">يطلبونا: {sumWeOwe.toLocaleString()} د.ع</span>}
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          )}
-                          
-                          {showNormalsHeader && (
-                            <div className="col-span-2 mt-4 mb-2">
-                              <h3 className="font-black text-gray-700 dark:text-gray-300">الطلبات الاعتيادية</h3>
-                            </div>
-                          )}
-
-                          <div className={`rounded-3xl p-3 flex flex-col gap-3 shadow-sm relative group border-2 transition-all ${
+                        <div key={order.id} className={`rounded-3xl p-3 flex flex-col gap-3 shadow-sm relative group border-2 transition-all ${
                           customerOwesUs ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-400 dark:border-rose-800' : 
                           weOweCustomer ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-400 dark:border-blue-800' : 
                           fullyPaidDelivered ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-400 dark:border-purple-800' :
@@ -1264,8 +1229,7 @@ function AdminHubContent() {
                               </div>
                             </div>
                           </div>
-                          </div>
-                        </React.Fragment>
+                        </div>
                       );
                     })}
                   </div>
