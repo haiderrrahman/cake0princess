@@ -582,15 +582,11 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
       ) : (
         <>
           <div className="absolute inset-0 w-full h-full flex items-center justify-center">
-            <motion.img
+            <img
               src={data.url}
               className="w-full h-full object-contain select-none touch-none"
               style={{
-                x: data.x,
-                y: data.y,
-                rotate: data.rotation || 0,
-                scaleX: data.flipH ? -data.scale : data.scale,
-                scaleY: data.scale,
+                transform: `translate(${data.x}px, ${data.y}px) rotate(${data.rotation || 0}deg) scaleX(${data.flipH ? -data.scale : data.scale}) scaleY(${data.scale})`,
                 cursor: "move",
               }}
               onPointerDown={handlePointerDown}
@@ -600,6 +596,7 @@ function CellSlot({ cell, data, isActive, cornerRadius, onActivate, onImageChang
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
+              onTouchCancel={handleTouchEnd}
               draggable={false}
             />
           </div>
