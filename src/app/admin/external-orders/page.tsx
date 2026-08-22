@@ -63,7 +63,10 @@ export default function ExternalOrdersAdmin() {
       const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setOrders(fetchedOrders);
       setLoading(false);
-      try { localStorage.setItem("cache_external_orders", JSON.stringify(fetchedOrders)); } catch (e) {}
+      try {
+        const cleanExt = fetchedOrders.map(o => ({ ...o, tempImageUrl: undefined }));
+        localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
+      } catch (e) {}
     }, (error) => {
       console.error("Error fetching external orders:", error);
       // Fallback if index fails
