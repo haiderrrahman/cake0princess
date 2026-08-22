@@ -625,12 +625,12 @@ export default function ExternalOrdersAdmin() {
 
       {activeTab === "debts" && !loading && (() => {
         // Debts are orders where status is 'delivered' and paidAmount != price and !isDebtSettled
-        const debtOrders = orders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && o.paidAmount !== o.price && !o.isDebtSettled);
-        const customersOweUs = debtOrders.filter(o => o.paidAmount < o.price);
-        const weOweCustomers = debtOrders.filter(o => o.paidAmount > o.price);
+      const debtOrders = orders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled);
+        const customersOweUs = debtOrders.filter(o => Number(o.paidAmount) < Number(o.price));
+        const weOweCustomers = debtOrders.filter(o => Number(o.paidAmount) > Number(o.price));
 
-        const totalCustomersOweUs = customersOweUs.reduce((s, o) => s + (o.price - o.paidAmount), 0);
-        const totalWeOweCustomers = weOweCustomers.reduce((s, o) => s + (o.paidAmount - o.price), 0);
+        const totalCustomersOweUs = customersOweUs.reduce((s, o) => s + (Number(o.price) - Number(o.paidAmount)), 0);
+        const totalWeOweCustomers = weOweCustomers.reduce((s, o) => s + (Number(o.paidAmount) - Number(o.price)), 0);
 
         return (
           <div className="px-5 space-y-6">
@@ -657,13 +657,13 @@ export default function ExternalOrdersAdmin() {
               ) : (
                 <div className="space-y-3">
                   {customersOweUs.map(order => (
-                    <div key={order.id} className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4 flex justify-between items-center shadow-sm">
+                    <div key={order.id} className="bg-white dark:bg-zinc-900 border-2 border-rose-200 dark:border-rose-800/50 rounded-2xl p-4 flex justify-between items-center shadow-sm">
                       <div>
                         <h3 className="font-black text-gray-800 dark:text-white mb-1">{order.customerName} <span className="text-xs font-bold text-gray-400">({order.cakeName})</span></h3>
-                        <p className="text-xs font-bold text-gray-500">السعر: {order.price.toLocaleString()} | الواصل: {order.paidAmount.toLocaleString()}</p>
+                        <p className="text-xs font-bold text-gray-500">الإجمالي: {Number(order.price).toLocaleString()} | الواصل: {Number(order.paidAmount).toLocaleString()}</p>
                       </div>
                       <div className="text-left">
-                        <div className="text-lg font-black text-rose-600 mb-1">{(order.price - order.paidAmount).toLocaleString()} د.ع</div>
+                        <div className="text-lg font-black text-rose-600 mb-1">{(Number(order.price) - Number(order.paidAmount)).toLocaleString()} د.ع</div>
                         <button onClick={() => handleSettleDebt(order)} className="text-xs font-black bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg hover:bg-rose-200">تم التسديد</button>
                       </div>
                     </div>
@@ -683,14 +683,14 @@ export default function ExternalOrdersAdmin() {
               ) : (
                 <div className="space-y-3">
                   {weOweCustomers.map(order => (
-                    <div key={order.id} className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4 flex justify-between items-center shadow-sm">
+                    <div key={order.id} className="bg-white dark:bg-zinc-900 border-2 border-blue-200 dark:border-blue-800/50 rounded-2xl p-4 flex justify-between items-center shadow-sm">
                       <div>
                         <h3 className="font-black text-gray-800 dark:text-white mb-1">{order.customerName} <span className="text-xs font-bold text-gray-400">({order.cakeName})</span></h3>
-                        <p className="text-xs font-bold text-gray-500">السعر: {order.price.toLocaleString()} | الواصل: {order.paidAmount.toLocaleString()}</p>
+                        <p className="text-xs font-bold text-gray-500">الإجمالي: {Number(order.price).toLocaleString()} | الواصل: {Number(order.paidAmount).toLocaleString()}</p>
                       </div>
                       <div className="text-left">
-                        <div className="text-lg font-black text-amber-600 mb-1">{(order.paidAmount - order.price).toLocaleString()} د.ع</div>
-                        <button onClick={() => handleSettleDebt(order)} className="text-xs font-black bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg hover:bg-amber-200">تم الإرجاع والتسوية</button>
+                        <div className="text-lg font-black text-blue-600 mb-1">{(Number(order.paidAmount) - Number(order.price)).toLocaleString()} د.ع</div>
+                        <button onClick={() => handleSettleDebt(order)} className="text-xs font-black bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200">تم الإرجاع والتسوية</button>
                       </div>
                     </div>
                   ))}
