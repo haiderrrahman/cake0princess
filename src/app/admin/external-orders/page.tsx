@@ -287,6 +287,32 @@ export default function ExternalOrdersAdmin() {
     }
   };
 
+  const fixImages = async () => {
+    if (await customConfirm("هل أنت متأكد من رغبتك في إصلاح الصور العالقة؟ قد يستغرق هذا بضع ثوانٍ.")) {
+      try {
+        const snap = await getDocs(collection(db, "external_orders"));
+        let count = 0;
+        for (const docSnap of snap.docs) {
+          const data = docSnap.data();
+          if (data.tempImageUrl && data.tempImageUrl.startsWith('data:image')) {
+            try {
+              const base64Response = await fetch(data.tempImageUrl);
+              const blob = await base64Response.blob();
+              const fileRef = ref(storage, `external_orders/recovered_${Date.now()}_${docSnap.id}.jpg`);
+              await uploadBytes(fileRef, blob);
+              const url = await getDownloadURL(fileRef);
+              await updateDoc(doc(db, "external_orders", docSnap.id), { imageUrl: url, tempImageUrl: null });
+              count++;
+            } catch (err: any) {}
+          }
+        }
+        toast.success(`تم إصلاح ${count} طلبات بنجاح.`);
+      } catch (e: any) {
+        toast.error("حدث خطأ");
+      }
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (await customConfirm("هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.")) {
       try {
@@ -338,6 +364,7 @@ export default function ExternalOrdersAdmin() {
             <div>
               <h1 className="text-xl font-black text-white mb-1">الطلبات الخارجية (السوشيال)</h1>
               <p className="text-xs text-emerald-200 font-bold">طلبات انستغرام، واتساب، والمكالمات</p>
+              <button onClick={fixImages} className="mt-2 text-[10px] bg-red-500/80 hover:bg-red-500 text-white px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10 transition">إصلاح الصور العالقة (يستخدم مرة واحدة)</button>
             </div>
           </div>
           
