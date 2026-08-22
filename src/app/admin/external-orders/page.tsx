@@ -409,8 +409,17 @@ export default function ExternalOrdersAdmin() {
           const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
           let todaySales = 0, weekSales = 0, monthSales = 0;
+          let totalOweUs = 0, totalWeOwe = 0;
 
           orders.forEach(o => {
+            if (o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled) {
+              if (Number(o.paidAmount) < Number(o.price)) {
+                totalOweUs += (Number(o.price) - Number(o.paidAmount));
+              } else if (Number(o.paidAmount) > Number(o.price)) {
+                totalWeOwe += (Number(o.paidAmount) - Number(o.price));
+              }
+            }
+
             if (["rejected", "cancelled"].includes(o.status)) return;
             const amt = Number(o.price) || 0;
             const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
@@ -422,18 +431,26 @@ export default function ExternalOrdersAdmin() {
           });
 
           return (
-            <div className="grid grid-cols-3 gap-2.5 mt-6 relative z-10">
-              <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3 md:p-4 text-center flex flex-col justify-center">
-                <p className="text-[10px] md:text-xs font-bold text-emerald-200 mb-1">مبيعات اليوم</p>
-                <p className="text-sm md:text-xl font-black text-white">{todaySales.toLocaleString()} <span className="text-[9px] md:text-[10px] font-normal">د.ع</span></p>
+            <div className="grid grid-cols-3 md:grid-cols-5 gap-2.5 mt-6 relative z-10">
+              <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
+                <p className="text-[9px] md:text-xs font-bold text-emerald-200 mb-1">مبيعات اليوم</p>
+                <p className="text-xs md:text-xl font-black text-white">{todaySales.toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
               </div>
-              <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3 md:p-4 text-center flex flex-col justify-center">
-                <p className="text-[10px] md:text-xs font-bold text-emerald-200 mb-1">مبيعات الأسبوع</p>
-                <p className="text-sm md:text-xl font-black text-white">{weekSales.toLocaleString()} <span className="text-[9px] md:text-[10px] font-normal">د.ع</span></p>
+              <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
+                <p className="text-[9px] md:text-xs font-bold text-emerald-200 mb-1">مبيعات الأسبوع</p>
+                <p className="text-xs md:text-xl font-black text-white">{weekSales.toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
               </div>
-              <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3 md:p-4 text-center flex flex-col justify-center">
-                <p className="text-[10px] md:text-xs font-bold text-emerald-200 mb-1">مبيعات الشهر</p>
-                <p className="text-sm md:text-xl font-black text-white">{monthSales.toLocaleString()} <span className="text-[9px] md:text-[10px] font-normal">د.ع</span></p>
+              <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
+                <p className="text-[9px] md:text-xs font-bold text-emerald-200 mb-1">مبيعات الشهر</p>
+                <p className="text-xs md:text-xl font-black text-white">{monthSales.toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
+              </div>
+              <div className="bg-rose-500/20 backdrop-blur-md border border-rose-500/30 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
+                <p className="text-[9px] md:text-xs font-bold text-rose-200 mb-1">باقي نطلبه</p>
+                <p className="text-xs md:text-xl font-black text-white">{totalOweUs.toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
+              </div>
+              <div className="bg-blue-500/20 backdrop-blur-md border border-blue-500/30 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
+                <p className="text-[9px] md:text-xs font-bold text-blue-200 mb-1">أمانة يطلبنا</p>
+                <p className="text-xs md:text-xl font-black text-white">{totalWeOwe.toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
               </div>
             </div>
           );
@@ -524,7 +541,7 @@ export default function ExternalOrdersAdmin() {
                         <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
                           <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                             {order.imageUrl ? (
-                              <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" />
+                              <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" unoptimized />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-gray-300">
                                 <Smartphone className="w-8 h-8" />
@@ -577,7 +594,7 @@ export default function ExternalOrdersAdmin() {
               {/* Image / Icon */}
               <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                 {order.imageUrl ? (
-                  <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" />
+                  <Image src={order.imageUrl} alt={order.cakeName} fill className="object-cover" unoptimized />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-300">
                     <Smartphone className="w-8 h-8" />
