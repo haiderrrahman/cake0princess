@@ -152,6 +152,14 @@ function AdminHubContent() {
     localStorage.setItem('cache_inventory', JSON.stringify(inventory));
   }, [inventory]);
 
+  useEffect(() => {
+    localStorage.setItem('cache_orders', JSON.stringify(orders));
+  }, [orders]);
+
+  useEffect(() => {
+    localStorage.setItem('cache_external_orders', JSON.stringify(externalOrders));
+  }, [externalOrders]);
+
   const fetchAll = useCallback(async () => {
     if (orders.length === 0 && externalOrders.length === 0) {
       setLoading(true);
@@ -507,15 +515,18 @@ function AdminHubContent() {
       setUpdatingOrder(settleOrder.id);
       const collectionName = settleOrderType === "external" ? "external_orders" : "orders";
       const orderId = settleOrder.id;
+      const isSettled = finalPaidAmount === basePrice;
+      
       await updateDoc(doc(db, collectionName, orderId), { 
         status: "delivered", 
-        paidAmount: finalPaidAmount 
+        paidAmount: finalPaidAmount,
+        isDebtSettled: isSettled
       });
       // Optimistic update
       if (settleOrderType === "external") {
-        setExternalOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "delivered", paidAmount: finalPaidAmount } : o));
+        setExternalOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "delivered", paidAmount: finalPaidAmount, isDebtSettled: isSettled } : o));
       } else {
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "delivered", paidAmount: finalPaidAmount } : o));
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "delivered", paidAmount: finalPaidAmount, isDebtSettled: isSettled } : o));
       }
       toast.success("تم تأكيد التسليم وتحديث الحساب");
       setSettleOrder(null);
