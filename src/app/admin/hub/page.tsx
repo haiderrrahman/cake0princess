@@ -153,11 +153,11 @@ function AdminHubContent() {
   }, [inventory]);
 
   useEffect(() => {
-    localStorage.setItem('cache_orders', JSON.stringify(orders));
+    try { localStorage.setItem('cache_orders', JSON.stringify(orders)); } catch (e) {}
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('cache_external_orders', JSON.stringify(externalOrders));
+    try { localStorage.setItem('cache_external_orders', JSON.stringify(externalOrders)); } catch (e) {}
   }, [externalOrders]);
 
   const fetchAll = useCallback(async () => {
