@@ -457,7 +457,7 @@ export default function InventoryAdmin() {
                               
                               <div className="flex-1 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-zinc-800 dark:to-zinc-700 flex items-center justify-center text-4xl relative overflow-hidden">
                                 {item.imageUrl ? (
-                                  <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                  <img src={item.imageUrl} alt={item.name} onClick={() => window.open(item.imageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
                                 ) : (
                                   <span>{item.category === "كريمات" ? "🧁" : item.category === "حشوات" ? "🍫" : item.category === "طحين وسكر" ? "🌾" : item.category === "ألوان وإضافات" ? "🎨" : item.category === "تغليف وزينة" ? "🎀" : item.category === "أدوات" ? "🔧" : "📦"}</span>
                                 )}
@@ -526,7 +526,7 @@ export default function InventoryAdmin() {
                               
                               <div className="flex-1 bg-gradient-to-br from-gray-50 to-slate-50 dark:from-zinc-800 dark:to-zinc-700 flex items-center justify-center text-4xl relative overflow-hidden">
                                 {item.imageUrl ? (
-                                  <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                  <img src={item.imageUrl} alt={item.name} onClick={() => window.open(item.imageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
                                 ) : (
                                   <span>{item.category === "كريمات" ? "🧁" : item.category === "حشوات" ? "🍫" : item.category === "طحين وسكر" ? "🌾" : item.category === "ألوان وإضافات" ? "🎨" : item.category === "تغليف وزينة" ? "🎀" : item.category === "أدوات" ? "🔧" : "📦"}</span>
                                 )}
