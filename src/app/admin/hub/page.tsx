@@ -453,6 +453,16 @@ function AdminHubContent() {
     };
   }, [fetchAll]);
 
+  // Real-time listener for external orders to prevent stale cache issues
+  useEffect(() => {
+    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
+    const unsub = onSnapshot(q, (snap) => {
+      const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      setExternalOrders(allExt);
+    });
+    return () => unsub();
+  }, []);
+
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     if (newStatus === "delivered" || newStatus === "completed") {
       const order = orders.find(o => o.id === orderId);
