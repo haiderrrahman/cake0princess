@@ -152,6 +152,9 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
           uploadBytes(fileRef, imageFile).then(async () => {
             const url = await getDownloadURL(fileRef);
             await updateDoc(newOrderRef, { imageUrl: url, tempImageUrl: null });
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('backgroundUploadSuccess'));
+            }
           }).catch(() => {
              toast.error("تأجل رفع الصورة لعدم وجود إنترنت");
           });
