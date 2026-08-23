@@ -155,16 +155,20 @@ function AdminHubContent() {
 
   useEffect(() => {
     try {
-      const cleanOrders = orders.map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
+      const cleanOrders = orders.slice(0, 20).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
       localStorage.setItem('cache_orders', JSON.stringify(cleanOrders));
-    } catch (e) {}
+    } catch (e) {
+      console.error("Cache error orders:", e);
+    }
   }, [orders]);
 
   useEffect(() => {
     try {
-      const cleanExt = externalOrders.map(o => ({ ...o, tempImageUrl: undefined }));
+      const cleanExt = externalOrders.slice(0, 20).map(o => ({ ...o, tempImageUrl: undefined }));
       localStorage.setItem('cache_external_orders', JSON.stringify(cleanExt));
-    } catch (e) {}
+    } catch (e) {
+      console.error("Cache error ext:", e);
+    }
   }, [externalOrders]);
 
   const fetchAll = useCallback(async () => {
@@ -185,14 +189,14 @@ function AdminHubContent() {
       const allOrders = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setOrders(allOrders);
       try {
-        const cleanOrders = allOrders.map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
+        const cleanOrders = allOrders.slice(0, 20).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
         localStorage.setItem("cache_orders", JSON.stringify(cleanOrders));
       } catch (e) {}
 
       const allExt = extSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setExternalOrders(allExt);
       try {
-        const cleanExt = allExt.map(o => ({ ...o, tempImageUrl: undefined }));
+        const cleanExt = allExt.slice(0, 20).map(o => ({ ...o, tempImageUrl: undefined }));
         localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
       } catch (e) {}
 
