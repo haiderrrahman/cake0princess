@@ -137,6 +137,7 @@ function AdminHubContent() {
     return {
       todaySales: 0, weekSales: 0, monthSales: 0, allTimeSales: 0, 
       todayExtSales: 0, weekExtSales: 0, monthExtSales: 0, allTimeExtSales: 0,
+      extOweUs: 0, extWeOwe: 0,
       totalOrders: 0, pendingOrders: 0, pendingExtOrders: 0, externalSales: 0, externalProfit: 0,
       expenses: 0, inventoryLow: 0, inventoryValue: 0,
       netProfit: 0, totalProfit: 0,
@@ -213,6 +214,7 @@ function AdminHubContent() {
       // Stats and Notifications
       let todaySales = 0, weekSales = 0, monthSales = 0, allTimeSales = 0;
       let todayExtSales = 0, weekExtSales = 0, monthExtSales = 0, allTimeExtSales = 0;
+      let extOweUs = 0, extWeOwe = 0;
       
       let breakdown = { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 };
       let totalProfit = 0;
@@ -262,6 +264,16 @@ function AdminHubContent() {
       allExt.forEach(o => {
         if (["rejected", "cancelled"].includes(o.status)) return;
         const amt = o.paidAmount !== undefined ? Number(o.paidAmount) : (Number(o.price) || 0);
+        const price = Number(o.price) || 0;
+        
+        if (o.status === "delivered" && amt !== price && !o.isDebtSettled) {
+          if (amt < price) {
+            extOweUs += (price - amt);
+          } else if (amt > price) {
+            extWeOwe += (amt - price);
+          }
+        }
+
         calcSales(o, amt, true);
         totalProfit += Number(o.profit) || 0;
         breakdown.social += amt;
@@ -341,6 +353,7 @@ function AdminHubContent() {
         ...prev,
         todaySales, weekSales, monthSales, allTimeSales, 
         todayExtSales, weekExtSales, monthExtSales, allTimeExtSales, 
+        extOweUs, extWeOwe,
         totalOrders: allOrders.length, pendingOrders: pendingOrders.length, 
         pendingExtOrders, externalSales, externalProfit, 
         totalProfit, netProfit: totalProfit - prev.expenses, breakdown 
@@ -895,7 +908,7 @@ function AdminHubContent() {
         )}
 
         {activeTab === "external" && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 relative z-10">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 relative z-10">
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> مبيعات اليوم</p>
               <p className="text-lg font-black text-white">{(stats.todayExtSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
@@ -911,6 +924,14 @@ function AdminHubContent() {
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><BarChart3 className="w-3.5 h-3.5" /> المبيعات الكلية</p>
               <p className="text-lg font-black text-teal-200">{(stats.allTimeExtSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
+              <p className="text-[10px] font-bold text-rose-200 mb-1 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> باقي نطلبه</p>
+              <p className="text-lg font-black text-rose-300">{(stats.extOweUs || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
+              <p className="text-[10px] font-bold text-blue-200 mb-1 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> أمانة يطلبنا</p>
+              <p className="text-lg font-black text-blue-300">{(stats.extWeOwe || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
             </div>
           </div>
         )}
@@ -1171,7 +1192,7 @@ function AdminHubContent() {
                           {/* Image Top */}
                           <div className="w-full aspect-square rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 border border-gray-100 dark:border-zinc-700 relative">
                             {order.imageUrl || order.tempImageUrl ? (
-                              <img src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} loading="lazy" decoding="async" className="w-full h-full object-cover mix-blend-multiply dark:mix-blend-normal" />
+                              <img src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover mix-blend-multiply dark:mix-blend-normal cursor-pointer" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">
                                 <Package className="w-8 h-8 text-gray-300" />
