@@ -1216,7 +1216,7 @@ function AdminHubContent() {
                               <img src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover mix-blend-multiply dark:mix-blend-normal cursor-pointer" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">
-                                <Package className="w-8 h-8 text-gray-300" />
+                                <img src="/cp-logo.png" alt="Cake Princess" className="w-10 h-10 opacity-20 grayscale" />
                               </div>
                             )}
                             <button onClick={() => setShowEditExternal(order)} className="absolute top-2 right-2 bg-white/80 dark:bg-black/60 backdrop-blur-md text-gray-700 dark:text-gray-300 hover:text-emerald-500 p-1.5 rounded-xl transition">

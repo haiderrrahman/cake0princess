@@ -71,7 +71,7 @@ export default function ExternalOrdersAdmin() {
     // 1. Fast network query with onSnapshot for real-time and local cache
     const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
     const unsubscribe = onSnapshot(q, (snap) => {
-      const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
       setOrders(fetchedOrders);
       setLoading(false);
       try {
