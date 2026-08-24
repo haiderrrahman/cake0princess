@@ -14,11 +14,7 @@ export const metadata: Metadata = {
   title: "كيك الأميرة | Cake Princess",
   description: "اطلب أفضل أنواع الكيك وتعلم فنون التزيين بخطوة بخطوة",
   manifest: "/manifest.json",
-  icons: {
-    icon: "/icon.png",
-    apple: "/apple-touch-icon.png",
-    shortcut: "/icon.png",
-  },
+
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
