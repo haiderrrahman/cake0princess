@@ -16,8 +16,30 @@ import { ar } from "date-fns/locale/ar";
 import "react-datepicker/dist/react-datepicker.css";
 
 export default function ExternalOrdersAdmin() {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [orders, setOrders] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem("cache_external_orders");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem("cache_external_orders");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return false;
+        }
+      } catch (e) {}
+    }
+    return true;
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<"orders" | "debts">("orders");
@@ -45,18 +67,7 @@ export default function ExternalOrdersAdmin() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // ⚡ Instant load from cache (0ms perceived latency)
-    try {
-      const cached = localStorage.getItem("cache_external_orders");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setOrders(parsed);
-          setLoading(false);
-        }
-      }
-    } catch (e) {}
-
+    // Cache is now loaded synchronously in useState
     // 1. Fast network query with onSnapshot for real-time and local cache
     const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -64,7 +75,7 @@ export default function ExternalOrdersAdmin() {
       setOrders(fetchedOrders);
       setLoading(false);
       try {
-        const cleanExt = fetchedOrders.map(o => ({ ...o, tempImageUrl: undefined }));
+        const cleanExt = fetchedOrders.slice(0, 20).map(o => ({ ...o, tempImageUrl: o.imageUrl ? undefined : o.tempImageUrl }));
         localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
       } catch (e) {}
     }, (error) => {
@@ -340,6 +351,7 @@ export default function ExternalOrdersAdmin() {
     const parseDate = (d: any) => {
       if (!d) return new Date(8640000000000000); // push to bottom if no date
       if (d.toDate) return d.toDate();
+      if (d.seconds) return new Date(d.seconds * 1000); // Fix for JSON stringified Firebase Timestamps
       const parsed = new Date(d);
       return isNaN(parsed.getTime()) ? new Date(8640000000000000) : parsed;
     };

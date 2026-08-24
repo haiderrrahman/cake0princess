@@ -150,7 +150,12 @@ function AdminHubContent() {
   }, [stats]);
   
   useEffect(() => {
-    localStorage.setItem('cache_inventory', JSON.stringify(inventory));
+    try {
+      const cleanInv = inventory.map(i => ({ ...i, tempImageUrl: undefined }));
+      localStorage.setItem('cache_inventory', JSON.stringify(cleanInv));
+    } catch (e) {
+      console.error("Cache error inventory:", e);
+    }
   }, [inventory]);
 
   useEffect(() => {
@@ -164,7 +169,7 @@ function AdminHubContent() {
 
   useEffect(() => {
     try {
-      const cleanExt = externalOrders.slice(0, 20).map(o => ({ ...o, tempImageUrl: undefined }));
+      const cleanExt = externalOrders.slice(0, 20).map(o => ({ ...o, tempImageUrl: o.imageUrl ? undefined : o.tempImageUrl }));
       localStorage.setItem('cache_external_orders', JSON.stringify(cleanExt));
     } catch (e) {
       console.error("Cache error ext:", e);
@@ -196,7 +201,7 @@ function AdminHubContent() {
       const allExt = extSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setExternalOrders(allExt);
       try {
-        const cleanExt = allExt.slice(0, 20).map(o => ({ ...o, tempImageUrl: undefined }));
+        const cleanExt = allExt.slice(0, 20).map(o => ({ ...o, tempImageUrl: o.imageUrl ? undefined : o.tempImageUrl }));
         localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
       } catch (e) {}
 
@@ -695,6 +700,7 @@ function AdminHubContent() {
       const parseDate = (d: any) => {
         if (!d) return new Date(8640000000000000);
         if (d.toDate) return d.toDate();
+        if (d.seconds) return new Date(d.seconds * 1000); // Fix for JSON stringified Firebase Timestamps
         const parsed = new Date(d);
         return isNaN(parsed.getTime()) ? new Date(8640000000000000) : parsed;
       };
@@ -740,6 +746,7 @@ function AdminHubContent() {
     const parseDate = (d: any) => {
       if (!d) return new Date(8640000000000000);
       if (d.toDate) return d.toDate();
+      if (d.seconds) return new Date(d.seconds * 1000); // Fix for JSON stringified Firebase Timestamps
       const parsed = new Date(d);
       return isNaN(parsed.getTime()) ? new Date(8640000000000000) : parsed;
     };
