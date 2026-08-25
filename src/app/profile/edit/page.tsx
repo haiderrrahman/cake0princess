@@ -60,16 +60,12 @@ export default function EditProfilePage() {
         dob,
         name: `${firstName} ${lastName}`.trim() || user.displayName
       });
-      toast.success("تم تحديث معلومات الحساب بنجاح", {
+      toast.success("تم تحديث البيانات بنجاح", {
         style: {
           background: '#10B981',
           color: '#fff',
           borderRadius: '16px',
-        },
-        iconTheme: {
-          primary: '#fff',
-          secondary: '#10B981',
-        },
+        }
       });
       router.push("/profile");
     } catch (e) {

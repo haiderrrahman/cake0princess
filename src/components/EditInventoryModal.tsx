@@ -123,16 +123,12 @@ export default function EditInventoryModal({ isOpen, onClose, item, onEditSucces
         }
       }
 
-      toast.success("تم التعديل بنجاح", {
+      toast.success("تم تحديث المادة بنجاح!", {
         style: {
           background: '#10B981',
           color: '#fff',
           borderRadius: '16px',
-        },
-        iconTheme: {
-          primary: '#fff',
-          secondary: '#10B981',
-        },
+        }
       });
       if (onEditSuccess) onEditSuccess({ ...item, ...updateData });
       onClose();

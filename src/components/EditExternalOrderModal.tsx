@@ -117,8 +117,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       }
 
       toast.success("تم التعديل بنجاح", {
-        style: { background: '#10B981', color: '#fff', borderRadius: '16px' },
-        iconTheme: { primary: '#fff', secondary: '#10B981' },
+        style: { background: '#10B981', color: '#fff', borderRadius: '16px' }
       });
       onEditSuccess({
         ...order,
