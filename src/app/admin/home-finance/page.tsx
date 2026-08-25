@@ -10,7 +10,7 @@ import {
   MessageCircle, Send, Bot, Sparkles, BrainCircuit, CheckCircle, PackageCheck
 } from "lucide-react";
 import Link from "next/link";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import { customConfirm } from "@/lib/customConfirm";
 import { db, storage } from "@/lib/firebase";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp } from "firebase/firestore";
@@ -426,6 +426,7 @@ export default function HomeFinanceDashboard() {
 
   // Search states
   const [expenseSearch, setExpenseSearch] = useState("");
+  const [expenseDateFilter, setExpenseDateFilter] = useState("");
   const [inventorySearch, setInventorySearch] = useState("");
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
 
@@ -525,8 +526,8 @@ export default function HomeFinanceDashboard() {
         if (pendingDuties.length > 0) {
           pendingDuties.forEach((duty, idx) => {
             setTimeout(() => {
-              toast.custom((t) => (
-                <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl shadow-2xl rounded-3xl pointer-events-auto flex flex-col p-4 border border-gray-100/50 dark:border-zinc-800/50 relative overflow-hidden ring-1 ring-black/5`}>
+              toast.custom((id) => (
+                <div className={`${''} max-w-sm w-full bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl shadow-2xl rounded-3xl pointer-events-auto flex flex-col p-4 border border-gray-100/50 dark:border-zinc-800/50 relative overflow-hidden ring-1 ring-black/5`}>
                   <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none" />
                   <div className="flex items-start gap-3 relative z-10">
                     <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 p-2 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
@@ -535,7 +536,7 @@ export default function HomeFinanceDashboard() {
                     <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex justify-between items-start">
                         <p className="text-sm font-black text-gray-900 dark:text-white">تذكير بالواجبات</p>
-                        <button onClick={() => toast.dismiss(t.id)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition bg-gray-100/50 dark:bg-zinc-800/50 rounded-full p-1.5 -mt-1 -mr-1">
+                        <button onClick={() => toast.dismiss(id)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition bg-gray-100/50 dark:bg-zinc-800/50 rounded-full p-1.5 -mt-1 -mr-1">
                           <X className="w-3 h-3" />
                         </button>
                       </div>
@@ -3189,21 +3190,36 @@ setEditTrip(null);
               </button>
             </div>
 
-            {/* Search Bar */}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="ابحث في المصاريف..."
-                value={expenseSearch}
-                onChange={e => setExpenseSearch(e.target.value)}
-                className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-4 py-2.5 pr-10 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-              {expenseSearch && (
-                <button onClick={() => setExpenseSearch('')} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+            {/* Search Bar & Date Filter */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="ابحث في المصاريف..."
+                  value={expenseSearch}
+                  onChange={e => setExpenseSearch(e.target.value)}
+                  className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-4 py-2.5 pr-10 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+                {expenseSearch && (
+                  <button onClick={() => setExpenseSearch('')} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <div className="relative w-full sm:w-40 shrink-0">
+                <input
+                  type="date"
+                  value={expenseDateFilter}
+                  onChange={e => setExpenseDateFilter(e.target.value)}
+                  className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-3 py-2.5 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
+                />
+                {expenseDateFilter && (
+                  <button onClick={() => setExpenseDateFilter('')} className="absolute left-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-white dark:bg-zinc-900 px-1">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Category quick filters (ALL VISIBLE ON SCREEN) */}
@@ -3268,15 +3284,15 @@ setEditTrip(null);
 
             {(() => {
               const filtered = expenses.filter(exp =>
-                isInCycle(exp.date) &&
+                (expenseDateFilter ? exp.date.startsWith(expenseDateFilter) : isInCycle(exp.date)) &&
                 (!expenseCategoryFilter || exp.category === expenseCategoryFilter) &&
-                (!expenseSearch || exp.name.includes(expenseSearch) || exp.category.includes(expenseSearch))
+                (!expenseSearch || (exp.name && exp.name.includes(expenseSearch)) || (exp.category && exp.category.includes(expenseSearch)))
               ).sort((a, b) => b.date.localeCompare(a.date));
 
               if (filtered.length === 0) return (
                 <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
                   <span className="text-5xl block mb-3">💸</span>
-                  <p className="text-gray-400 font-bold text-sm">{expenseSearch ? `لا نتائج عن "${expenseSearch}"` : expenseCategoryFilter ? `لا توجد مصاريف في قسم ${expenseCategoryFilter}` : 'لا توجد مصاريف في هذه الدورة'}</p>
+                  <p className="text-gray-400 font-bold text-sm">{expenseSearch ? `لا نتائج عن "${expenseSearch}"` : expenseDateFilter ? `لا توجد مصاريف في تاريخ ${expenseDateFilter}` : expenseCategoryFilter ? `لا توجد مصاريف في قسم ${expenseCategoryFilter}` : 'لا توجد مصاريف في هذه الدورة'}</p>
                 </div>
               );
 
@@ -6028,13 +6044,13 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
       {/* ═══════════════ AI CHAT FAB & WINDOW ═══════════════ */}
       <button 
         onClick={() => setShowAIChat(!showAIChat)}
-        className="fixed bottom-6 left-6 z-50 bg-gradient-to-tr from-purple-600 to-indigo-600 text-white p-4 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center group"
+        className="fixed bottom-24 md:bottom-6 left-6 z-50 bg-gradient-to-tr from-purple-600 to-indigo-600 text-white p-4 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center group"
       >
         {showAIChat ? <X className="w-6 h-6" /> : <Bot className="w-6 h-6 group-hover:animate-bounce" />}
       </button>
 
       {showAIChat && (
-        <div className="fixed bottom-24 left-6 z-50 w-[350px] max-w-[calc(100vw-48px)] bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-gray-100 dark:border-zinc-800 flex flex-col overflow-hidden animate-in slide-in-from-bottom-8 duration-300">
+        <div className="fixed bottom-44 md:bottom-24 left-6 z-50 w-[350px] max-w-[calc(100vw-48px)] bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-gray-100 dark:border-zinc-800 flex flex-col overflow-hidden animate-in slide-in-from-bottom-8 duration-300">
           <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-4 text-white flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">

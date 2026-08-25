@@ -1,5 +1,5 @@
 "use client";
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 import Link from "next/link";
 import { ArrowRight, MapPin, CreditCard, CheckCircle2, AlertCircle, Calendar, Wallet, Landmark, Phone, Home, CheckCircle, XCircle, User } from "lucide-react";
 import { useState, useEffect } from "react";

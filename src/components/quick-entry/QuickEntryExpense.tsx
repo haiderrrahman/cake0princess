@@ -4,7 +4,7 @@ import { Receipt, Loader2, Tag, Calendar, ShoppingBag } from "lucide-react";
 import { collection, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import FormattedNumberInput from "@/components/FormattedNumberInput";
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 
 const EXPENSE_CATEGORIES = ["كهرباء / ماء", "أدوات ومعدات", "مواد خام وتغليف", "إعلانات وتسويق", "صيانة", "أخرى"];
 

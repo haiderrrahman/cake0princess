@@ -1,5 +1,5 @@
 "use client";
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";

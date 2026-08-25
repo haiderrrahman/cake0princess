@@ -8,7 +8,7 @@ import { ArrowRight, Search, User, Star, MapPin, Phone, Crown, DollarSign, Calen
 import { customConfirm } from "@/lib/customConfirm";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 
 export default function CustomersPage() {
   const { isAdmin } = useAuth();

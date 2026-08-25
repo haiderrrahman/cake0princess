@@ -1,4 +1,4 @@
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 import { useState } from "react";
 import { X, Search, Package, Check, Loader2 } from "lucide-react";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";

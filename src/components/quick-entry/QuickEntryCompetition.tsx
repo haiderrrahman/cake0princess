@@ -5,7 +5,7 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import imageCompression from 'browser-image-compression';
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 
 export default function QuickEntryCompetition({ onSuccess }: { onSuccess: () => void }) {
   const [submitting, setSubmitting] = useState(false);

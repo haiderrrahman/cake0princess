@@ -1,6 +1,6 @@
 "use client";
 import { customConfirm } from '@/lib/customConfirm';
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";

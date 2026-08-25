@@ -41,7 +41,7 @@ import SplashScreen from "@/components/SplashScreen";
 import NetworkStatus from "@/components/NetworkStatus";
 
 
-import { Toaster } from 'react-hot-toast';
+import { Toaster } from 'sonner';
 
 export default function RootLayout({
   children,
@@ -68,19 +68,11 @@ export default function RootLayout({
                       fontSize: '14px',
                       fontWeight: 'bold',
                       boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                      border: 'none',
                     },
-                    success: {
-                      iconTheme: {
-                        primary: '#10b981', // emerald
-                        secondary: '#fff',
-                      },
-                    },
-                    error: {
-                      iconTheme: {
-                        primary: '#ef4444', // red
-                        secondary: '#fff',
-                      },
-                    },
+                    classNames: {
+                      toast: 'group toast group-[.toaster]:bg-[#18181b] group-[.toaster]:text-white group-[.toaster]:border-none group-[.toaster]:shadow-lg',
+                    }
                   }}
                 />
                 <InstallPrompt />

@@ -1,5 +1,5 @@
 "use client";
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, Package, CheckCircle, Clock, Truck, Loader2, ArrowRight, AlertCircle, ShoppingBag } from "lucide-react";

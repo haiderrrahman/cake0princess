@@ -5,7 +5,7 @@ import { collection, addDoc, getDocs } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import imageCompression from 'browser-image-compression';
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 
 export default function QuickEntryCourse({ onSuccess }: { onSuccess: () => void }) {
   const [submitting, setSubmitting] = useState(false);

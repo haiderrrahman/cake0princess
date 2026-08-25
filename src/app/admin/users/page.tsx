@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { ArrowRight, Search, User, Shield, ShieldAlert, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { customConfirm } from "@/lib/customConfirm";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 
 type AppUser = {
   id: string;

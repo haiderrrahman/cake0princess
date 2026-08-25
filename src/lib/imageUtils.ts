@@ -1,5 +1,5 @@
 import imageCompression from 'browser-image-compression';
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 
 export const compressImage = async (file: File): Promise<File> => {
   const options = {

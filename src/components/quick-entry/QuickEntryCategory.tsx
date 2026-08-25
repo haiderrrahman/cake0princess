@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { Tag, Loader2 } from "lucide-react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 
 export default function QuickEntryCategory({ onSuccess }: { onSuccess: () => void }) {
   const [submitting, setSubmitting] = useState(false);

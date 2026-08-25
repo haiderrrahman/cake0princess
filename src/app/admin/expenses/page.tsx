@@ -1,6 +1,6 @@
 "use client";
 import { customConfirm } from '@/lib/customConfirm';
-import toast from 'react-hot-toast';
+import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Search, Plus, Loader2, Trash2, Calendar, Receipt, DollarSign, Tag } from "lucide-react";
