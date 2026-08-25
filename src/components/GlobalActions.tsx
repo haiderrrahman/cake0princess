@@ -1,7 +1,7 @@
 "use client";
 import { ShoppingCart, Bell, Sun, Moon, X, BookOpen, Gift, CheckCircle2, ShoppingBag, LayoutDashboard, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { toast } from "react-hot-toast";
+import { toast } from "sonner";
 import { useCart } from "@/context/CartContext";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
