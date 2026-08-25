@@ -46,9 +46,9 @@ export default function GlobalActions() {
     if (newUnread.length > 0) {
       newUnread.forEach(n => {
         toast.custom((t) => (
-          <div className={`${t.visible ? 'animate-in slide-in-from-top-5' : 'animate-out slide-out-to-top-5 fade-out'} max-w-sm w-full bg-white dark:bg-zinc-900 shadow-xl rounded-2xl pointer-events-auto flex ring-1 ring-black/5 dark:ring-white/10 overflow-hidden cursor-pointer`}
+          <div className={`animate-in slide-in-from-top-5 max-w-sm w-full bg-white dark:bg-zinc-900 shadow-xl rounded-2xl pointer-events-auto flex ring-1 ring-black/5 dark:ring-white/10 overflow-hidden cursor-pointer`}
                onClick={() => { 
-                 toast.dismiss(t.id); 
+                 toast.dismiss(t as string | number); 
                  if (n.link) {
                    router.push(n.link);
                  } else {
@@ -67,7 +67,7 @@ export default function GlobalActions() {
               </div>
             </div>
             <div className="flex border-r border-gray-100 dark:border-zinc-800">
-              <button onClick={(e) => { e.stopPropagation(); toast.dismiss(t.id); }} className="w-full p-4 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition">
+              <button onClick={(e) => { e.stopPropagation(); toast.dismiss(t as string | number); }} className="w-full p-4 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition">
                 <X className="w-4 h-4" />
               </button>
             </div>
