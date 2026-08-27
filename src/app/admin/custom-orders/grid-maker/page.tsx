@@ -5,7 +5,7 @@ import {
   LayoutGrid, Grid3x3, Minimize2, ArrowRightLeft, Maximize,
   Crop, Square, Circle, RotateCw, FlipHorizontal,
   Wand2, Scissors, Type, Image as ImageIcon, Layout,
-  Printer, FileVideo, Columns, ChevronRight, Frame, Smile, Sparkles
+  Printer, FileVideo, Columns, ChevronRight, Frame, Scan, Sparkles
 } from "lucide-react";
 
 type Tool = {
@@ -58,9 +58,9 @@ const TOOLS: Tool[] = [
     badge: "جديد",
   },
   {
-    title: "ملصقات",
-    icon: Smile,
-    href: "/admin/custom-orders/grid-maker/stickers",
+    title: "ماسح ضوئي",
+    icon: Scan,
+    href: "/admin/custom-orders/grid-maker/scanner",
     bg: "bg-gradient-to-br from-[#f9a8d4] to-[#c084fc]",
     shadow: "shadow-pink-500/30",
     badge: "جديد",

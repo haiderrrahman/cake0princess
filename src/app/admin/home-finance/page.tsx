@@ -426,7 +426,8 @@ export default function HomeFinanceDashboard() {
 
   // Search states
   const [expenseSearch, setExpenseSearch] = useState("");
-  const [expenseDateFilter, setExpenseDateFilter] = useState("");
+  const [expenseStartDate, setExpenseStartDate] = useState("");
+  const [expenseEndDate, setExpenseEndDate] = useState("");
   const [inventorySearch, setInventorySearch] = useState("");
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
 
@@ -638,6 +639,16 @@ export default function HomeFinanceDashboard() {
     const endStr = `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, '0')}-${String(endD.getDate()).padStart(2, '0')}`;
     
     return dStr >= startStr && dStr <= endStr;
+  };
+
+  const isExpenseInDateRange = (dateString: string) => {
+    if (!expenseStartDate && !expenseEndDate) return isInCycle(dateString);
+    if (!dateString) return false;
+    const dStr = dateString.split("T")[0];
+    if (expenseStartDate && expenseEndDate) return dStr >= expenseStartDate && dStr <= expenseEndDate;
+    if (expenseStartDate) return dStr >= expenseStartDate;
+    if (expenseEndDate) return dStr <= expenseEndDate;
+    return true;
   };
 
   // ──────────────────────────────────────────
@@ -2908,7 +2919,7 @@ setEditTrip(null);
               const hasVariableIncome = totalInc > fixedIncomeBase;
               const totalUnpaidBills = bills.filter(b => !isBillPaidThisCycle(b)).reduce((s,b)=>s+b.amount, 0);
               const totalMonthlyInst = installments.filter(i => i.remainingAmount > 0).reduce((s,i)=>s+i.monthlyInstallment, 0);
-              const fixedObligations = totalUnpaidBills + totalMonthlyInst;
+              const fixedObligations = totalUnpaidBills + totalDebtsOnMe + totalMonthlyInst + 500000;
               
               const remainingAfterObligations = totalInc - fixedObligations;
               const safeDebtRepayment = remainingAfterObligations > 0 ? (remainingAfterObligations * 0.4) : 0;
@@ -2966,12 +2977,20 @@ setEditTrip(null);
 
                       <div className="bg-black/20 rounded-2xl p-3 border border-black/20 space-y-2">
                         <div className="flex justify-between items-center text-gray-300">
-                          <span>إجمالي الأقساط الشهرية</span>
+                          <span>الفواتير المستحقة</span>
+                          <span className="font-black text-white">{fmt(totalUnpaidBills)} د.ع</span>
+                        </div>
+                        <div className="flex justify-between items-center text-gray-300">
+                          <span>الديون</span>
+                          <span className="font-black text-white">{fmt(totalDebtsOnMe)} د.ع</span>
+                        </div>
+                        <div className="flex justify-between items-center text-gray-300">
+                          <span>الأقساط</span>
                           <span className="font-black text-white">{fmt(totalMonthlyInst)} د.ع</span>
                         </div>
                         <div className="flex justify-between items-center text-gray-300">
-                          <span>الفواتير المستحقة</span>
-                          <span className="font-black text-white">{fmt(totalUnpaidBills)} د.ع</span>
+                          <span>مصاريف محددة</span>
+                          <span className="font-black text-white">{fmt(500000)} د.ع</span>
                         </div>
                         <div className="w-full h-px bg-white/10 my-1" />
                         <div className="flex justify-between items-center font-bold">
@@ -3207,18 +3226,36 @@ setEditTrip(null);
                   </button>
                 )}
               </div>
-              <div className="relative w-full sm:w-40 shrink-0">
-                <input
-                  type="date"
-                  value={expenseDateFilter}
-                  onChange={e => setExpenseDateFilter(e.target.value)}
-                  className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-3 py-2.5 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
-                />
-                {expenseDateFilter && (
-                  <button onClick={() => setExpenseDateFilter('')} className="absolute left-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-white dark:bg-zinc-900 px-1">
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                <div className="relative shrink-0">
+                  <input
+                    type="date"
+                    value={expenseStartDate}
+                    onChange={e => setExpenseStartDate(e.target.value)}
+                    className="w-[140px] bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-3 py-2.5 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
+                    title="من تاريخ"
+                  />
+                  {expenseStartDate && (
+                    <button onClick={() => setExpenseStartDate('')} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-white dark:bg-zinc-900 px-1">
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <span className="text-gray-500 font-bold shrink-0 text-sm">-</span>
+                <div className="relative shrink-0">
+                  <input
+                    type="date"
+                    value={expenseEndDate}
+                    onChange={e => setExpenseEndDate(e.target.value)}
+                    className="w-[140px] bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-3 py-2.5 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
+                    title="إلى تاريخ"
+                  />
+                  {expenseEndDate && (
+                    <button onClick={() => setExpenseEndDate('')} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-white dark:bg-zinc-900 px-1">
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -3235,7 +3272,7 @@ setEditTrip(null);
               </button>
               {(showAllCategories ? EXPENSE_CATEGORIES : EXPENSE_CATEGORIES.slice(0, 4)).map(cat => {
                 const isActive = expenseCategoryFilter === cat.label;
-                const catTotal = expenses.filter(e => isInCycle(e.date) && e.category === cat.label).reduce((s,e)=>s+e.amount,0);
+                const catTotal = expenses.filter(e => isExpenseInDateRange(e.date) && e.category === cat.label).reduce((s,e)=>s+e.amount,0);
                 return (
                   <button key={cat.label}
                     onClick={() => setExpenseCategoryFilter(isActive ? null : cat.label)}
@@ -3277,14 +3314,14 @@ setEditTrip(null);
               <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/40 rounded-2xl px-4 py-3 flex justify-between items-center">
                 <span className="text-rose-700 dark:text-rose-400 text-xs font-bold">إجمالي {expenseCategoryFilter}:</span>
                 <span className="text-rose-600 dark:text-rose-400 font-black">
-                  {fmt(expenses.filter(e => isInCycle(e.date) && e.category === expenseCategoryFilter).reduce((s,e)=>s+e.amount,0))} د.ع
+                  {fmt(expenses.filter(e => isExpenseInDateRange(e.date) && e.category === expenseCategoryFilter).reduce((s,e)=>s+e.amount,0))} د.ع
                 </span>
               </div>
             )}
 
             {(() => {
               const filtered = expenses.filter(exp =>
-                (expenseDateFilter ? exp.date.startsWith(expenseDateFilter) : isInCycle(exp.date)) &&
+                isExpenseInDateRange(exp.date) &&
                 (!expenseCategoryFilter || exp.category === expenseCategoryFilter) &&
                 (!expenseSearch || (exp.name && exp.name.includes(expenseSearch)) || (exp.category && exp.category.includes(expenseSearch)))
               ).sort((a, b) => b.date.localeCompare(a.date));
@@ -3292,7 +3329,7 @@ setEditTrip(null);
               if (filtered.length === 0) return (
                 <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
                   <span className="text-5xl block mb-3">💸</span>
-                  <p className="text-gray-400 font-bold text-sm">{expenseSearch ? `لا نتائج عن "${expenseSearch}"` : expenseDateFilter ? `لا توجد مصاريف في تاريخ ${expenseDateFilter}` : expenseCategoryFilter ? `لا توجد مصاريف في قسم ${expenseCategoryFilter}` : 'لا توجد مصاريف في هذه الدورة'}</p>
+                  <p className="text-gray-400 font-bold text-sm">{expenseSearch ? `لا نتائج عن "${expenseSearch}"` : (expenseStartDate || expenseEndDate) ? `لا توجد مصاريف في الفترة المحددة` : expenseCategoryFilter ? `لا توجد مصاريف في قسم ${expenseCategoryFilter}` : 'لا توجد مصاريف في هذه الدورة'}</p>
                 </div>
               );
 
