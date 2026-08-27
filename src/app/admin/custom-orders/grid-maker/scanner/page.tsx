@@ -9,7 +9,7 @@ import jsPDF from "jspdf";
 
 type FilterType = "original" | "magic" | "bw" | "grayscale";
 
-const FILTERS: { id: FilterType; name: string; css: string } = [
+const FILTERS: { id: FilterType; name: string; css: string }[] = [
   { id: "original", name: "أصلي", css: "none" },
   { id: "magic", name: "سحري", css: "contrast(120%) saturate(150%) brightness(110%)" },
   { id: "bw", name: "أبيض وأسود", css: "grayscale(100%) contrast(200%) brightness(120%)" },
