@@ -490,7 +490,7 @@ export default function DocumentScannerPage() {
   // واجهة العرض
   // -------------------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-[#0f0f17] flex flex-col pt-safe pb-safe" dir="rtl">
+    <div className="fixed inset-0 z-[100] bg-[#0f0f17] flex flex-col pt-safe pb-safe" dir="rtl">
       {/* Global Top Bar */}
       <div className="flex items-center justify-between p-4 bg-white/5 border-b border-white/10 z-50">
         <button 
@@ -624,11 +624,11 @@ export default function DocumentScannerPage() {
               المستند ({pages.length} صفحات)
             </h3>
 
-            <div className="flex gap-2 mb-3 overflow-x-auto pb-2 scrollbar-hide">
+            <div className="grid grid-cols-2 gap-2 mb-3">
               {(["magic", "bw", "gray", "original"] as FilterMode[]).map((f) => (
                 <button
                   key={f}
-                  className={`scn-filter ${filter === f ? "active" : ""}`}
+                  className={`scn-filter w-full text-center justify-center ${filter === f ? "active" : ""}`}
                   onClick={() => setFilter(f)}
                 >
                   {f === "magic" ? "سحري (ملون)" : f === "bw" ? "مستند أسود/أبيض" : f === "gray" ? "تدرج رمادي" : "أصلي"}
