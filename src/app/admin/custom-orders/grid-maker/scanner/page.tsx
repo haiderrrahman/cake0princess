@@ -23,7 +23,6 @@ async function applyPerspectiveWarp(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
     img.onload = () => {
       const srcW = img.width;
       const srcH = img.height;
@@ -33,8 +32,8 @@ async function applyPerspectiveWarp(
       const h1 = Math.hypot(corners[3].x - corners[0].x, corners[3].y - corners[0].y);
       const h2 = Math.hypot(corners[2].x - corners[1].x, corners[2].y - corners[1].y);
       
-      const dstW = Math.max(w1, w2);
-      const dstH = Math.max(h1, h2);
+      const dstW = Math.round(Math.max(w1, w2));
+      const dstH = Math.round(Math.max(h1, h2));
 
       const srcCanvas = document.createElement("canvas");
       srcCanvas.width = srcW;
@@ -82,7 +81,7 @@ async function applyPerspectiveWarp(
             dstData[dstIdx] = srcData[srcIdx];
             dstData[dstIdx + 1] = srcData[srcIdx + 1];
             dstData[dstIdx + 2] = srcData[srcIdx + 2];
-            dstData[dstIdx + 3] = srcData[srcIdx + 3];
+            dstData[dstIdx + 3] = 255;
           }
         }
       }
