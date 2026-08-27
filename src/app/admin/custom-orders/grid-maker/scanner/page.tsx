@@ -4,6 +4,7 @@ import { UploadCloud, FileText, Camera, Plus, Trash2, Download, Check, X, Slider
 import ToolHeader from "../components/ToolHeader";
 import { processDownloadOrShare } from "../utils";
 import jsPDF from "jspdf";
+// @ts-ignore
 import createPerspective from "perspective-transform";
 
 type FilterType = "original" | "magic" | "bw" | "grayscale";
