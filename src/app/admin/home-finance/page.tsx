@@ -1892,7 +1892,7 @@ setEditTrip(null);
 
   const tabs = [
     { key: "overview",      label: "نظرة عامة",          emoji: "🏠", icon: BarChart3, badge: 0 },
-    { key: "income",        label: "الدخل",               emoji: "💵", icon: PiggyBank, badge: 0, amount: totalIncome },
+    { key: "income",        label: "الدخل",               emoji: "💵", icon: PiggyBank, badge: 0, amount: balance, isBalance: true },
     { key: "expenses",      label: "المصاريف",            emoji: "💸", icon: Wallet, badge: 0, amount: totalExpensesAmt },
     { key: "needs",         label: "النواقص",             emoji: "🛒", icon: ShoppingCart, badge: totalShortages },
     { key: "inventory",     label: "موجودات البيت",       emoji: "📦", icon: Package, badge: inventory.filter(i => (i.neededQuantity||0) > 0).length },
@@ -2072,14 +2072,16 @@ setEditTrip(null);
                   </span>
                   
                   {/* Badge */}
-                  {( (t.badge || 0) > 0 || (t.amount !== undefined && t.amount > 0) ) && (
+                  {( (t.badge || 0) > 0 || (t.amount !== undefined && (t.isBalance || t.amount > 0)) ) && (
                     <span className={`absolute -top-2 -right-2 min-w-[22px] h-[22px] rounded-full text-[9px] sm:text-[10px] font-black flex items-center justify-center px-1.5 shadow-sm border-[1.5px] transition-all duration-300 ${
                       isActive 
                         ? "bg-white text-gray-900 border-transparent dark:bg-zinc-900 dark:text-white dark:border-zinc-700" 
-                        : "bg-red-500 text-white border-white dark:border-zinc-900"
+                        : t.isBalance
+                          ? (t.amount >= 0 ? "bg-blue-600 text-white border-white dark:border-zinc-900" : "bg-black text-white border-white dark:border-zinc-900")
+                          : "bg-red-500 text-white border-white dark:border-zinc-900"
                     }`}>
                       {t.amount !== undefined 
-                        ? (t.amount >= 1000000 ? (t.amount / 1000000).toFixed(1) + 'M' : t.amount >= 1000 ? (t.amount / 1000).toFixed(0) + 'K' : t.amount)
+                        ? (Math.abs(t.amount) >= 1000000 ? (t.amount / 1000000).toFixed(1) + 'M' : Math.abs(t.amount) >= 1000 ? (t.amount / 1000).toFixed(0) + 'K' : t.amount)
                         : (t.badge! > 99 ? '99+' : t.badge)}
                     </span>
                   )}
