@@ -311,7 +311,19 @@ export default function HomeFinanceDashboard() {
   const [showTravelShortcutModal, setShowTravelShortcutModal] = useState(false);
   const [showTripSelectorModal, setShowTripSelectorModal] = useState(false);
 
-  const [settings, setSettings] = useState<{ manualCycleStarts?: string[] }>({ manualCycleStarts: [] });
+  const [settings, setSettings] = useState<{ 
+    manualCycleStarts?: string[],
+    budgetLimits?: Record<string, number>
+  }>({ 
+    manualCycleStarts: [],
+    budgetLimits: {
+      "سوبر ماركت": 450000,
+      "مطاعم وكوفيهات": 150000,
+      "السيارة": 120000,
+      "العائلة": 100000,
+    }
+  });
+  const [showBudgetSettingsModal, setShowBudgetSettingsModal] = useState(false);
   const [showAIChat, setShowAIChat] = useState(false);
   const [aiChatInput, setAiChatInput] = useState("");
   const [aiChatMessages, setAiChatMessages] = useState<{sender: 'user' | 'ai', text: string}[]>([
@@ -1057,36 +1069,86 @@ setEditFuturePlan(null);
   // ──────────────────────────────────────────
   // EXPENSE HANDLERS
   // ──────────────────────────────────────────
-  const handleSaveExpense = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveExpense = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const isEdit = !!editExpense;
+    
+    const name = fd.get("name") as string;
+    const category = fd.get("category") as string;
+    const amount = Number(fd.get("amount"));
+    const date = fd.get("date") as string;
+    
+    // 1. Blacklist Check
+    if (name.includes("لوتو") || name.includes("عراق لوتو")) {
+      if (!(await customConfirm("تحذير: هذا البند يعتبر هدراً مالياً مباشراً. هل أنت متأكد من رغبتك في تسجيله؟"))) {
+        return;
+      }
+    }
+
     const item: Expense = {
       id: isEdit ? editExpense!.id : Date.now().toString(),
-      name: fd.get("name") as string,
-      category: fd.get("category") as string,
-      amount: Number(fd.get("amount")),
-      date: fd.get("date") as string,
+      name,
+      category,
+      amount,
+      date,
       createdAt: isEdit ? editExpense!.createdAt : new Date().toISOString(),
     };
+
+    let updatedList = expenses;
     if (isEdit) {
-      const updated = expenses.map(x => x.id === item.id ? item : x);
-      setExpenses(updated);
-      syncToFirebase("expenses", updated);
+      updatedList = expenses.map(x => x.id === item.id ? item : x);
+      setExpenses(updatedList);
+      syncToFirebase("expenses", updatedList);
       toast.success("تم تعديل المصروف");
     } else {
-      const updated = [item, ...expenses];
-      setExpenses(updated);
-      syncToFirebase("expenses", updated);
+      updatedList = [item, ...expenses];
+      setExpenses(updatedList);
+      syncToFirebase("expenses", updatedList);
       toast.success("تم تسجيل المصروف");
+      
+      // 2. Micro-Shopping Alert (New Expenses Only)
+      if (category === "سوبر ماركت" && amount < 25000) {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        const recentSmallPurchases = updatedList.filter(e => 
+          e.category === "سوبر ماركت" && 
+          e.amount < 25000 && 
+          new Date(e.date) >= oneWeekAgo
+        );
+        if (recentSmallPurchases.length >= 3) {
+          toast("التسوق المتكرر بمبالغ صغيرة يزيد من الهدر المالي. يُنصح بدمج المشتريات في تسوقة أسبوعية واحدة.", {
+            icon: "💡",
+            style: { background: "#EFF6FF", color: "#1D4ED8", borderColor: "#BFDBFE" }
+          });
+        }
+      }
+
+      // 3. Progressive Alerts Check (New Expenses Only)
+      const categoryBudget = settings.budgetLimits?.[category];
+      if (categoryBudget) {
+        const currentCycleExpenses = updatedList.filter(e => isInCycle(e.date) && e.category === category);
+        const totalSpent = currentCycleExpenses.reduce((s, e) => s + e.amount, 0);
+        const percent = totalSpent / categoryBudget;
+        
+        if (percent >= 1) {
+          toast.error(`لقد تجاوزت الميزانية المحددة لـ ${category}! يجب التوقف عن الصرف في هذا البند.`, { duration: 8000 });
+        } else if (percent >= 0.75) {
+          toast(`تنبيه: اقتربت من استنفاد ميزانية ${category} لهذا الشهر. المتبقي: ${fmt(categoryBudget - totalSpent)}`, { 
+            icon: "⚠️",
+            style: { background: "#FEF3C7", color: "#92400E", borderColor: "#F59E0B" } 
+          });
+        }
+      }
     }
+    
     e.currentTarget.reset();
     setExpNameInput("");
     setTimeout(() => {
       setShowExpenseModal(false);
-    setEditExpense(null);
-      }, 2000);
-};
+      setEditExpense(null);
+    }, 2000);
+  };
 
   const handleDeleteExpense = async (id: string) => {
     if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
@@ -2334,8 +2396,56 @@ setEditTrip(null);
             </p>
           </div>
         )}
+        )}
 
-        {/* Professional Summary Cards */}
+        {/* Budget Limits Progress Cards */}
+        {settings.budgetLimits && Object.entries(settings.budgetLimits).length > 0 && (
+          <div className="relative z-10 bg-white/5 backdrop-blur-md rounded-[2rem] p-5 border border-white/10 shadow-lg mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-purple-400" />
+                <h4 className="text-white font-black text-sm">حالة الميزانية الحالية (سقوف الصرف)</h4>
+              </div>
+              <button 
+                onClick={() => setShowBudgetSettingsModal(true)} 
+                className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 border border-white/10"
+              >
+                <Edit2 className="w-3 h-3" /> إعداد
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {Object.entries(settings.budgetLimits).map(([catName, limit]) => {
+                const spent = expenses.filter(e => isInCycle(e.date) && e.category === catName).reduce((s, e) => s + e.amount, 0);
+                const percent = limit > 0 ? (spent / limit) * 100 : 0;
+                const clampedPercent = Math.min(percent, 100);
+                let colorClass = "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]";
+                if (percent >= 100) colorClass = "bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]";
+                else if (percent >= 75) colorClass = "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]";
+
+                return (
+                  <div key={catName} className="bg-black/20 rounded-2xl p-3 border border-white/5">
+                    <div className="flex justify-between text-xs mb-2">
+                      <span className="font-bold text-gray-200">{catName}</span>
+                      <span className="font-bold text-gray-400">
+                        <span className={percent >= 100 ? 'text-rose-400 font-black' : 'text-white'}>{fmt(spent)}</span> / {fmt(limit)}
+                      </span>
+                    </div>
+                    <div className="w-full h-2.5 bg-gray-800/50 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full ${colorClass} transition-all duration-1000`} 
+                        style={{ width: `${clampedPercent}%` }} 
+                      />
+                    </div>
+                    <div className="flex justify-between items-center mt-1.5">
+                      <span className="text-[10px] font-black text-gray-500">{percent >= 100 ? 'تجاوز السقف!' : percent >= 75 ? 'تحذير' : 'آمن'}</span>
+                      <span className="text-[10px] text-gray-400 font-bold" dir="ltr">{percent.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Professional Summary Cards */}
         <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -6113,6 +6223,66 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
           </div>
         </div>
       )}
+
+      {/* ═══════════════ BUDGET SETTINGS MODAL ═══════════════ */}
+      {showBudgetSettingsModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowBudgetSettingsModal(false)} />
+          <div className="relative bg-white dark:bg-[#1A1525] rounded-[2rem] w-full max-w-md border border-gray-100 dark:border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-gray-100 dark:border-white/10 flex items-center justify-between bg-gray-50/50 dark:bg-white/5">
+              <h3 className="text-lg font-black text-gray-800 dark:text-white flex items-center gap-2">
+                <Target className="w-5 h-5 text-purple-500" />
+                سقوف الميزانية الشهرية
+              </h3>
+              <button onClick={() => setShowBudgetSettingsModal(false)} className="p-2 hover:bg-gray-200 dark:hover:bg-zinc-800 rounded-full transition">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-5">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 font-bold">
+                قم بتحديد سقف الصرف الشهري لكل قسم لتتلقى تنبيهات ذكية عند اقتراب استنفاد الميزانية.
+              </p>
+              
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const newLimits: Record<string, number> = {};
+                ["سوبر ماركت", "مطاعم وكوفيهات", "السيارة", "العائلة"].forEach(cat => {
+                  const val = Number(fd.get(cat));
+                  if (val > 0) newLimits[cat] = val;
+                });
+                const newSettings = { ...settings, budgetLimits: newLimits };
+                setSettings(newSettings);
+                syncToFirebase("settings", newSettings);
+                toast.success("تم تحديث سقوف الميزانية بنجاح");
+                setShowBudgetSettingsModal(false);
+              }} className="space-y-4">
+                
+                {["سوبر ماركت", "مطاعم وكوفيهات", "السيارة", "العائلة"].map(cat => (
+                  <div key={cat} className="flex flex-col gap-1.5">
+                    <label className="text-xs font-black text-gray-700 dark:text-gray-300">{cat} (د.ع)</label>
+                    <input
+                      type="number"
+                      name={cat}
+                      defaultValue={settings.budgetLimits?.[cat] || ""}
+                      placeholder="مثال: 150000"
+                      className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition"
+                    />
+                  </div>
+                ))}
+
+                <div className="pt-4">
+                  <button type="submit" className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-3 rounded-xl shadow-lg active:scale-95 transition">
+                    حفظ التغييرات
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ═══════════════ AI CHAT FAB & WINDOW ═══════════════ */}
       <button 
         onClick={() => setShowAIChat(!showAIChat)}
