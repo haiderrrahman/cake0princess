@@ -2396,56 +2396,6 @@ setEditTrip(null);
             </p>
           </div>
         )}
-        )}
-
-        {/* Budget Limits Progress Cards */}
-        {settings.budgetLimits && Object.entries(settings.budgetLimits).length > 0 && (
-          <div className="relative z-10 bg-white/5 backdrop-blur-md rounded-[2rem] p-5 border border-white/10 shadow-lg mb-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Target className="w-5 h-5 text-purple-400" />
-                <h4 className="text-white font-black text-sm">حالة الميزانية الحالية (سقوف الصرف)</h4>
-              </div>
-              <button 
-                onClick={() => setShowBudgetSettingsModal(true)} 
-                className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 border border-white/10"
-              >
-                <Edit2 className="w-3 h-3" /> إعداد
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {Object.entries(settings.budgetLimits).map(([catName, limit]) => {
-                const spent = expenses.filter(e => isInCycle(e.date) && e.category === catName).reduce((s, e) => s + e.amount, 0);
-                const percent = limit > 0 ? (spent / limit) * 100 : 0;
-                const clampedPercent = Math.min(percent, 100);
-                let colorClass = "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]";
-                if (percent >= 100) colorClass = "bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]";
-                else if (percent >= 75) colorClass = "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]";
-
-                return (
-                  <div key={catName} className="bg-black/20 rounded-2xl p-3 border border-white/5">
-                    <div className="flex justify-between text-xs mb-2">
-                      <span className="font-bold text-gray-200">{catName}</span>
-                      <span className="font-bold text-gray-400">
-                        <span className={percent >= 100 ? 'text-rose-400 font-black' : 'text-white'}>{fmt(spent)}</span> / {fmt(limit)}
-                      </span>
-                    </div>
-                    <div className="w-full h-2.5 bg-gray-800/50 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${colorClass} transition-all duration-1000`} 
-                        style={{ width: `${clampedPercent}%` }} 
-                      />
-                    </div>
-                    <div className="flex justify-between items-center mt-1.5">
-                      <span className="text-[10px] font-black text-gray-500">{percent >= 100 ? 'تجاوز السقف!' : percent >= 75 ? 'تحذير' : 'آمن'}</span>
-                      <span className="text-[10px] text-gray-400 font-bold" dir="ltr">{percent.toFixed(1)}%</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {/* Professional Summary Cards */}
         <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -3320,6 +3270,56 @@ setEditTrip(null);
                 <Plus className="w-3.5 h-3.5" /> إضافة
               </button>
             </div>
+
+            {/* Budget Limits Progress Cards */}
+            {settings.budgetLimits && Object.entries(settings.budgetLimits).length > 0 && (
+              <div className="relative z-10 bg-white dark:bg-zinc-900 rounded-[1.5rem] p-4 border border-gray-100 dark:border-zinc-800 shadow-sm mb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-5 h-5 text-purple-500" />
+                    <h4 className="text-gray-800 dark:text-white font-black text-sm">حالة الميزانية الحالية (سقوف الصرف)</h4>
+                  </div>
+                  <button 
+                    onClick={() => setShowBudgetSettingsModal(true)} 
+                    className="text-xs bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 border border-gray-200 dark:border-zinc-700"
+                  >
+                    <Edit2 className="w-3 h-3" /> إعداد
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {Object.entries(settings.budgetLimits).map(([catName, limit]) => {
+                    const spent = expenses.filter(e => isInCycle(e.date) && e.category === catName).reduce((s, e) => s + e.amount, 0);
+                    const percent = limit > 0 ? (spent / limit) * 100 : 0;
+                    const clampedPercent = Math.min(percent, 100);
+                    let colorClass = "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]";
+                    if (percent >= 100) colorClass = "bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.3)]";
+                    else if (percent >= 75) colorClass = "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.3)]";
+
+                    return (
+                      <div key={catName} className="bg-gray-50 dark:bg-zinc-800/50 rounded-xl p-3 border border-gray-100 dark:border-zinc-700/50">
+                        <div className="flex justify-between text-xs mb-2">
+                          <span className="font-bold text-gray-700 dark:text-gray-300">{catName}</span>
+                          <span className="font-bold text-gray-500 dark:text-gray-400">
+                            <span className={percent >= 100 ? 'text-rose-500 font-black' : 'text-gray-900 dark:text-white'}>{fmt(spent)}</span> / {fmt(limit)}
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full ${colorClass} transition-all duration-1000`} 
+                            style={{ width: `${clampedPercent}%` }} 
+                          />
+                        </div>
+                        <div className="flex justify-between items-center mt-1.5">
+                          <span className="text-[10px] font-black text-gray-500">{percent >= 100 ? 'تجاوز السقف!' : percent >= 75 ? 'تحذير' : 'آمن'}</span>
+                          <span className="text-[10px] text-gray-500 font-bold" dir="ltr">{percent.toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
 
             {/* Search Bar & Date Filter */}
             <div className="flex flex-col sm:flex-row gap-2">
