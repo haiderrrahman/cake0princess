@@ -3309,16 +3309,6 @@ setEditTrip(null);
               )}
             </div>
 
-            {/* Summary if filtered */}
-            {expenseCategoryFilter && (
-              <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/40 rounded-2xl px-4 py-3 flex justify-between items-center">
-                <span className="text-rose-700 dark:text-rose-400 text-xs font-bold">إجمالي {expenseCategoryFilter}:</span>
-                <span className="text-rose-600 dark:text-rose-400 font-black">
-                  {fmt(expenses.filter(e => isExpenseInDateRange(e.date) && e.category === expenseCategoryFilter).reduce((s,e)=>s+e.amount,0))} د.ع
-                </span>
-              </div>
-            )}
-
             {(() => {
               const filtered = expenses.filter(exp =>
                 isExpenseInDateRange(exp.date) &&
@@ -3326,14 +3316,28 @@ setEditTrip(null);
                 (!expenseSearch || (exp.name && exp.name.includes(expenseSearch)) || (exp.category && exp.category.includes(expenseSearch)))
               ).sort((a, b) => b.date.localeCompare(a.date));
 
-              if (filtered.length === 0) return (
-                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
-                  <span className="text-5xl block mb-3">💸</span>
-                  <p className="text-gray-400 font-bold text-sm">{expenseSearch ? `لا نتائج عن "${expenseSearch}"` : (expenseStartDate || expenseEndDate) ? `لا توجد مصاريف في الفترة المحددة` : expenseCategoryFilter ? `لا توجد مصاريف في قسم ${expenseCategoryFilter}` : 'لا توجد مصاريف في هذه الدورة'}</p>
-                </div>
-              );
+              const isAnyFilterActive = expenseCategoryFilter || expenseSearch || expenseStartDate || expenseEndDate;
 
               return (
+                <>
+                  {/* Summary if filtered */}
+                  {isAnyFilterActive && (
+                    <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/40 rounded-2xl px-4 py-3 flex justify-between items-center mb-3">
+                      <span className="text-rose-700 dark:text-rose-400 text-xs font-bold">
+                        إجمالي {expenseCategoryFilter ? expenseCategoryFilter : expenseSearch ? `البحث: ${expenseSearch}` : 'الفترة المحددة'}:
+                      </span>
+                      <span className="text-rose-600 dark:text-rose-400 font-black">
+                        {fmt(filtered.reduce((s,e)=>s+e.amount,0))} د.ع
+                      </span>
+                    </div>
+                  )}
+
+                  {filtered.length === 0 ? (
+                    <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
+                      <span className="text-5xl block mb-3">💸</span>
+                      <p className="text-gray-400 font-bold text-sm">{expenseSearch ? `لا نتائج عن "${expenseSearch}"` : (expenseStartDate || expenseEndDate) ? `لا توجد مصاريف في الفترة المحددة` : expenseCategoryFilter ? `لا توجد مصاريف في قسم ${expenseCategoryFilter}` : 'لا توجد مصاريف في هذه الدورة'}</p>
+                    </div>
+                  ) : (
                 <div className="grid grid-cols-2 gap-3">
                   {filtered.map(exp => {
                     const cat = EXPENSE_CATEGORIES.find(c => c.label === exp.category);
@@ -3367,6 +3371,8 @@ setEditTrip(null);
                     );
                   })}
                 </div>
+                )}
+                </>
               );
             })()}
           </div>
