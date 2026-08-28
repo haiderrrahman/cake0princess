@@ -3270,43 +3270,56 @@ setEditTrip(null);
                 }`}>
                 الكل
               </button>
-              {(showAllCategories ? EXPENSE_CATEGORIES : EXPENSE_CATEGORIES.slice(0, 4)).map(cat => {
-                const isActive = expenseCategoryFilter === cat.label;
-                const catTotal = expenses.filter(e => isExpenseInDateRange(e.date) && e.category === cat.label).reduce((s,e)=>s+e.amount,0);
+              {(() => {
+                const availableCats = EXPENSE_CATEGORIES.map(cat => ({
+                  ...cat,
+                  catTotal: expenses.filter(e => isExpenseInDateRange(e.date) && e.category === cat.label).reduce((s,e)=>s+e.amount,0)
+                })).filter(cat => cat.catTotal > 0 || expenseCategoryFilter === cat.label)
+                .sort((a, b) => b.catTotal - a.catTotal);
+
+                const catsToRender = showAllCategories ? availableCats : availableCats.slice(0, 4);
+
                 return (
-                  <button key={cat.label}
-                    onClick={() => setExpenseCategoryFilter(isActive ? null : cat.label)}
-                    className={`flex items-center gap-1 px-3.5 py-2 border rounded-full text-[11px] font-bold transition ${
-                      isActive 
-                        ? "bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-500/20 scale-105"
-                        : "bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-zinc-700 hover:border-purple-400 hover:text-purple-600 dark:hover:text-purple-400"
-                    }`}>
-                    <span>{cat.icon}</span> 
-                    <span>{cat.label}</span>
-                    {catTotal > 0 && (
-                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${isActive ? "bg-white/20 text-white" : "bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300"}`}>
-                        {fmt(catTotal)}
-                      </span>
+                  <>
+                    {catsToRender.map(cat => {
+                      const isActive = expenseCategoryFilter === cat.label;
+                      return (
+                        <button key={cat.label}
+                          onClick={() => setExpenseCategoryFilter(isActive ? null : cat.label)}
+                          className={`flex items-center gap-1 px-3.5 py-2 border rounded-full text-[11px] font-bold transition ${
+                            isActive 
+                              ? "bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-500/20 scale-105"
+                              : "bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-zinc-700 hover:border-purple-400 hover:text-purple-600 dark:hover:text-purple-400"
+                          }`}>
+                          <span>{cat.icon}</span> 
+                          <span>{cat.label}</span>
+                          {cat.catTotal > 0 && (
+                            <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${isActive ? "bg-white/20 text-white" : "bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300"}`}>
+                              {fmt(cat.catTotal)}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                    {!showAllCategories && availableCats.length > 4 && (
+                      <button
+                        onClick={() => setShowAllCategories(true)}
+                        className="flex items-center gap-1 px-3.5 py-2 border rounded-full text-[11px] font-bold transition bg-gray-50 dark:bg-zinc-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                      >
+                        المزيد...
+                      </button>
                     )}
-                  </button>
+                    {showAllCategories && availableCats.length > 4 && (
+                      <button
+                        onClick={() => { setShowAllCategories(false); setExpenseCategoryFilter(null); }}
+                        className="flex items-center gap-1 px-3.5 py-2 border rounded-full text-[11px] font-bold transition bg-gray-50 dark:bg-zinc-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                      >
+                        عرض أقل
+                      </button>
+                    )}
+                  </>
                 );
-              })}
-              {!showAllCategories && EXPENSE_CATEGORIES.length > 4 && (
-                <button
-                  onClick={() => setShowAllCategories(true)}
-                  className="flex items-center gap-1 px-3.5 py-2 border rounded-full text-[11px] font-bold transition bg-gray-50 dark:bg-zinc-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800"
-                >
-                  المزيد...
-                </button>
-              )}
-              {showAllCategories && EXPENSE_CATEGORIES.length > 4 && (
-                <button
-                  onClick={() => { setShowAllCategories(false); setExpenseCategoryFilter(null); }}
-                  className="flex items-center gap-1 px-3.5 py-2 border rounded-full text-[11px] font-bold transition bg-gray-50 dark:bg-zinc-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800"
-                >
-                  عرض أقل
-                </button>
-              )}
+              })()}
             </div>
 
             {(() => {
@@ -3323,12 +3336,26 @@ setEditTrip(null);
                   {/* Summary if filtered */}
                   {isAnyFilterActive && (
                     <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/40 rounded-2xl px-4 py-3 flex justify-between items-center mb-3">
-                      <span className="text-rose-700 dark:text-rose-400 text-xs font-bold">
-                        إجمالي {expenseCategoryFilter ? expenseCategoryFilter : expenseSearch ? `البحث: ${expenseSearch}` : 'الفترة المحددة'}:
-                      </span>
-                      <span className="text-rose-600 dark:text-rose-400 font-black">
-                        {fmt(filtered.reduce((s,e)=>s+e.amount,0))} د.ع
-                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-rose-700 dark:text-rose-400 text-xs font-bold">
+                          إجمالي {expenseCategoryFilter ? expenseCategoryFilter : expenseSearch ? `البحث: ${expenseSearch}` : 'الفترة المحددة'}:
+                        </span>
+                        <span className="text-rose-600 dark:text-rose-400 font-black">
+                          {fmt(filtered.reduce((s,e)=>s+e.amount,0))} د.ع
+                        </span>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          const lines = filtered.map((e, i) => `${i+1}. ${e.name} | ${e.category} | ${fmt(e.amount)} د.ع | ${new Date(e.date).toLocaleDateString("ar-IQ")}`);
+                          const text = `📊 تقرير المصاريف المفلترة\nإجمالي: ${fmt(filtered.reduce((s,e)=>s+e.amount,0))} د.ع\nالعدد: ${filtered.length} مصروف\n\n${lines.join('\n')}`;
+                          navigator.clipboard.writeText(text);
+                          toast.success("تم نسخ البيانات للذكاء الاصطناعي 🤖");
+                        }}
+                        className="bg-white dark:bg-zinc-800 text-rose-600 dark:text-rose-400 text-xs font-bold px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-800/50 flex items-center gap-1.5 hover:bg-rose-100 dark:hover:bg-zinc-700 transition shadow-sm"
+                        title="نسخ المصاريف"
+                      >
+                        <Bot className="w-4 h-4" /> نسخ البيانات
+                      </button>
                     </div>
                   )}
 
