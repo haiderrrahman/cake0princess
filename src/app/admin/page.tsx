@@ -69,14 +69,14 @@ export default function AdminDashboard() {
         }
 
         socialReceived += received;
-        social += price; // Use full price for breakdown
+        social += received; // Use received for breakdown
         totalProfit += Number(o.profit || 0);
 
         const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
         d.setHours(0, 0, 0, 0);
-        if (d.getTime() === today.getTime()) todaySales += price;
-        if (d >= weekAgo) weekSales += price;
-        if (d >= monthAgo) monthSales += price;
+        if (d.getTime() === today.getTime()) todaySales += received;
+        if (d >= weekAgo) weekSales += received;
+        if (d >= monthAgo) monthSales += received;
       });
 
       // ── App Orders (orders) ──

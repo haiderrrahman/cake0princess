@@ -76,7 +76,7 @@ export default function ExternalOrdersAdmin() {
       setLoading(false);
       try {
         // Strip tempImageUrl entirely to avoid localStorage quota limits (base64 strings are too large)
-        const cleanExt = fetchedOrders.slice(0, 20).map(o => {
+        const cleanExt = fetchedOrders.slice(0, 150).map(o => {
           const clean = { ...o };
           delete clean.tempImageUrl;
           return clean;
@@ -439,8 +439,17 @@ export default function ExternalOrdersAdmin() {
               }
             }
 
-            if (["rejected", "cancelled"].includes(o.status)) return;
-            const amt = Number(o.price) || 0;
+            const isDelivered = o.status === "delivered" || o.status === "completed";
+            if (!isDelivered) return;
+
+            const price = Number(o.price || 0);
+            const paid = Number(o.paidAmount ?? price);
+            let received = price;
+            if (o.paidAmount !== undefined && paid < price && !o.isDebtSettled) {
+              received = paid;
+            }
+
+            const amt = received;
             const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
             d.setHours(0,0,0,0);
             

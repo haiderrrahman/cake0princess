@@ -161,13 +161,13 @@ function AdminHubContent() {
 
   useEffect(() => {
     try {
-      const cleanOrders = orders.slice(0, 20).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
-      const cleanExt = externalOrders.slice(0, 20).map(o => {
+      const cleanOrders = orders.slice(0, 150).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
+      const cleanExt = externalOrders.slice(0, 150).map(o => {
         const clean = { ...o };
         delete clean.tempImageUrl;
         return clean;
       });
-      const cleanSales = storeSales.slice(0, 20);
+      const cleanSales = storeSales.slice(0, 150);
       try {
         localStorage.setItem("cache_orders", JSON.stringify(cleanOrders));
         localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
@@ -365,24 +365,27 @@ function AdminHubContent() {
     
     externalOrders.forEach(o => {
       if (["rejected", "cancelled"].includes(o.status)) return;
-      const amt = o.paidAmount !== undefined ? Number(o.paidAmount) : (Number(o.price) || 0);
       const price = Number(o.price) || 0;
-      
       const isDelivered = o.status === 'delivered' || o.status === 'completed';
       
-      if (isDelivered && amt !== price && !o.isDebtSettled) {
-        if (amt < price) {
-          extOweUs += (price - amt);
-        } else if (amt > price) {
-          extWeOwe += (amt - price);
+      let received = price;
+      if (o.paidAmount !== undefined && !o.isDebtSettled) {
+        const amt = Number(o.paidAmount);
+        if (isDelivered && amt !== price) {
+          if (amt < price) {
+            extOweUs += (price - amt);
+            received = amt;
+          } else if (amt > price) {
+            extWeOwe += (amt - price);
+          }
         }
       }
 
-      calcSales(o, price, true); // Use full price for sales metrics
+      calcSales(o, received, true);
       if (isDelivered) {
         totalProfit += Number(o.profit) || 0;
       }
-      breakdown.social += price; // Use full price for breakdown
+      breakdown.social += received;
     });
 
     storeSales.forEach(o => {
