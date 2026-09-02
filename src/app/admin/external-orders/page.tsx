@@ -75,9 +75,16 @@ export default function ExternalOrdersAdmin() {
       setOrders(fetchedOrders);
       setLoading(false);
       try {
-        const cleanExt = fetchedOrders.slice(0, 20).map(o => ({ ...o, tempImageUrl: o.imageUrl ? undefined : o.tempImageUrl }));
+        // Strip tempImageUrl entirely to avoid localStorage quota limits (base64 strings are too large)
+        const cleanExt = fetchedOrders.slice(0, 20).map(o => {
+          const clean = { ...o };
+          delete clean.tempImageUrl;
+          return clean;
+        });
         localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
-      } catch (e) {}
+      } catch (e) {
+        console.error("Cache error:", e);
+      }
     }, (error) => {
       console.error("Error fetching external orders:", error);
       // Fallback if index fails
@@ -552,8 +559,8 @@ export default function ExternalOrdersAdmin() {
                       return (
                         <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
                           <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
-                            {order.imageUrl ? (
-                              <img loading="lazy" src={order.imageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
+                            {(order.imageUrl || order.tempImageUrl) ? (
+                              <img loading="lazy" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-gray-300">
                                 <Smartphone className="w-8 h-8" />
@@ -605,8 +612,8 @@ export default function ExternalOrdersAdmin() {
 
               {/* Image / Icon */}
               <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
-                {order.imageUrl ? (
-                  <img loading="lazy" src={order.imageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
+                {(order.imageUrl || order.tempImageUrl) ? (
+                  <img loading="lazy" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-300">
                     <Smartphone className="w-8 h-8" />

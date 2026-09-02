@@ -162,20 +162,23 @@ function AdminHubContent() {
   useEffect(() => {
     try {
       const cleanOrders = orders.slice(0, 20).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
-      localStorage.setItem('cache_orders', JSON.stringify(cleanOrders));
+      const cleanExt = externalOrders.slice(0, 20).map(o => {
+        const clean = { ...o };
+        delete clean.tempImageUrl;
+        return clean;
+      });
+      const cleanSales = storeSales.slice(0, 20);
+      try {
+        localStorage.setItem("cache_orders", JSON.stringify(cleanOrders));
+        localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
+        localStorage.setItem("cache_store_sales", JSON.stringify(cleanSales));
+      } catch (e) {
+        console.error("Cache error:", e);
+      }
     } catch (e) {
-      console.error("Cache error orders:", e);
+      console.error("Cache error:", e);
     }
-  }, [orders]);
-
-  useEffect(() => {
-    try {
-      const cleanExt = externalOrders.slice(0, 20).map(o => ({ ...o, tempImageUrl: o.imageUrl ? undefined : o.tempImageUrl }));
-      localStorage.setItem('cache_external_orders', JSON.stringify(cleanExt));
-    } catch (e) {
-      console.error("Cache error ext:", e);
-    }
-  }, [externalOrders]);
+  }, [orders, externalOrders, storeSales]);
 
   const fetchAll = useCallback(async () => {
     try {
