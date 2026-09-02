@@ -327,11 +327,7 @@ export default function HomeFinanceDashboard() {
     }
   });
   const [showBudgetSettingsModal, setShowBudgetSettingsModal] = useState(false);
-  const [showAIChat, setShowAIChat] = useState(false);
-  const [aiChatInput, setAiChatInput] = useState("");
-  const [aiChatMessages, setAiChatMessages] = useState<{sender: 'user' | 'ai', text: string}[]>([
-    { sender: 'ai', text: 'مرحباً! أنا مساعدك المالي الذكي. يمكنك سؤالي عن مصاريفك، تقييم خططك، أو استشارتي في إدارة أموالك.' }
-  ]);
+
 
   const [mounted, setMounted] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
@@ -2170,7 +2166,7 @@ setEditTrip(null);
         
         {/* STATS BANNER (المتوفر والنواقص في كل صفحة) */}
         {(() => {
-          if (activeTab === "overview" || activeTab === "futurePlans") return null;
+          if (activeTab === "overview" || activeTab === "futurePlans" || activeTab === "familyNeeds") return null;
 
           let availCard = { title: "المتوفر", count: 0, countLabel: "عنصر/قطعة", value: 0, color: "emerald", icon: "✨" };
           let shortCard = { title: "النواقص", count: 0, countLabel: "ناقص/معلق", value: 0, color: "orange", icon: "⚠️" };
@@ -2196,13 +2192,7 @@ setEditTrip(null);
             const shortVal = travelInventory.filter(i => (i.neededQuantity || 0) > 0).reduce((s, i) => s + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0);
             availCard = { title: "جاهز للسفر", count: availQty, countLabel: "مستلزم", value: availVal, color: "emerald", icon: "✈️" };
             shortCard = { title: "نواقص السفر", count: shortQty, countLabel: "ناقص", value: shortVal, color: "orange", icon: "🎒" };
-          } else if (activeTab === "familyNeeds") {
-            const memberAvailable = familyNeeds.filter(n => n.member === activeFamilyMember && n.status === "available");
-            const memberPending = familyNeeds.filter(n => n.member === activeFamilyMember && n.status === "pending");
-            const availVal = memberAvailable.reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
-            const shortVal = memberPending.reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
-            availCard = { title: `متوفر لـ (${activeFamilyMember})`, count: memberAvailable.length, countLabel: "طلب متوفر", value: availVal, color: "emerald", icon: "✨" };
-            shortCard = { title: `نواقص لـ (${activeFamilyMember})`, count: memberPending.length, countLabel: "طلب معلق", value: shortVal, color: "orange", icon: "🛍️" };
+
           } else if (activeTab === "needs") {
             const totalAvailQty = inventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + carInventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + travelInventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + familyNeeds.filter(n => n.status === "available").length;
             const totalShortQty = shoppingList.reduce((s, i) => s + (Number(i.neededQuantity) || 1), 0) + familyNeeds.filter(n => n.status === "pending").length;
@@ -2359,6 +2349,12 @@ setEditTrip(null);
 
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/15 blur-[60px] rounded-full pointer-events-none" />
             <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/20 blur-[80px] rounded-full pointer-events-none" />
+            
+            {/* Family Competition Overview */}
+            <div className="mb-4">
+              <FamilyCompetitionOverview onClick={() => setActiveTab("familyNeeds")} />
+            </div>
+
             {/* Financial Cycle moved from Header */}
           <div className="relative bg-gradient-to-br from-[#1a0533] via-[#2d1060] to-[#0f3460] rounded-[2rem] p-5 shadow-2xl overflow-hidden mt-6 mb-4">
             <div className="relative z-10 mb-4 bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/20 flex flex-col md:flex-row items-center justify-between gap-3">
@@ -2560,10 +2556,6 @@ setEditTrip(null);
           </div>
         </div>
           </div>
-            {/* Family Competition Overview */}
-            <div className="mt-4 mb-4">
-              <FamilyCompetitionOverview onClick={() => setActiveTab("familyNeeds")} />
-            </div>
 
             {/* ══════════════════════════════════════════
                 PREMIUM BUDGET BREAKDOWN SECTION
@@ -4114,6 +4106,76 @@ setEditTrip(null);
               </button>
             </div>
 
+            {/* Injected Summary Cards for Active Member */}
+            <div className="mt-4 mb-2">
+              {(() => {
+                const memberAvailable = familyNeeds.filter(n => n.member === activeFamilyMember && n.status === "available");
+                const memberPending = familyNeeds.filter(n => n.member === activeFamilyMember && n.status === "pending");
+                const availVal = memberAvailable.reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
+                const shortVal = memberPending.reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
+
+                return (
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Card 1: المتوفر */}
+                    <div className="bg-gradient-to-br from-emerald-950/80 via-zinc-900 to-zinc-900 dark:from-emerald-950/50 dark:to-zinc-900/90 border border-emerald-500/30 rounded-3xl p-3 sm:p-4 text-white shadow-lg relative overflow-hidden flex flex-col justify-between">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1.5">
+                          <span>✨</span>
+                          <span>متوفر لـ ({activeFamilyMember})</span>
+                        </span>
+                        <div className="text-left">
+                          <span className="text-2xl font-black text-white">{memberAvailable.length}</span>
+                          <span className="text-[10px] text-gray-400 block font-bold">طلب متوفر</span>
+                        </div>
+                      </div>
+                      {availVal !== 0 ? (
+                        <div className="mt-3 pt-2 border-t border-emerald-500/10 flex justify-between items-baseline">
+                          <span className="text-[11px] font-bold text-gray-400">القيمة التقديرية:</span>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-lg font-black text-emerald-300">{fmt(availVal)}</span>
+                            <span className="text-[10px] text-emerald-400 font-bold">د.ع</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-3 pt-2 border-t border-emerald-500/10 flex justify-between items-baseline">
+                          <span className="text-[11px] font-bold text-gray-500">الحالة:</span>
+                          <span className="text-xs font-bold text-emerald-400">محدث أولاً بأول</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card 2: النواقص */}
+                    <div className="bg-gradient-to-br from-red-950/80 via-zinc-900 to-zinc-900 dark:from-red-950/50 dark:to-zinc-900/90 border border-red-500/30 rounded-3xl p-3 sm:p-4 text-white shadow-lg relative overflow-hidden flex flex-col justify-between">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-xs font-black text-red-400 bg-red-500/10 dark:bg-red-500/20 px-3 py-1 rounded-full border border-red-500/30 flex items-center gap-1.5">
+                          <span>🛍️</span>
+                          <span>نواقص لـ ({activeFamilyMember})</span>
+                        </span>
+                        <div className="text-left">
+                          <span className="text-2xl font-black text-white">{memberPending.length}</span>
+                          <span className="text-[10px] text-gray-400 block font-bold">طلب معلق</span>
+                        </div>
+                      </div>
+                      {shortVal !== 0 ? (
+                        <div className="mt-3 pt-2 border-t border-red-500/10 flex justify-between items-baseline">
+                          <span className="text-[11px] font-bold text-gray-400">التكلفة التقديرية:</span>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-lg font-black text-red-300">{fmt(shortVal)}</span>
+                            <span className="text-[10px] text-red-400 font-bold">د.ع</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-3 pt-2 border-t border-red-500/10 flex justify-between items-baseline">
+                          <span className="text-[11px] font-bold text-gray-500">الحالة:</span>
+                          <span className="text-[10px] font-bold text-emerald-400">لا توجد نواقص معلقة 🎉</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* Lists in 2 Columns */}
             {(() => {
               const memberNeeds = familyNeeds.filter(n => n.member === activeFamilyMember);
@@ -5657,67 +5719,6 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
                 </div>
               </form>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════ AI CHAT FAB & WINDOW ═══════════════ */}
-      <button 
-        onClick={() => setShowAIChat(!showAIChat)}
-        className="fixed bottom-24 md:bottom-6 left-6 z-50 bg-gradient-to-tr from-purple-600 to-indigo-600 text-white p-4 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center group"
-      >
-        {showAIChat ? <X className="w-6 h-6" /> : <Bot className="w-6 h-6 group-hover:animate-bounce" />}
-      </button>
-
-      {showAIChat && (
-        <div className="fixed bottom-44 md:bottom-24 left-6 z-50 w-[350px] max-w-[calc(100vw-48px)] bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-gray-100 dark:border-zinc-800 flex flex-col overflow-hidden animate-in slide-in-from-bottom-8 duration-300">
-          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-4 text-white flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-                <Bot className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-black text-sm">المساعد الذكي</h3>
-                <p className="text-[10px] text-white/80 font-bold">متصل الآن • تجريبي</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="h-[350px] overflow-y-auto p-4 bg-gray-50 dark:bg-zinc-900/50 flex flex-col gap-3 custom-scrollbar">
-            {aiChatMessages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] p-3 rounded-2xl text-sm font-bold ${
-                  msg.sender === 'user' 
-                  ? 'bg-indigo-500 text-white rounded-br-sm' 
-                  : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200 border border-gray-100 dark:border-zinc-700 rounded-bl-sm shadow-sm'
-                }`}>
-                  {msg.text}
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          <div className="p-3 bg-white dark:bg-zinc-900 border-t border-gray-100 dark:border-zinc-800">
-            <form onSubmit={e => {
-              e.preventDefault();
-              if (!aiChatInput.trim()) return;
-              setAiChatMessages([...aiChatMessages, { sender: 'user', text: aiChatInput }]);
-              setAiChatInput("");
-              setTimeout(() => {
-                setAiChatMessages(prev => [...prev, { sender: 'ai', text: 'أنا هنا لمساعدتك! لاحظ أنني حالياً بنسخة تجريبية مبدئية، سيتم تفعيل قدراتي الكاملة قريباً.' }]);
-              }, 1000);
-            }} className="flex items-center gap-2 bg-gray-50 dark:bg-zinc-800 p-1.5 rounded-full">
-              <input 
-                type="text" 
-                value={aiChatInput} 
-                onChange={e => setAiChatInput(e.target.value)} 
-                placeholder="اكتب رسالتك هنا..." 
-                className="flex-1 bg-transparent border-none text-sm font-bold px-3 py-2 text-gray-800 dark:text-gray-200 focus:outline-none"
-              />
-              <button type="submit" disabled={!aiChatInput.trim()} className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white p-2 rounded-full transition shrink-0">
-                <Send className="w-4 h-4 rtl:-scale-x-100" />
-              </button>
-            </form>
           </div>
         </div>
       )}

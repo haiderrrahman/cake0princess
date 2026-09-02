@@ -83,7 +83,7 @@ export default function FamilyCompetition() {
   const [viewMode, setViewMode] = useState<"competition" | "history">("competition");
   const [selectedRoundHistory, setSelectedRoundHistory] = useState<string | null>(null);
   
-  const [targetPointsSelector, setTargetPointsSelector] = useState<number>(10);
+
 
   // Listen to active round
   useEffect(() => {
@@ -132,7 +132,7 @@ export default function FamilyCompetition() {
   }, [viewMode]);
 
   const handleStartNewRound = async () => {
-    const confirmed = await customConfirm(`هل أنت متأكد من بدء جولة جديدة بهدف ${targetPointsSelector} نقاط؟ جميع النقاط ستبدأ من 0.`);
+    const confirmed = await customConfirm(`هل أنت متأكد من بدء جولة جديدة بـ 8 نقاط كحد أدنى للفوز؟ جميع النقاط ستبدأ من 0.`);
     
     if (!confirmed) return;
 
@@ -144,7 +144,7 @@ export default function FamilyCompetition() {
 
       await addDoc(collection(db, "familyCompetitionRounds"), {
         roundNumber: lastRoundNumber + 1,
-        targetPoints: targetPointsSelector,
+        targetPoints: 8,
         participants: { ruqayya: 0, qunoot: 0, eva: 0 },
         status: "active",
         winner: null,
@@ -315,15 +315,9 @@ export default function FamilyCompetition() {
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">حدد شرط الفوز الأدنى لبدء منافسة أسبوعية جديدة بين البنات</p>
               
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <select 
-                  className="px-4 py-3 rounded-2xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 font-bold focus:ring-2 focus:ring-yellow-500"
-                  value={targetPointsSelector}
-                  onChange={(e) => setTargetPointsSelector(Number(e.target.value))}
-                >
-                  <option value={8}>شرط الفوز الأدنى: 8 نقاط</option>
-                  <option value={9}>شرط الفوز الأدنى: 9 نقاط</option>
-                  <option value={10}>شرط الفوز الأدنى: 10 نقاط</option>
-                </select>
+                <div className="px-4 py-3 rounded-2xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 font-bold text-gray-700 dark:text-gray-300">
+                  شرط الفوز الأدنى: 8 نقاط
+                </div>
                 <button 
                   onClick={handleStartNewRound}
                   className="px-6 py-3 rounded-2xl bg-gradient-to-r from-yellow-500 to-amber-600 text-white font-black shadow-lg shadow-yellow-500/30 hover:scale-105 active:scale-95 transition"
@@ -414,8 +408,9 @@ export default function FamilyCompetition() {
                           <div>
                             <p className="font-bold text-gray-800 dark:text-white text-sm">
                               {entry.participantName}
-                              <span className="mx-2 text-gray-300">|</span>
-                              <span className="text-xs text-gray-500 font-normal">{entry.reason}</span>
+                            </p>
+                            <p className="text-xs text-gray-600 dark:text-gray-300 font-normal mt-0.5">
+                              {entry.reason}
                             </p>
                             <p className="text-[10px] text-gray-400 mt-0.5">
                               {entry.createdAt?.toDate?.().toLocaleString('ar-IQ')} • بواسطة {entry.createdBy}
