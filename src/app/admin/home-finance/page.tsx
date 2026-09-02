@@ -2386,12 +2386,7 @@ setEditTrip(null);
                     <span className="text-rose-200 text-xs font-black">تجاوزت الميزانية المحددة!</span>
                   </div>
                 )}
-                {balance >= 0 && balance < unpaidObligations && (
-                  <div className="flex items-center gap-2 bg-amber-500/20 backdrop-blur-md rounded-2xl px-4 py-3 border border-amber-500/30 shadow-inner">
-                    <AlertCircle className="w-5 h-5 text-amber-400" />
-                    <span className="text-amber-200 text-xs font-black">تحذير: الرصيد لا يكفي لتسديد الالتزامات ({fmt(unpaidObligations)} د.ع)</span>
-                  </div>
-                )}
+
                 {balance >= unpaidObligations && (
                   <div className="flex items-center gap-2 bg-emerald-500/20 backdrop-blur-md rounded-2xl px-4 py-3 border border-emerald-500/30 shadow-inner">
                     <CheckCircle2 className="w-5 h-5 text-emerald-400" />
