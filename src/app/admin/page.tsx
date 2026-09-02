@@ -162,10 +162,10 @@ export default function AdminDashboard() {
     };
 
     import("firebase/firestore").then(({ onSnapshot, query, orderBy, limit }) => {
-      const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200));
-      const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(200));
-      const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(200));
-      const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(200));
+      const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+      const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
+      const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"));
+      const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"));
 
       const unsubOrders = onSnapshot(qOrders, (snap) => {
         currentOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));

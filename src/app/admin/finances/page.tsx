@@ -98,7 +98,16 @@ export default function FinancesAdmin() {
         ordersSnap.docs.forEach(d => {
           const o = d.data();
           if (["delivered", "completed"].includes(o.status)) {
-            const amt = Number(o.toPayNow) || Number(o.total) || 0;
+            let amt = Number(o.total || o.toPayNow) || 0;
+            if (o.isDebt && o.debtAmount > 0) {
+              if (o.customerOwesUs === false) {
+                // We owe customer, received full amount
+              } else {
+                // Customer owes us, received partial amount
+                amt = amt - Number(o.debtAmount);
+              }
+            }
+            
             totalRevenue += amt;
             totalProfit += (amt * 0.3);
             if (o.items && Array.isArray(o.items)) {
@@ -116,7 +125,16 @@ export default function FinancesAdmin() {
         extSnap.docs.forEach(d => {
           const o = d.data();
           if (!["delivered", "completed"].includes(o.status)) return;
-          const amt = Number(o.price) || 0;
+          const price = Number(o.price) || 0;
+          
+          let amt = price;
+          if (o.paidAmount !== undefined && !o.isDebtSettled) {
+            const paid = Number(o.paidAmount);
+            if (paid < price) {
+              amt = paid;
+            }
+          }
+          
           totalRevenue += amt;
           totalProfit += Number(o.profit) || 0;
           breakdown.social += amt;

@@ -9,6 +9,7 @@ import { customConfirm } from "@/lib/customConfirm";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 import { toast } from "sonner";
+import CustomerProfileModal from "@/components/CustomerProfileModal";
 
 export default function CustomersPage() {
   const { isAdmin } = useAuth();
@@ -21,6 +22,7 @@ export default function CustomersPage() {
   const [editPhoto, setEditPhoto] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [tempPhotoUrl, setTempPhotoUrl] = useState<string | null>(null);
+  const [customerProfile, setCustomerProfile] = useState<{name: string, phone?: string} | null>(null);
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -251,7 +253,9 @@ export default function CustomersPage() {
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start mb-1">
-                      <h2 className="font-black text-gray-900 dark:text-white truncate">{customer.displayName || "مجهول"}</h2>
+                      <button onClick={() => setCustomerProfile({ name: customer.displayName || customer.id, phone: customer.phone })} className="font-black text-gray-900 dark:text-white truncate hover:text-[#e8456b] transition">
+                        {customer.displayName || "مجهول"}
+                      </button>
                       <div className="flex items-center gap-1">
                         {customer.source === "app" && (
                           <>
@@ -380,6 +384,15 @@ export default function CustomersPage() {
             </div>
           </div>
         </div>
+      )}
+      
+      {customerProfile && (
+        <CustomerProfileModal 
+          isOpen={true} 
+          onClose={() => setCustomerProfile(null)} 
+          customerName={customerProfile.name} 
+          customerPhone={customerProfile.phone} 
+        />
       )}
     </div>
   );

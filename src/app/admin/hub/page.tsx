@@ -224,7 +224,7 @@ function AdminHubContent() {
     window.addEventListener('backgroundUploadSuccess', handleBackgroundUpload);
     
     // Real-time listener for expenses
-    const expQuery = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(200));
+    const expQuery = query(collection(db, "expenses"), orderBy("createdAt", "desc"));
     const unsubExpenses = onSnapshot(expQuery, (snap) => {
       const exps = snap.docs.map(d => d.data()) as any[];
       const totalExpenses = exps.reduce((s, e) => s + Number(e.amount || 0), 0);
@@ -285,19 +285,19 @@ function AdminHubContent() {
 
   // Real-time listeners for orders, external_orders, and store_sales
   useEffect(() => {
-    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
+    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
     const unsubExt = onSnapshot(qExt, (snap) => {
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setExternalOrders(allExt);
     });
 
-    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200));
+    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"));
     const unsubOrders = onSnapshot(qOrders, (snap) => {
       const allOrd = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setOrders(allOrd);
     });
 
-    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100));
+    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"));
     const unsubStore = onSnapshot(qStore, (snap) => {
       const allStore = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setStoreSales(allStore);

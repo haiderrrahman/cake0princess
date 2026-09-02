@@ -62,6 +62,7 @@ export default function ExternalOrdersAdmin() {
   const [deliveryDate, setDeliveryDate] = useState<string>(new Date().toISOString());
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [address, setAddress] = useState("");
   
   const [customers, setCustomers] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -112,8 +113,10 @@ export default function ExternalOrdersAdmin() {
     const name = e.target.value;
     setCustomerName(name);
     const existing = customers.find(c => c.name === name);
-    if (existing && existing.phone) {
-      setCustomerPhone(existing.phone);
+    if (existing) {
+      if (existing.phone) setCustomerPhone(existing.phone);
+      if (existing.address) setAddress(existing.address);
+      if (existing.platform) setPlatform(existing.platform);
     }
   };
 
@@ -129,6 +132,7 @@ export default function ExternalOrdersAdmin() {
     setDeliveryDate(order.deliveryDate || new Date().toISOString());
     setImagePreview(order.imageUrl || null);
     setImageFile(null);
+    setAddress(order.address || "");
     setIsModalOpen(true);
   };
 
@@ -181,6 +185,8 @@ export default function ExternalOrdersAdmin() {
         const custRefPromise = addDoc(collection(db, "customers"), {
           name: customerName,
           phone: customerPhone,
+          address: address || "",
+          platform: platform || "واتساب",
           points: Math.floor(numPrice / 1000), // 1 point per 1000 IQD
           totalSpent: numPrice,
           ordersCount: 1,
@@ -191,7 +197,9 @@ export default function ExternalOrdersAdmin() {
       } else {
         const docRef = doc(db, "customers", customerId!);
         const updateCustPromise = updateDoc(docRef, {
-          phone: customerPhone || existingCustomer.phone, // Update if provided
+          phone: customerPhone || existingCustomer.phone || "", // Update if provided
+          address: address || existingCustomer.address || "",
+          platform: platform || existingCustomer.platform || "واتساب",
           points: (existingCustomer.points || 0) + Math.floor(numPrice / 1000),
           totalSpent: (existingCustomer.totalSpent || 0) + numPrice,
           ordersCount: (existingCustomer.ordersCount || 0) + 1,
@@ -209,6 +217,7 @@ export default function ExternalOrdersAdmin() {
         customerId: customerId || "offline-temp-id",
         customerName,
         customerPhone,
+        address,
         platform,
         cakeName,
         price: numPrice,
@@ -240,6 +249,7 @@ export default function ExternalOrdersAdmin() {
       setPrice("");
       setCost("");
       setDeliveryDate(new Date().toISOString());
+      setAddress("");
       setImageFile(null);
       setImagePreview(null);
       setIsModalOpen(false);
@@ -844,7 +854,8 @@ export default function ExternalOrdersAdmin() {
             </div>
             
             <form onSubmit={handleAddOrder} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Row 1: Name and Platform */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold mb-2">اسم الزبون</label>
                   <input required type="text" value={customerName} onChange={handleCustomerNameChange} list="customers-list-external" className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: سارة محمد" />
@@ -853,15 +864,8 @@ export default function ExternalOrdersAdmin() {
                   </datalist>
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-2">رقم الهاتف (اختياري)</label>
-                  <input type="tel" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} dir="ltr" className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="07XXXXXXXXX" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold mb-2">المنصة</label>
-                  <select value={platform} onChange={e => setPlatform(e.target.value)} className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none">
+                  <label className="block text-sm font-bold mb-2">منصة الطلب</label>
+                  <select value={platform} onChange={e => setPlatform(e.target.value)} className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none font-bold text-emerald-800 dark:text-emerald-300">
                     <option value="إنستجرام">إنستجرام</option>
                     <option value="واتساب">واتساب</option>
                     <option value="فيسبوك">فيسبوك</option>
@@ -870,8 +874,48 @@ export default function ExternalOrdersAdmin() {
                     <option value="أخرى">أخرى</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Row 2: Phone and Address */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold mb-2">تاريخ ووقت التسليم</label>
+                  <label className="block text-sm font-bold mb-2">رقم الهاتف (اختياري)</label>
+                  <input type="tel" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} dir="ltr" className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="07XXXXXXXXX" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-2">العنوان (اختياري)</label>
+                  <input type="text" value={address} onChange={e => setAddress(e.target.value)} className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: مجمع A بلوك 5 عمارة 508 شقة 511" />
+                </div>
+              </div>
+
+              {/* Row 3: Cake Details */}
+              <div>
+                <label className="block text-sm font-bold mb-2">تفاصيل الطلب (الكيك)</label>
+                <textarea required value={cakeName} onChange={e => setCakeName(e.target.value)} className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none min-h-[80px]" placeholder="مثال: كيكة عيد ميلاد طابقين بنكهة الفراولة..."></textarea>
+              </div>
+
+              {/* Row 4: Price & Cost */}
+              <div className="grid grid-cols-2 gap-4 p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">سعر البيع للزبون (د.ع)</label>
+                  <FormattedNumberInput required value={price} onChange={val => setPrice(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: 55" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">تكلفة الصنع (د.ع) - اختياري</label>
+                  <FormattedNumberInput value={cost} onChange={val => setCost(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: 20" />
+                </div>
+                
+                {price && (
+                  <div className="col-span-2 pt-2 flex items-center justify-between text-emerald-700 dark:text-emerald-400 border-t border-emerald-200 dark:border-emerald-800/50 mt-2">
+                    <span className="text-sm font-bold flex items-center gap-2"><Calculator className="w-4 h-4"/> الربح الصافي:</span>
+                    <span className="font-black text-lg">{(Number(price) - (cost ? Number(cost) : 0)).toLocaleString()} د.ع</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Row 5: Delivery Date */}
+              <div>
+                <label className="block text-sm font-bold mb-2">تاريخ ووقت التسليم</label>
                   <DatePicker
                     selected={deliveryDate ? new Date(deliveryDate) : null}
                     onChange={(date: Date | null) => setDeliveryDate(date ? date.toISOString() : new Date().toISOString())}
@@ -896,31 +940,8 @@ export default function ExternalOrdersAdmin() {
                     </div>
                   </DatePicker>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-bold mb-2">تفاصيل الطلب (الكيك)</label>
-                <textarea required value={cakeName} onChange={e => setCakeName(e.target.value)} className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none min-h-[80px]" placeholder="مثال: كيكة عيد ميلاد طابقين بنكهة الفراولة..."></textarea>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
-                <div>
-                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">سعر البيع للزبون (د.ع)</label>
-                  <FormattedNumberInput required value={price} onChange={val => setPrice(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: 55" />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">تكلفة الصنع (د.ع) - اختياري</label>
-                  <FormattedNumberInput value={cost} onChange={val => setCost(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: 20" />
-                </div>
-                
-                {price && (
-                  <div className="col-span-2 pt-2 flex items-center justify-between text-emerald-700 dark:text-emerald-400 border-t border-emerald-200 dark:border-emerald-800/50 mt-2">
-                    <span className="text-sm font-bold flex items-center gap-2"><Calculator className="w-4 h-4"/> الربح الصافي:</span>
-                    <span className="font-black text-lg">{(Number(price) - (cost ? Number(cost) : 0)).toLocaleString()} د.ع</span>
-                  </div>
-                )}
-              </div>
-
+              {/* Row 6: Image */}
               <div>
                 <label className="block text-sm font-bold mb-2">صورة الكيكة (اختياري)</label>
                 <div 
