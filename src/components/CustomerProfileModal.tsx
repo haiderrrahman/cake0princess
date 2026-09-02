@@ -1,5 +1,5 @@
 "use client";
-import { X, ShoppingBag, Receipt, MapPin, Phone, Package, Calendar } from "lucide-react";
+import { X, ShoppingBag, Receipt, MapPin, Phone, Package, Calendar, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -16,6 +16,7 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
   const [loading, setLoading] = useState(true);
   const [appOrders, setAppOrders] = useState<any[]>([]);
   const [socialOrders, setSocialOrders] = useState<any[]>([]);
+  const [customerProfile, setCustomerProfile] = useState<any>(null);
 
   useEffect(() => {
     if (!isOpen || !customerName) return;
@@ -23,6 +24,13 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
     const fetchHistory = async () => {
       setLoading(true);
       try {
+        // Fetch customer profile details
+        const custQ = query(collection(db, "customers"), where("name", "==", customerName));
+        const custSnap = await getDocs(custQ);
+        if (!custSnap.empty) {
+          setCustomerProfile(custSnap.docs[0].data());
+        }
+
         // Fetch social orders
         const socialQ = query(
           collection(db, "external_orders"),
@@ -108,8 +116,27 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
             <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
               <span className="w-10 h-10 rounded-full bg-[#FF3366]/10 text-[#FF3366] flex items-center justify-center text-lg">👤</span>
               ملف الزبون
+              {customerProfile?.platform && (
+                <span className="text-xs bg-[#FF3366]/10 text-[#FF3366] px-2 py-0.5 rounded-full font-bold ml-2">
+                  {customerProfile.platform}
+                </span>
+              )}
             </h2>
-            <p className="text-sm font-bold text-gray-500 dark:text-gray-400 mt-1">{customerName} {customerPhone && `• ${customerPhone}`}</p>
+            <div className="mt-2 space-y-1">
+              <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                <User className="w-3.5 h-3.5" /> {customerName}
+              </p>
+              {(customerPhone || customerProfile?.phone) && (
+                <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1" dir="ltr">
+                  <Phone className="w-3.5 h-3.5" /> {customerPhone || customerProfile?.phone}
+                </p>
+              )}
+              {customerProfile?.address && (
+                <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5" /> {customerProfile.address}
+                </p>
+              )}
+            </div>
           </div>
           <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition active:scale-90">
             <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />

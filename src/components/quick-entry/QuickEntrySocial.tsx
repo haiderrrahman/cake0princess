@@ -213,6 +213,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         </div>
       </div>
 
+      {/* الصف الأول: اسم الزبون والمنصة */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الزبون</label>
@@ -231,15 +232,34 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
                   <li 
                     key={c.id} 
                     onClick={() => selectCustomer(c.name, c.phone, c.address, c.platform)}
-                    className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer text-gray-800 dark:text-gray-200 border-b border-gray-50 dark:border-zinc-700/50 last:border-0"
+                    className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer text-gray-800 dark:text-gray-200 border-b border-gray-50 dark:border-zinc-700/50 last:border-0 flex justify-between items-center"
                   >
-                    {c.name}
+                    <span>{c.name}</span>
+                    <span className="text-[10px] text-gray-400">{c.platform || "واتساب"}</span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
         </div>
+        <div>
+          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">منصة الطلب</label>
+          <div className="relative">
+            <select
+              value={platform}
+              onChange={e => setPlatform(e.target.value)}
+              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none appearance-none font-bold text-gray-700 dark:text-gray-200"
+            >
+              {PLATFORMS.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* الصف الثاني: رقم الهاتف والعنوان */}
+      <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">رقم الهاتف</label>
           <div className="relative">
@@ -251,30 +271,29 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
             />
           </div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الكيكة / المنتج</label>
-          <div className="relative">
-            <Tag className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input 
-              type="text" value={cakeName} onChange={e => setCakeName(e.target.value)}
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
-              placeholder="مثال: كيكة شوكولاتة"
-            />
-          </div>
-        </div>
         <div>
           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">العنوان</label>
           <div className="relative">
-            <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="text" value={address} onChange={e => setAddress(e.target.value)}
               className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
-              placeholder="مثال: بغداد, المنصور"
+              placeholder="مثال: مجمع A بلوك 5 عمارة 508 شقة 511"
             />
           </div>
+        </div>
+      </div>
+
+      {/* الصف الثالث: اسم الكيكة */}
+      <div>
+        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الكيكة / المنتج</label>
+        <div className="relative">
+          <Tag className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input 
+            type="text" value={cakeName} onChange={e => setCakeName(e.target.value)}
+            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+            placeholder="مثال: كيكة شوكولاتة"
+          />
         </div>
       </div>
 
@@ -335,16 +354,6 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mt-2">
-        {PLATFORMS.map(p => (
-          <button
-            key={p} onClick={() => setPlatform(p)}
-            className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${platform === p ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-500/50 dark:text-emerald-300' : 'bg-gray-50 border-gray-200 text-gray-600 dark:bg-zinc-800 dark:border-zinc-700 dark:text-gray-400'}`}
-          >
-            {p}
-          </button>
-        ))}
-      </div>
 
       <button
         onClick={submitSale}
