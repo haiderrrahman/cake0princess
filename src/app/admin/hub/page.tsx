@@ -1240,15 +1240,15 @@ function AdminHubContent() {
                               </div>
                               {order.deliveryDate && (
                                 <div className="mt-2.5 w-full">
-                                  <div className="bg-gradient-to-r from-orange-400 via-amber-400 to-orange-400 p-[1.5px] rounded-lg shadow-sm">
-                                    <div className="bg-amber-50/90 dark:bg-zinc-900/90 rounded-[6px] px-2 py-1.5 flex flex-col sm:flex-row items-center justify-center gap-1">
+                                  <div className="bg-gradient-to-r from-orange-400 via-amber-400 to-orange-400 p-[2px] rounded-lg shadow-md">
+                                    <div className="bg-amber-50/90 dark:bg-zinc-900/90 rounded-[6px] px-3 py-2 flex flex-col sm:flex-row items-center justify-center gap-1.5">
                                       <div className="flex items-center gap-1.5 text-orange-700 dark:text-orange-400">
-                                        <Calendar className="w-3.5 h-3.5 animate-pulse" />
-                                        <span className="font-black text-[11px] sm:text-xs leading-none">
+                                        <Calendar className="w-4 h-4 animate-pulse" />
+                                        <span className="font-black text-[13px] sm:text-sm leading-none">
                                           {new Date(order.deliveryDate).toLocaleDateString('ar-IQ')}
                                         </span>
                                       </div>
-                                      <span className="text-orange-600/80 dark:text-orange-500/80 font-bold text-[10px] sm:text-[11px] leading-none">
+                                      <span className="text-orange-700 dark:text-orange-400 font-black text-xs sm:text-[13px] leading-none bg-orange-200/50 dark:bg-orange-900/40 px-2 py-0.5 rounded-md">
                                         الساعة {new Date(order.deliveryDate).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
                                       </span>
                                     </div>

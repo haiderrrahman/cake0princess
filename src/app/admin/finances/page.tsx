@@ -36,6 +36,7 @@ export default function FinancesAdmin() {
       totalRevenue: 0, 
       totalExpenses: 0, 
       netProfit: 0,
+      cashInHand: 0,
       totalSalaryDebt: 0,
       cakeMaterialsExpense: 0,
       breakdown: { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 }
@@ -98,9 +99,10 @@ export default function FinancesAdmin() {
         ordersSnap.docs.forEach(d => {
           const o = d.data();
           if (["delivered", "completed"].includes(o.status)) {
-            const amt = Number(o.toPayNow) || Number(o.total) || 0;
+            const baseAmt = Number(o.toPayNow) || Number(o.total) || 0;
+            const amt = o.paidAmount !== undefined ? Number(o.paidAmount) : baseAmt;
             totalRevenue += amt;
-            totalProfit += (amt * 0.3);
+            totalProfit += (baseAmt * 0.3);
             if (o.items && Array.isArray(o.items)) {
               let hasAcademy = o.items.some((i: any) => i.type === "course" || i.id?.includes("course"));
               let hasSupplies = o.items.some((i: any) => i.type === "supply" || i.id?.includes("supply"));
@@ -116,7 +118,8 @@ export default function FinancesAdmin() {
         extSnap.docs.forEach(d => {
           const o = d.data();
           if (!["delivered", "completed"].includes(o.status)) return;
-          const amt = Number(o.price) || 0;
+          const price = Number(o.price) || 0;
+          const amt = o.paidAmount !== undefined ? Number(o.paidAmount) : price;
           totalRevenue += amt;
           totalProfit += Number(o.profit) || 0;
           breakdown.social += amt;
@@ -159,12 +162,14 @@ export default function FinancesAdmin() {
       return cat === "مشتريات مخزنية" || cat === "مواد الكيك" || cat === "مواد كيك" || cat === "المواد الأولية (كيك وكريمة)" || 
              desc.includes("المخزن") || desc.includes("مادة") || desc.includes("مواد");
     }).reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const netProfit = revenueData.totalRevenue - totalExpenses - totalSalaryDebt; // Profit based on Revenue - Expenses - Debt
+    const netProfit = revenueData.totalProfit - totalExpenses - totalSalaryDebt; // Fixed: Use totalProfit instead of totalRevenue
+    const cashInHand = revenueData.totalRevenue - totalExpenses; // New: Cash in hand is revenue minus expenses
     
     setStats({
       totalRevenue: revenueData.totalRevenue,
       totalExpenses,
       netProfit,
+      cashInHand,
       totalSalaryDebt,
       cakeMaterialsExpense,
       breakdown: revenueData.breakdown,
@@ -354,24 +359,28 @@ export default function FinancesAdmin() {
         </div>
 
         {/* Financial Stats */}
-        <div className="grid grid-cols-2 gap-3 mb-3 relative z-10">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3 relative z-10">
           <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
-            <p className="text-xs font-bold text-purple-200 mb-1 flex items-center gap-1"><Wallet className="w-3.5 h-3.5" /> إجمالي الإيرادات</p>
+            <p className="text-xs font-bold text-purple-200 mb-1 flex items-center gap-1"><Wallet className="w-3.5 h-3.5" /> إجمالي المبيعات (المستلمة)</p>
             <p className="text-xl font-black text-white">{stats.totalRevenue.toLocaleString()} <span className="text-[10px]">د.ع</span></p>
           </div>
           <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
             <p className="text-xs font-bold text-purple-200 mb-1 flex items-center gap-1"><Receipt className="w-3.5 h-3.5" /> إجمالي المصروفات (من أموال الكيك)</p>
             <p className="text-xl font-black text-red-300">{stats.totalExpenses.toLocaleString()} <span className="text-[10px]">د.ع</span></p>
           </div>
+          <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 md:col-span-1 col-span-2">
+            <p className="text-xs font-bold text-emerald-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> الأموال المتوفرة (الصندوق)</p>
+            <p className="text-xl font-black text-emerald-300">{stats.cashInHand.toLocaleString()} <span className="text-[10px]">د.ع</span></p>
+          </div>
         </div>
         
         <div className="bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-4 relative z-10 flex justify-between items-center">
           <div>
-            <p className="text-xs font-bold text-emerald-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> صافي الربح التقديري (بعد المصاريف)</p>
+            <p className="text-xs font-bold text-emerald-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> صافي الربح الحقيقي (بعد المصاريف)</p>
             <p className="text-2xl font-black text-white">{stats.netProfit.toLocaleString()} <span className="text-[10px]">د.ع</span></p>
           </div>
           <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center">
-            <DollarSign className="w-6 h-6 text-emerald-400" />
+            <BarChart3 className="w-6 h-6 text-emerald-400" />
           </div>
         </div>
 
