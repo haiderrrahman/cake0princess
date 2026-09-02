@@ -224,10 +224,8 @@ export default function FamilyCompetition() {
         // Logic to find winner
         let highestScore = -Infinity;
         let winners: ParticipantId[] = [];
-        let metTarget = false;
 
         Object.entries(participants).forEach(([id, points]) => {
-          if (points >= targetPoints) metTarget = true;
           if (points > highestScore) {
             highestScore = points;
             winners = [id as ParticipantId];
@@ -239,7 +237,7 @@ export default function FamilyCompetition() {
         let resultType = "no_winner";
         let finalWinner = null;
 
-        if (metTarget) {
+        if (highestScore >= targetPoints) {
           if (winners.length === 1) {
             resultType = "winner";
             finalWinner = winners[0];
@@ -286,7 +284,7 @@ export default function FamilyCompetition() {
           <div>
             <h2 className="text-xl font-black text-gray-800 dark:text-white">منافسة العائلة</h2>
             {activeRound ? (
-              <p className="text-sm font-bold text-yellow-700/80 dark:text-yellow-400/80">الجولة رقم {activeRound.roundNumber} - الهدف: {activeRound.targetPoints} نقاط</p>
+              <p className="text-sm font-bold text-yellow-700/80 dark:text-yellow-400/80">الجولة رقم {activeRound.roundNumber} - شرط الفوز الأدنى: {activeRound.targetPoints} نقاط</p>
             ) : (
               <p className="text-sm font-bold text-gray-500">لا توجد جولة نشطة حالياً</p>
             )}
@@ -314,7 +312,7 @@ export default function FamilyCompetition() {
             <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-gray-100 dark:border-zinc-800 text-center">
               <Trophy className="w-16 h-16 text-gray-300 dark:text-zinc-700 mx-auto mb-4" />
               <h3 className="text-lg font-black text-gray-800 dark:text-white mb-2">ابدأ جولة جديدة</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">حدد هدف الفوز لبدء منافسة أسبوعية جديدة بين البنات</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">حدد شرط الفوز الأدنى لبدء منافسة أسبوعية جديدة بين البنات</p>
               
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <select 
@@ -322,9 +320,9 @@ export default function FamilyCompetition() {
                   value={targetPointsSelector}
                   onChange={(e) => setTargetPointsSelector(Number(e.target.value))}
                 >
-                  <option value={8}>هدف الفوز: 8 نقاط</option>
-                  <option value={9}>هدف الفوز: 9 نقاط</option>
-                  <option value={10}>هدف الفوز: 10 نقاط</option>
+                  <option value={8}>شرط الفوز الأدنى: 8 نقاط</option>
+                  <option value={9}>شرط الفوز الأدنى: 9 نقاط</option>
+                  <option value={10}>شرط الفوز الأدنى: 10 نقاط</option>
                 </select>
                 <button 
                   onClick={handleStartNewRound}
@@ -454,7 +452,7 @@ export default function FamilyCompetition() {
                       {round.resultType === 'tie' && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">تعادل 🤝</span>}
                       {round.resultType === 'no_winner' && <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs">لا يوجد فائز</span>}
                     </h4>
-                    <p className="text-xs text-gray-500 mt-1">الهدف: {round.targetPoints} | {round.startsAt?.toDate?.().toLocaleDateString('ar-IQ')} - {round.finalizedAt?.toDate?.().toLocaleDateString('ar-IQ')}</p>
+                    <p className="text-xs text-gray-500 mt-1">شرط الفوز الأدنى: {round.targetPoints} | {round.startsAt?.toDate?.().toLocaleDateString('ar-IQ')} - {round.finalizedAt?.toDate?.().toLocaleDateString('ar-IQ')}</p>
                   </div>
                   <div className="flex gap-4">
                     {Object.entries(round.participants).map(([id, pts]) => (

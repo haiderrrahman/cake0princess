@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { db } from "@/lib/firebase";
-import { collection, query, where, limit, onSnapshot } from "firebase/firestore";
-import { Trophy, Medal, Clock } from "lucide-react";
+import { collection, query, where, limit, onSnapshot, getDocs, orderBy } from "firebase/firestore";
+import { Trophy, Clock } from "lucide-react";
 import { FamilyCompetitionRound, PARTICIPANTS, ParticipantId } from "./FamilyCompetition";
 
 export default function FamilyCompetitionOverview({ onClick }: { onClick: () => void }) {
   const [activeRound, setActiveRound] = useState<FamilyCompetitionRound | null>(null);
+  const [lastRound, setLastRound] = useState<FamilyCompetitionRound | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,23 +20,32 @@ export default function FamilyCompetitionOverview({ onClick }: { onClick: () => 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         setActiveRound({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as FamilyCompetitionRound);
+        setLoading(false);
       } else {
         setActiveRound(null);
+        // Fetch last round
+        const lastQ = query(collection(db, "familyCompetitionRounds"), where("status", "==", "completed"), orderBy("roundNumber", "desc"), limit(1));
+        getDocs(lastQ).then(lastSnap => {
+          if (!lastSnap.empty) {
+            setLastRound({ id: lastSnap.docs[0].id, ...lastSnap.docs[0].data() } as FamilyCompetitionRound);
+          }
+          setLoading(false);
+        });
       }
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  const rankedParticipants = useMemo(() => {
-    if (!activeRound) return [];
-    const entries = Object.entries(activeRound.participants).map(([id, points]) => ({
+  const getRanked = (round: FamilyCompetitionRound) => {
+    const entries = Object.entries(round.participants).map(([id, points]) => ({
       id: id as ParticipantId,
       points,
       participant: PARTICIPANTS.find(p => p.id === id)!
     }));
     return entries.sort((a, b) => b.points - a.points);
-  }, [activeRound]);
+  };
+
+  const rankedParticipants = useMemo(() => activeRound ? getRanked(activeRound) : [], [activeRound]);
 
   const getTimeRemaining = () => {
     if (!activeRound?.endsAt) return null;
@@ -64,10 +74,14 @@ export default function FamilyCompetitionOverview({ onClick }: { onClick: () => 
             <Trophy className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
           </div>
           <div>
-            <h3 className="font-black text-gray-800 dark:text-white">منافسة العائلة</h3>
-            {activeRound && (
-              <p className="text-[10px] font-bold text-yellow-700/80 dark:text-yellow-400/80">هدف الفوز: {activeRound.targetPoints} نقاط</p>
-            )}
+            <h3 className="font-black text-gray-800 dark:text-white">
+              {activeRound ? `منافسة العائلة (جولة ${activeRound.roundNumber})` : "منافسة العائلة"}
+            </h3>
+            {activeRound ? (
+              <p className="text-[10px] font-bold text-yellow-700/80 dark:text-yellow-400/80">شرط الفوز الأدنى: {activeRound.targetPoints} نقاط</p>
+            ) : lastRound ? (
+               <p className="text-[10px] font-bold text-gray-500">نتيجة الجولة السابقة</p>
+            ) : null}
           </div>
         </div>
         {activeRound && (
@@ -79,14 +93,9 @@ export default function FamilyCompetitionOverview({ onClick }: { onClick: () => 
       </div>
 
       <div className="flex-1 relative z-10 space-y-2">
-        {!activeRound ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 py-4">
-            <Trophy className="w-8 h-8 text-gray-300 dark:text-zinc-700 mb-2" />
-            <p className="text-xs font-bold">لا توجد جولة نشطة</p>
-          </div>
-        ) : (
+        {activeRound ? (
           rankedParticipants.map((rp, i) => (
-            <div key={rp.id} className={`flex items-center justify-between p-2 rounded-xl border ${i === 0 ? 'bg-white dark:bg-zinc-800 border-yellow-200 dark:border-yellow-500/30' : 'bg-white/50 dark:bg-zinc-800/50 border-transparent'}`}>
+            <div key={rp.id} className={`flex items-center justify-between p-2 rounded-xl border ${i === 0 ? 'bg-white dark:bg-zinc-800 border-yellow-200 dark:border-yellow-500/30 shadow-sm' : 'bg-white/50 dark:bg-zinc-800/50 border-transparent'}`}>
               <div className="flex items-center gap-2">
                 <span className="text-sm w-4 text-center">
                   {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
@@ -96,6 +105,30 @@ export default function FamilyCompetitionOverview({ onClick }: { onClick: () => 
               <span className={`font-black ${rp.points < 0 ? 'text-red-500' : 'text-gray-800 dark:text-white'}`}>{rp.points}</span>
             </div>
           ))
+        ) : lastRound ? (
+          <div className="flex flex-col items-center justify-center text-center space-y-2 py-2">
+            {lastRound.resultType === 'winner' && (
+              <>
+                <p className="text-xs font-bold text-gray-500 mb-1">🏆 الفائزة في الجولة الأخيرة</p>
+                <div className="text-xl mb-1">👑 {PARTICIPANTS.find(p => p.id === lastRound.winner)?.name}</div>
+                <div className="font-black text-gray-800 dark:text-white">{lastRound.participants[lastRound.winner as ParticipantId]} نقطة</div>
+                <p className="text-[10px] text-gray-400 mt-1">الشرط كان: {lastRound.targetPoints} نقاط</p>
+              </>
+            )}
+            {lastRound.resultType === 'tie' && (
+              <p className="font-bold text-blue-600 dark:text-blue-400">🤝 انتهت الجولة بالتعادل</p>
+            )}
+            {lastRound.resultType === 'no_winner' && (
+              <>
+                <p className="font-bold text-gray-600 dark:text-gray-400">لا توجد فائزة</p>
+                <p className="text-[10px] text-gray-500">لم تصل أعلى نتيجة للحد الأدنى ({lastRound.targetPoints})</p>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 py-4">
+            <p className="text-xs font-bold">لا توجد جولة نشطة</p>
+          </div>
         )}
       </div>
       <div className="mt-4 pt-3 border-t border-yellow-500/20 text-center relative z-10">
