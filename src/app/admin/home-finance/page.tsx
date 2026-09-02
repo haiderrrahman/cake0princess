@@ -2292,69 +2292,6 @@ setEditTrip(null);
         {activeTab === "overview" && (
           <div className="space-y-4">
 
-            {/* Quick Actions Grid */}
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: "مصروف", icon: TrendingDown, color: "from-rose-500 to-pink-500", action: () => setShowExpenseModal(true) },
-                { label: "واجبات عائلة", icon: Users, color: "from-purple-500 to-indigo-500", action: () => setShowFamilyNeedModal(true) },
-                { label: "احتياج ونواقص", icon: ShoppingCart, color: "from-orange-500 to-amber-500", action: () => setShowNeedModal(true) },
-                { label: "قسط / سلفة", icon: CreditCard, color: "from-indigo-500 to-violet-500", action: () => setShowInstallmentModal(true) },
-                { label: "فاتورة", icon: Receipt, color: "from-amber-500 to-yellow-500", action: () => setShowBillModal(true) },
-                { label: "إضافة دخل", icon: TrendingUp, color: "from-emerald-500 to-teal-500", action: () => setShowIncomeModal(true) },
-                { label: "دين", icon: Banknote, color: "from-cyan-500 to-blue-500", action: () => setShowDebtModal(true) },
-                { label: "خطة مستقبلية", icon: Target, color: "from-fuchsia-500 to-pink-500", action: () => setShowFuturePlanModal(true) },
-                { label: "رحلة ومصاريف", icon: Plane, color: "from-sky-500 to-blue-500", action: () => setShowTravelShortcutModal(true) },
-              ].map(q => {
-                const Icon = q.icon;
-                return (
-                  <button key={q.label} onClick={q.action}
-                    className={`bg-gradient-to-br ${q.color} rounded-2xl p-3 text-white shadow-lg active:scale-95 transition flex flex-col items-center gap-1.5`}>
-                    <Icon className="w-5 h-5" />
-                    <span className="text-[10px] font-black text-center">{q.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-
-
-            {/* Alerts Banner */}
-            {(unpaidBillsCount > 0 || delayedInstallmentsCount > 0 || totalShortages > 0) && (
-              <div className="bg-gradient-to-br from-rose-500 to-orange-500 rounded-3xl p-5 shadow-[0_8px_30px_rgb(244,63,94,0.3)] space-y-3 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none -mr-10 -mt-10" />
-                <div className="flex items-center gap-2 mb-2 relative z-10">
-                  <AlertCircle className="w-6 h-6 text-white animate-pulse" />
-                  <span className="text-white font-black text-lg drop-shadow-md">تنبيهات عاجلة</span>
-                </div>
-                {unpaidBillsCount > 0 && (
-                  <button onClick={() => setActiveTab("bills")} className="relative z-10 w-full flex items-center justify-between bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/30 rounded-xl px-4 py-3 text-white text-sm font-bold transition shadow-sm">
-                    <span className="flex items-center gap-2"><Receipt className="w-4 h-4"/> {unpaidBillsCount} فاتورة غير مدفوعة ({fmt(unpaidBillsAmt)} د.ع)</span>
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                )}
-                {delayedInstallmentsCount > 0 && (
-                  <button onClick={() => setActiveTab("installments")} className="relative z-10 w-full flex items-center justify-between bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/30 rounded-xl px-4 py-3 text-white text-sm font-bold transition shadow-sm">
-                    <span className="flex items-center gap-2"><CreditCard className="w-4 h-4"/> {delayedInstallmentsCount} أقساط مطلوبة الدفع</span>
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                )}
-                {totalShortages > 0 && (
-                  <button onClick={() => setShowNeedModal(true)} className="relative z-10 w-full flex items-center justify-between bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/30 rounded-xl px-4 py-3 text-white text-sm font-bold transition shadow-sm">
-                    <span className="flex items-center gap-2"><ShoppingCart className="w-4 h-4"/> {totalShortages} نواقص واحتياجات معلقة</span>
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/15 blur-[60px] rounded-full pointer-events-none" />
-            <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/20 blur-[80px] rounded-full pointer-events-none" />
-            
-            {/* Family Competition Overview */}
-            <div className="mb-4">
-              <FamilyCompetitionOverview onClick={() => setActiveTab("familyNeeds")} />
-            </div>
-
             {/* Financial Cycle moved from Header */}
           <div className="relative bg-gradient-to-br from-[#1a0533] via-[#2d1060] to-[#0f3460] rounded-[2rem] p-5 shadow-2xl overflow-hidden mt-6 mb-4">
             <div className="relative z-10 mb-4 bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/20 flex flex-col md:flex-row items-center justify-between gap-3">
@@ -2561,6 +2498,331 @@ setEditTrip(null);
                 PREMIUM BUDGET BREAKDOWN SECTION
             ══════════════════════════════════════════ */}
           </div>
+
+            {/* Quick Actions Grid */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "مصروف", icon: TrendingDown, color: "from-rose-500 to-pink-500", action: () => setShowExpenseModal(true) },
+                { label: "واجبات عائلة", icon: Users, color: "from-purple-500 to-indigo-500", action: () => setShowFamilyNeedModal(true) },
+                { label: "احتياج ونواقص", icon: ShoppingCart, color: "from-orange-500 to-amber-500", action: () => setShowNeedModal(true) },
+                { label: "قسط / سلفة", icon: CreditCard, color: "from-indigo-500 to-violet-500", action: () => setShowInstallmentModal(true) },
+                { label: "فاتورة", icon: Receipt, color: "from-amber-500 to-yellow-500", action: () => setShowBillModal(true) },
+                { label: "إضافة دخل", icon: TrendingUp, color: "from-emerald-500 to-teal-500", action: () => setShowIncomeModal(true) },
+                { label: "دين", icon: Banknote, color: "from-cyan-500 to-blue-500", action: () => setShowDebtModal(true) },
+                { label: "خطة مستقبلية", icon: Target, color: "from-fuchsia-500 to-pink-500", action: () => setShowFuturePlanModal(true) },
+                { label: "رحلة ومصاريف", icon: Plane, color: "from-sky-500 to-blue-500", action: () => setShowTravelShortcutModal(true) },
+              ].map(q => {
+                const Icon = q.icon;
+                return (
+                  <button key={q.label} onClick={q.action}
+                    className={`bg-gradient-to-br ${q.color} rounded-2xl p-3 text-white shadow-lg active:scale-95 transition flex flex-col items-center gap-1.5`}>
+                    <Icon className="w-5 h-5" />
+                    <span className="text-[10px] font-black text-center">{q.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+
+
+            
+            {/* Family Competition Overview */}
+            <div className="mb-4">
+              <FamilyCompetitionOverview onClick={() => setActiveTab("familyNeeds")} />
+            </div>
+
+            
+
+
+
+            {/* Alerts Banner */}
+            {(unpaidBillsCount > 0 || delayedInstallmentsCount > 0 || totalShortages > 0) && (
+              <div className="bg-gradient-to-br from-rose-500 to-orange-500 rounded-3xl p-5 shadow-[0_8px_30px_rgb(244,63,94,0.3)] space-y-3 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none -mr-10 -mt-10" />
+                <div className="flex items-center gap-2 mb-2 relative z-10">
+                  <AlertCircle className="w-6 h-6 text-white animate-pulse" />
+                  <span className="text-white font-black text-lg drop-shadow-md">تنبيهات عاجلة</span>
+                </div>
+                {unpaidBillsCount > 0 && (
+                  <button onClick={() => setActiveTab("bills")} className="relative z-10 w-full flex items-center justify-between bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/30 rounded-xl px-4 py-3 text-white text-sm font-bold transition shadow-sm">
+                    <span className="flex items-center gap-2"><Receipt className="w-4 h-4"/> {unpaidBillsCount} فاتورة غير مدفوعة ({fmt(unpaidBillsAmt)} د.ع)</span>
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                )}
+                
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/15 blur-[80px] rounded-full translate-y-1/2 -translate-x-1/4 pointer-events-none" />
+
+        {/* Back + Title */}
+        <div className="relative z-10 flex items-center gap-3 mb-5">
+          <Link href="/admin" className="w-10 h-10 bg-white/15 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 hover:bg-white/25 transition">
+            <ArrowRight className="w-5 h-5 text-white" />
+          </Link>
+          <div className="flex-1">
+            <div className="flex flex-col gap-1.5">
+              <span className="bg-white/20 text-white border border-white/30 px-3 py-1 rounded-full text-[11px] font-bold shadow-sm flex items-center justify-center gap-1.5 backdrop-blur-md w-max">
+                <Home className="w-3.5 h-3.5" /> منزل حيدر وإيمان
+              </span>
+              <h1 className="text-2xl font-black text-white">إدارة ميزانية ومصاريف المنزل</h1>
+            </div>
+            <p className="text-purple-300 text-xs mt-0.5">
+              {new Date().toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            </p>
+          </div>
+        </div>
+
+        {/* Reminder Banner for 12th & 22nd */}
+        {(new Date().getDate() === 12 || new Date().getDate() === 22) && (
+          <div className="relative z-10 bg-red-600/90 backdrop-blur-md border border-red-400 rounded-2xl p-4 text-center mb-5 shadow-lg shadow-red-500/20">
+            <div className="flex justify-center items-center gap-2 mb-1">
+              <AlertCircle className="w-6 h-6 text-white animate-pulse" />
+              <span className="text-white font-black text-lg">تذكير هام!</span>
+            </div>
+            <p className="text-red-100 font-bold text-sm">
+              اليوم هو {new Date().getDate()} في الشهر. يرجى التأكد من تسديد الديون والأقساط المطلوبة لهذا الشهر.
+            </p>
+          </div>
+        )}
+
+        {/* Cycle Selector & Report Button */}
+      </div>
+
+      {/* ═══════════════ TABS AS APP ICONS ═══════════════ */}
+      <div className="pt-4 px-2 sm:px-4">
+        <div className="grid grid-cols-4 md:grid-cols-6 gap-x-2 gap-y-5 justify-items-center pb-2">
+          {tabs.map((t: any) => {
+            const isActive = activeTab === t.key;
+            const hasBadge = (t.badge || 0) > 0;
+            
+            const getTabColors = (key: string) => {
+              switch(key) {
+                case "overview":      return { grad: "from-blue-500 to-indigo-600",   shadow: "shadow-blue-500/40",   ring: "ring-blue-500",   bg: "bg-blue-500/10 dark:bg-blue-500/20",   text: "text-blue-600 dark:text-blue-400" };
+                case "income":        return { grad: "from-emerald-400 to-green-600", shadow: "shadow-emerald-500/40",ring: "ring-emerald-500",bg: "bg-emerald-500/10 dark:bg-emerald-500/20",text: "text-emerald-600 dark:text-emerald-400" };
+                case "expenses":      return { grad: "from-rose-500 to-red-600",       shadow: "shadow-rose-500/40",   ring: "ring-rose-500",   bg: "bg-rose-500/10 dark:bg-rose-500/20",   text: "text-rose-600 dark:text-rose-400" };
+                case "needs":         return { grad: "from-orange-500 to-amber-600",   shadow: "shadow-orange-500/40", ring: "ring-orange-500", bg: "bg-orange-500/10 dark:bg-orange-500/20", text: "text-orange-600 dark:text-orange-400" };
+                case "inventory":     return { grad: "from-teal-500 to-emerald-600",   shadow: "shadow-teal-500/40",   ring: "ring-teal-500",   bg: "bg-teal-500/10 dark:bg-teal-500/20",   text: "text-teal-600 dark:text-teal-400" };
+                case "bills":         return { grad: "from-amber-500 to-yellow-600",   shadow: "shadow-amber-500/40",  ring: "ring-amber-500",  bg: "bg-amber-500/10 dark:bg-amber-500/20",  text: "text-amber-600 dark:text-amber-400" };
+                case "installments":  return { grad: "from-indigo-500 to-violet-600",  shadow: "shadow-indigo-500/40", ring: "ring-indigo-500", bg: "bg-indigo-500/10 dark:bg-indigo-500/20", text: "text-indigo-600 dark:text-indigo-400" };
+                case "debts":         return { grad: "from-purple-500 to-fuchsia-600", shadow: "shadow-purple-500/40", ring: "ring-purple-500", bg: "bg-purple-500/10 dark:bg-purple-500/20", text: "text-purple-600 dark:text-purple-400" };
+                case "familyNeeds":   return { grad: "from-pink-500 to-rose-500",      shadow: "shadow-pink-500/40",   ring: "ring-pink-500",   bg: "bg-pink-500/10 dark:bg-pink-500/20",   text: "text-pink-600 dark:text-pink-400" };
+                case "car":           return { grad: "from-slate-600 to-gray-700",      shadow: "shadow-slate-500/40",  ring: "ring-slate-500",  bg: "bg-slate-500/10 dark:bg-slate-500/20",  text: "text-slate-600 dark:text-slate-400" };
+                case "travel":        return { grad: "from-sky-500 to-blue-600",        shadow: "shadow-sky-500/40",    ring: "ring-sky-500",    bg: "bg-sky-500/10 dark:bg-sky-500/20",    text: "text-sky-600 dark:text-sky-400" };
+                case "futurePlans":   return { grad: "from-violet-500 to-purple-700",   shadow: "shadow-violet-500/40", ring: "ring-violet-500", bg: "bg-violet-500/10 dark:bg-violet-500/20", text: "text-violet-600 dark:text-violet-400" };
+                default:             return { grad: "from-gray-500 to-gray-600",       shadow: "shadow-gray-500/40",   ring: "ring-gray-500",   bg: "bg-gray-500/10",                        text: "text-gray-600" };
+              }
+            };
+
+            const colors = getTabColors(t.key);
+
+            return (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className="relative flex flex-col items-center gap-1.5 group outline-none w-full max-w-[80px]"
+              >
+                {/* Icon Box */}
+                <div className={`relative flex items-center justify-center w-[58px] h-[58px] sm:w-[64px] sm:h-[64px] rounded-[1.3rem] sm:rounded-[1.4rem] transition-all duration-300 ${
+                  isActive 
+                    ? `bg-gradient-to-br ${colors.grad} text-white scale-110 z-10 shadow-lg ${colors.shadow} ring-2 ring-offset-2 ring-offset-[#f3f4f6] dark:ring-offset-[#09090b] ${colors.ring}` 
+                    : `${colors.bg} border border-white/30 dark:border-zinc-800/60 ${colors.text} shadow-sm group-hover:scale-105 group-hover:shadow-md`
+                }`}>
+                  {/* Emoji Icon */}
+                  <span className={`text-[22px] sm:text-[26px] transition-all duration-300 select-none ${
+                    isActive ? 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.3)] scale-110' : ''
+                  }`} style={{ lineHeight: 1 }}>
+                    {'emoji' in t ? (t as any).emoji : '📊'}
+                  </span>
+                  
+                  {/* Badge */}
+                  {( (t.badge || 0) > 0 || (t.amount !== undefined && (t.isBalance || t.amount > 0)) ) && (
+                    <span className={`absolute -top-2 -right-2 min-w-[22px] h-[22px] rounded-full text-[9px] sm:text-[10px] font-black flex items-center justify-center px-1.5 shadow-sm border-[1.5px] transition-all duration-300 ${
+                      isActive 
+                        ? "bg-white text-gray-900 border-transparent dark:bg-zinc-900 dark:text-white dark:border-zinc-700" 
+                        : t.isBalance
+                          ? (t.amount >= 0 ? "bg-blue-600 text-white border-white dark:border-zinc-900" : "bg-black text-white border-white dark:border-zinc-900")
+                          : "bg-red-500 text-white border-white dark:border-zinc-900"
+                    }`}>
+                      {t.amount !== undefined 
+                        ? (Math.abs(t.amount) >= 1000000 ? (t.amount / 1000000).toFixed(1) + 'M' : Math.abs(t.amount) >= 1000 ? (t.amount / 1000).toFixed(0) + 'K' : t.amount)
+                        : (t.badge! > 99 ? '99+' : t.badge)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Text Label */}
+                <span className={`text-[10px] sm:text-[11px] transition-all duration-300 max-w-[68px] text-center leading-tight flex flex-col items-center gap-0.5 ${
+                  isActive 
+                    ? `font-black ${colors.text} translate-y-0.5` 
+                    : "font-bold text-gray-500 dark:text-gray-400"
+                }`}>
+                  <span>{t.label}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="px-4 mt-4 space-y-4">
+        
+        {/* STATS BANNER (المتوفر والنواقص في كل صفحة) */}
+        {(() => {
+          if (activeTab === "overview" || activeTab === "futurePlans" || activeTab === "familyNeeds") return null;
+
+          let availCard = { title: "المتوفر", count: 0, countLabel: "عنصر/قطعة", value: 0, color: "emerald", icon: "✨" };
+          let shortCard = { title: "النواقص", count: 0, countLabel: "ناقص/معلق", value: 0, color: "orange", icon: "⚠️" };
+
+          if (activeTab === "inventory") {
+            const availQty = inventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+            const availVal = inventory.reduce((s, i) => s + ((Number(i.quantity) || 0) * (Number(i.estimatedPrice) || 0)), 0);
+            const shortQty = inventory.reduce((s, i) => s + (Number(i.neededQuantity) || 0), 0);
+            const shortVal = inventory.filter(i => (i.neededQuantity || 0) > 0).reduce((s, i) => s + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0);
+            availCard = { title: "المتوفر في موجودات البيت", count: availQty, countLabel: "قطعة", value: availVal, color: "emerald", icon: "📦" };
+            shortCard = { title: "نواقص البيت", count: shortQty, countLabel: "قطعة ناقصة", value: shortVal, color: "orange", icon: "⚠️" };
+          } else if (activeTab === "car") {
+            const availQty = carInventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+            const availVal = carInventory.reduce((s, i) => s + ((Number(i.quantity) || 0) * (Number(i.estimatedPrice) || 0)), 0);
+            const shortQty = carInventory.reduce((s, i) => s + (Number(i.neededQuantity) || 0), 0);
+            const shortVal = carInventory.filter(i => (i.neededQuantity || 0) > 0).reduce((s, i) => s + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0);
+            availCard = { title: "جاهز للسيارة", count: availQty, countLabel: "عنصر", value: availVal, color: "emerald", icon: "🚗" };
+            shortCard = { title: "نواقص السيارة", count: shortQty, countLabel: "ناقص", value: shortVal, color: "orange", icon: "🔧" };
+          } else if (activeTab === "travel") {
+            const availQty = travelInventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+            const availVal = travelInventory.reduce((s, i) => s + ((Number(i.quantity) || 0) * (Number(i.estimatedPrice) || 0)), 0);
+            const shortQty = travelInventory.reduce((s, i) => s + (Number(i.neededQuantity) || 0), 0);
+            const shortVal = travelInventory.filter(i => (i.neededQuantity || 0) > 0).reduce((s, i) => s + ((Number(i.neededQuantity) || 1) * (Number(i.estimatedPrice) || 0)), 0);
+            availCard = { title: "جاهز للسفر", count: availQty, countLabel: "مستلزم", value: availVal, color: "emerald", icon: "✈️" };
+            shortCard = { title: "نواقص السفر", count: shortQty, countLabel: "ناقص", value: shortVal, color: "orange", icon: "🎒" };
+
+          } else if (activeTab === "needs") {
+            const totalAvailQty = inventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + carInventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + travelInventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + familyNeeds.filter(n => n.status === "available").length;
+            const totalShortQty = shoppingList.reduce((s, i) => s + (Number(i.neededQuantity) || 1), 0) + familyNeeds.filter(n => n.status === "pending").length;
+            availCard = { title: "إجمالي المتوفر (منزل وعائلة)", count: totalAvailQty, countLabel: "عنصر متوفر", value: 0, color: "emerald", icon: "📦" };
+            shortCard = { title: "إجمالي النواقص والاحتياجات", count: totalShortQty, countLabel: "طلب/عنصر ناقص", value: totalNeedsAmt, color: "orange", icon: "🚨" };
+          } else if (activeTab === "debts") {
+            const myDebtsCount = debts.filter(d => d.type === "دين لي").length;
+            const onMeDebtsCount = debts.filter(d => d.type === "دين علي").length;
+            availCard = { title: "ديون لي (عند الناس)", count: myDebtsCount, countLabel: "دين", value: totalDebtsForMe, color: "emerald", icon: "📈" };
+            shortCard = { title: "ديون علي (مطلوبة مني)", count: onMeDebtsCount, countLabel: "دين", value: totalDebtsOnMe, color: "orange", icon: "📉" };
+          } else if (activeTab === "expenses") {
+            const currentExps = expenses.filter(e => isInCycle(e.date));
+            const totalExpVal = currentExps.reduce((s, e) => s + e.amount, 0);
+            availCard = { title: "المتبقي من الميزانية", count: balance >= 0 ? 1 : 0, countLabel: balance >= 0 ? "فائض" : "عجز", value: balance, color: balance >= 0 ? "emerald" : "orange", icon: "💰" };
+            shortCard = { title: "مصاريف الدورة الحالية", count: currentExps.length, countLabel: "مصروف", value: totalExpVal, color: "orange", icon: "💸" };
+          } else if (activeTab === "income") {
+            const currentIncomes = incomes.filter(i => isInCycle(i.date));
+            const totalIncVal = currentIncomes.reduce((s, i) => s + i.amount, 0);
+            availCard = { title: "دخل الدورة الحالية", count: currentIncomes.length, countLabel: "مصدر دخل", value: totalIncVal, color: "emerald", icon: "💵" };
+            shortCard = { title: "الميزانية المتاحة للصرف", count: 1, countLabel: "رصيد", value: balance, color: "emerald", icon: "🏦" };
+          } else if (activeTab === "installments") {
+            const activeInst = installments.filter(i => i.remainingAmount > 0);
+            const totalRemaining = activeInst.reduce((s, i) => s + i.remainingAmount, 0);
+            const monthlyTotal = activeInst.reduce((s, i) => s + i.monthlyInstallment, 0);
+            availCard = { title: "الأقساط النشطة", count: activeInst.length, countLabel: "قسط نشط", value: totalRemaining, color: "orange", icon: "💳" };
+            shortCard = { title: "إجمالي القسط الشهري", count: activeInst.length, countLabel: "شهرياً", value: monthlyTotal, color: "orange", icon: "📅" };
+          } else if (activeTab === "bills") {
+            const unpaidCount = bills.filter(b => !isBillPaidThisCycle(b)).length;
+            availCard = { title: "الفواتير المدفوعة هذا الشهر", count: bills.length - unpaidCount, countLabel: "فاتورة", value: bills.filter(b => isBillPaidThisCycle(b)).reduce((s, b) => s + b.amount, 0), color: "emerald", icon: "✅" };
+            shortCard = { title: "الفواتير المتبقية للدفع", count: unpaidCount, countLabel: "غير مدفوع", value: unpaidBillsAmt, color: "orange", icon: "🧾" };
+          } else {
+            return null;
+          }
+
+          return (
+            <div className="grid grid-cols-2 gap-3">
+              {/* Card 1: المتوفر / الإيجابي */}
+              <div className="bg-gradient-to-br from-emerald-950/80 via-zinc-900 to-zinc-900 dark:from-emerald-950/50 dark:to-zinc-900/90 border border-emerald-500/30 rounded-3xl p-3 sm:p-4 text-white shadow-lg relative overflow-hidden flex flex-col justify-between">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1.5">
+                    <span>{availCard.icon}</span>
+                    <span>{availCard.title}</span>
+                  </span>
+                  <div className="text-left">
+                    <span className="text-2xl font-black text-white">{availCard.count}</span>
+                    <span className="text-[10px] text-gray-400 block font-bold">{availCard.countLabel}</span>
+                  </div>
+                </div>
+                {availCard.value !== 0 ? (
+                  <div className="mt-3 pt-2 border-t border-emerald-500/10 flex justify-between items-baseline">
+                    <span className="text-[11px] font-bold text-gray-400">القيمة التقديرية / الرصيد:</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-lg font-black text-emerald-300">{fmt(availCard.value)}</span>
+                      <span className="text-[10px] text-emerald-400 font-bold">د.ع</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 pt-2 border-t border-emerald-500/10 flex justify-between items-baseline">
+                    <span className="text-[11px] font-bold text-gray-500">الحالة:</span>
+                    <span className="text-xs font-bold text-emerald-400">محدث أولاً بأول</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Card 2: النواقص / المطلوب */}
+              <div className="bg-gradient-to-br from-red-950/80 via-zinc-900 to-zinc-900 dark:from-red-950/50 dark:to-zinc-900/90 border border-red-500/30 rounded-3xl p-3 sm:p-4 text-white shadow-lg relative overflow-hidden flex flex-col justify-between">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-black text-red-400 bg-red-500/10 dark:bg-red-500/20 px-3 py-1 rounded-full border border-red-500/30 flex items-center gap-1.5">
+                    <span>{shortCard.icon}</span>
+                    <span>{shortCard.title}</span>
+                  </span>
+                  <div className="text-left">
+                    <span className="text-2xl font-black text-white">{shortCard.count}</span>
+                    <span className="text-[10px] text-gray-400 block font-bold">{shortCard.countLabel}</span>
+                  </div>
+                </div>
+                {shortCard.value !== 0 ? (
+                  <div className="mt-3 pt-2 border-t border-red-500/10 flex justify-between items-baseline">
+                    <span className="text-[11px] font-bold text-gray-400">التكلفة / المطلوب:</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-lg font-black text-red-300">{fmt(shortCard.value)}</span>
+                      <span className="text-[10px] text-red-400 font-bold">د.ع</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 pt-2 border-t border-red-500/10 flex justify-between items-baseline">
+                    <span className="text-[11px] font-bold text-gray-500">الحالة:</span>
+                    <span className="text-xs font-bold text-green-400">لا توجد نواقص معلقة 🎉</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ═══════════════ OVERVIEW TAB ═══════════════ */}
+        {activeTab === "overview" && (
+          <div className="space-y-4">
+
+            {/* Quick Actions Grid */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "مصروف", icon: TrendingDown, color: "from-rose-500 to-pink-500", action: () => setShowExpenseModal(true) },
+                { label: "واجبات عائلة", icon: Users, color: "from-purple-500 to-indigo-500", action: () => setShowFamilyNeedModal(true) },
+                { label: "احتياج ونواقص", icon: ShoppingCart, color: "from-orange-500 to-amber-500", action: () => setShowNeedModal(true) },
+                { label: "قسط / سلفة", icon: CreditCard, color: "from-indigo-500 to-violet-500", action: () => setShowInstallmentModal(true) },
+                { label: "فاتورة", icon: Receipt, color: "from-amber-500 to-yellow-500", action: () => setShowBillModal(true) },
+                { label: "إضافة دخل", icon: TrendingUp, color: "from-emerald-500 to-teal-500", action: () => setShowIncomeModal(true) },
+                { label: "دين", icon: Banknote, color: "from-cyan-500 to-blue-500", action: () => setShowDebtModal(true) },
+                { label: "خطة مستقبلية", icon: Target, color: "from-fuchsia-500 to-pink-500", action: () => setShowFuturePlanModal(true) },
+                { label: "رحلة ومصاريف", icon: Plane, color: "from-sky-500 to-blue-500", action: () => setShowTravelShortcutModal(true) },
+              ].map(q => {
+                const Icon = q.icon;
+                return (
+                  <button key={q.label} onClick={q.action}
+                    className={`bg-gradient-to-br ${q.color} rounded-2xl p-3 text-white shadow-lg active:scale-95 transition flex flex-col items-center gap-1.5`}>
+                    <Icon className="w-5 h-5" />
+                    <span className="text-[10px] font-black text-center">{q.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+
+
+            {/* Alerts Banner */}
+            {(unpaidBillsCount > 0 || delayedInstallmentsCount > 0 || totalShortages > 0) && (
+              <div className="bg-gradient-to-br from-rose-500 to-orange-500 rounded-3xl p-5 shadow-[0_8px_30px_rgb(244,63,94,0.3)] space-y-3 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none -mr-10 -mt-10" />
+
         )}
 
         {/* ═══════════════ INCOME TAB ═══════════════ */}

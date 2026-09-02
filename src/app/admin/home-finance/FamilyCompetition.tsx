@@ -108,11 +108,11 @@ export default function FamilyCompetition() {
     if (!activeRound?.id) return;
     const q = query(
       collection(db, "familyCompetitionEntries"),
-      where("roundId", "==", activeRound.id),
-      orderBy("createdAt", "desc")
+      where("roundId", "==", activeRound.id)
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FamilyCompetitionEntry)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FamilyCompetitionEntry));
+      setEntries(data.sort((a, b) => (b.createdAt?.toMillis?.() || Date.now()) - (a.createdAt?.toMillis?.() || Date.now())));
     });
     return () => unsubscribe();
   }, [activeRound?.id]);
