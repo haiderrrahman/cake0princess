@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Camera, Upload, Phone, User, Calendar, Tag, Coins, Loader2 } from "lucide-react";
+import { Camera, Upload, Phone, User, Calendar, Tag, Coins, Loader2, MapPin } from "lucide-react";
 import { collection, addDoc, updateDoc, serverTimestamp, getDocs, doc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
