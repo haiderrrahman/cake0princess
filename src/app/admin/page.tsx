@@ -38,54 +38,144 @@ export default function AdminDashboard() {
   });
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const [ordersSnap, extSnap, expSnap, storeSnap] = await Promise.all([
-          getDocs(collection(db, "orders")),
-          getDocs(collection(db, "external_orders")),
-          getDocs(collection(db, "expenses")),
-          getDocs(collection(db, "store_sales")),
-        ]);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-        const orders = ordersSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-        const externalOrders = extSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-        const expenses = expSnap.docs.map(d => d.data());
-        const storeSales = storeSnap.docs.map(d => d.data());
+    let currentOrders: any[] = [];
+    let currentExtOrders: any[] = [];
+    let currentExpenses: any[] = [];
+    let currentStoreSales: any[] = [];
 
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const calculateStats = () => {
+      let todaySales = 0, weekSales = 0, monthSales = 0, totalRevenue = 0, totalProfit = 0;
+      let social = 0, appCakes = 0, appAcademy = 0, storeSupplies = 0;
+      
+      let socialReceived = 0, appReceived = 0, suppliesReceived = 0;
 
-        let todaySales = 0, weekSales = 0, monthSales = 0, totalRevenue = 0, totalProfit = 0;
-        let social = 0, appCakes = 0, appAcademy = 0, storeSupplies = 0;
+      currentExtOrders.forEach(o => {
+        const isDelivered = o.status === 'delivered' || o.status === 'completed';
+        if (!isDelivered) return;
 
-        const processOrder = (o: any, isExternal: boolean) => {
-          if (["rejected", "cancelled"].includes(o.status)) return;
-          const amt = Number(isExternal ? o.price : (o.toPayNow || o.total)) || 0;
-          const profit = Number(isExternal ? o.profit : (amt * 0.3)) || 0;
-          const isDelivered = o.status === 'delivered' || o.status === 'completed';
-          if (isDelivered) {
-            totalRevenue += amt;
-            totalProfit += profit;
-            
-            if (isExternal) {
-              social += amt;
-            } else {
-              if (o.type === 'course') appAcademy += amt;
-              else appCakes += amt;
-            }
+        const price = Number(o.price || 0);
+        const paid = Number(o.paidAmount ?? price);
+        const isDebt = o.paidAmount !== undefined && paid !== price && !o.isDebtSettled;
 
-            const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
-            d.setHours(0, 0, 0, 0);
-            if (d.getTime() === today.getTime()) todaySales += amt;
-            if (d >= weekAgo) weekSales += amt;
-            if (d >= monthAgo) monthSales += amt;
-          }
-        };
+        let received = price;
+        if (isDebt) {
+          const diff = price - paid;
+          if (diff > 0) received = paid; // Customer owes us
+          else received = price; // We owe customer
+        }
 
-        orders.forEach(o => processOrder(o, false));
-        externalOrders.forEach(o => {
-          processOrder(o, true);
+        socialReceived += received;
+        social += price; // Use full price for breakdown
+        totalProfit += Number(o.profit || 0);
+
+        const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        d.setHours(0, 0, 0, 0);
+        if (d.getTime() === today.getTime()) todaySales += price;
+        if (d >= weekAgo) weekSales += price;
+        if (d >= monthAgo) monthSales += price;
+      });
+
+      // ── App Orders (orders) ──
+      currentOrders.forEach(o => {
+        const isDelivered = o.status === 'delivered' || o.status === 'completed';
+        if (!isDelivered) return;
+
+        const hasSupplies = o.items?.some((i: any) => i.isSupply || i.category === 'supplies' || i.id?.includes('supply'));
+        const hasCourses = o.items?.some((i: any) => i.type === 'course');
+        if (hasCourses && !hasSupplies && o.items?.length === 1) {
+          // Pure academy - maybe count? We need to count it in breakdown
+        }
+
+        const total = Number(o.total || o.toPayNow || 0);
+        const isDebt = o.isDebt === true;
+        const debtAmount = Number(o.debtAmount || 0);
+        const weOwe = o.customerOwesUs === false;
+
+        let received = total;
+        if (isDebt && debtAmount > 0) {
+          if (weOwe) received = total;
+          else received = total - debtAmount;
+        }
+
+        appReceived += received;
+        if (hasCourses && !hasSupplies && o.items?.length === 1) {
+          appAcademy += received;
+        } else if (hasSupplies) {
+          appCakes += received; // Wait, actually the app cakes breakdown
+        } else {
+          appCakes += received;
+        }
+
+        totalProfit += (total * 0.3); // App profit estimate
+
+        const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        d.setHours(0, 0, 0, 0);
+        if (d.getTime() === today.getTime()) todaySales += received;
+        if (d >= weekAgo) weekSales += received;
+        if (d >= monthAgo) monthSales += received;
+      });
+
+      // ── Store Sales (store_sales) ──
+      currentStoreSales.forEach(o => {
+        if (["rejected", "cancelled"].includes(o.status)) return;
+        const amt = Number(o.price || 0);
+        const profit = Number(o.profit || 0);
+        
+        suppliesReceived += amt;
+        storeSupplies += amt;
+        totalProfit += profit;
+
+        const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || o.date || 0);
+        d.setHours(0, 0, 0, 0);
+        if (d.getTime() === today.getTime()) todaySales += amt;
+        if (d >= weekAgo) weekSales += amt;
+        if (d >= monthAgo) monthSales += amt;
+      });
+
+      totalRevenue = socialReceived + appReceived + suppliesReceived;
+
+      const totalExpenses = currentExpenses.filter(e => !e.isDebt).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      const totalSalaryDebt = currentExpenses.filter(e => e.isDebt).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      const cakeMaterialsExpense = currentExpenses.filter(e => {
+        const cat = e.category || "";
+        const desc = e.description || e.title || "";
+        return cat === "مشتريات مخزنية" || cat === "مواد الكيك" || cat === "مواد كيك" || cat === "المواد الأولية (كيك وكريمة)" || 
+               desc.includes("المخزن") || desc.includes("مادة") || desc.includes("مواد");
+      }).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+      const netProfit = totalProfit - totalExpenses; // Profit minus expenses
+      
+      const result = {
+        todaySales, weekSales, monthSales,
+        totalRevenue, netProfit, totalExpenses,
+        totalSalaryDebt, cakeMaterialsExpense,
+        breakdown: { social, appCakes, appAcademy, storeSupplies }
+      };
+
+      setRealStats(result);
+      setStatsLoading(false);
+      try { localStorage.setItem('admin_dashboard_stats', JSON.stringify(result)); } catch {}
+    };
+
+    import("firebase/firestore").then(({ onSnapshot, query, orderBy, limit }) => {
+      const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200));
+      const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(200));
+      const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(200));
+      const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(200));
+
+      const unsubOrders = onSnapshot(qOrders, (snap) => {
+        currentOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        calculateStats();
+      });
+      const unsubExt = onSnapshot(qExt, (snap) => {
+        currentExtOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        // Notifications Logic
+        currentExtOrders.forEach(o => {
           if (o.deliveryDate) {
             const deliveryDateObj = new Date(o.deliveryDate);
             const now = new Date();
@@ -110,47 +200,32 @@ export default function AdminDashboard() {
             }
           }
         });
+        
+        calculateStats();
+      });
+      const unsubExp = onSnapshot(qExp, (snap) => {
+        currentExpenses = snap.docs.map(d => d.data());
+        calculateStats();
+      });
+      const unsubStore = onSnapshot(qStore, (snap) => {
+        currentStoreSales = snap.docs.map(d => d.data());
+        calculateStats();
+      });
 
-        storeSales.forEach(o => {
-          if (["rejected", "cancelled"].includes(o.status)) return;
-          const amt = Number(o.price) || 0;
-          const profit = Number(o.profit) || 0;
-          totalRevenue += amt;
-          totalProfit += profit;
-          storeSupplies += amt;
-          
-          const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || o.date || 0);
-          d.setHours(0, 0, 0, 0);
-          if (d.getTime() === today.getTime()) todaySales += amt;
-          if (d >= weekAgo) weekSales += amt;
-          if (d >= monthAgo) monthSales += amt;
-        });
+      // Quick entry background refresh
+      const handleBackgroundUpload = () => {
+        // With onSnapshot, it will auto-update, but we keep this for consistency if needed.
+      };
+      window.addEventListener('backgroundUploadSuccess', handleBackgroundUpload);
 
-        const totalExpenses = expenses.filter((e: any) => !e.isDebt).reduce((sum, e: any) => sum + (Number(e.amount) || 0), 0);
-        const totalSalaryDebt = expenses.filter((e: any) => e.isDebt).reduce((s, e: any) => s + (Number(e.amount) || 0), 0);
-        const cakeMaterialsExpense = expenses.filter((e: any) => {
-          const cat = e.category || "";
-          const desc = e.description || e.title || "";
-          return cat === "مشتريات مخزنية" || cat === "مواد الكيك" || cat === "مواد كيك" || cat === "المواد الأولية (كيك وكريمة)" || 
-                 desc.includes("المخزن") || desc.includes("مادة") || desc.includes("مواد");
-        }).reduce((s, e: any) => s + (Number(e.amount) || 0), 0);
-        const netProfit = totalRevenue - totalExpenses - totalSalaryDebt;
-
-        const result = { 
-          todaySales, weekSales, monthSales, 
-          totalRevenue, netProfit, totalExpenses, 
-          totalSalaryDebt, cakeMaterialsExpense,
-          breakdown: { social, appCakes, appAcademy, storeSupplies } 
-        };
-        setRealStats(result);
-        // Cache for instant next load
-        try { localStorage.setItem('admin_dashboard_stats', JSON.stringify(result)); } catch {}
-      } catch (e) {
-        console.error("Stats fetch error:", e);
-      }
-      setStatsLoading(false);
-    };
-    fetchStats();
+      return () => {
+        unsubOrders();
+        unsubExt();
+        unsubExp();
+        unsubStore();
+        window.removeEventListener('backgroundUploadSuccess', handleBackgroundUpload);
+      };
+    });
   }, []);
 
   if (!isAdmin) {

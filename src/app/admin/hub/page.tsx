@@ -97,6 +97,7 @@ function AdminHubContent() {
     }
     return [];
   });
+  const [storeSales, setStoreSales] = useState<any[]>([]);
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
   const [settleOrder, setSettleOrder] = useState<any>(null);
   const [settleOrderType, setSettleOrderType] = useState<"external" | "app" | null>(null);
@@ -177,209 +178,18 @@ function AdminHubContent() {
   }, [externalOrders]);
 
   const fetchAll = useCallback(async () => {
-    if (orders.length === 0 && externalOrders.length === 0) {
-      setLoading(true);
-    }
     try {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const weekAgo = new Date(Date.now() - 7 * 86400000);
-
-      // Fast crucial data
-      const [ordersSnap, extSnap, customSnap] = await Promise.all([
-        getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(100))),
-        getDocs(query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100))),
-        getDocs(query(collection(db, "custom_orders"), orderBy("createdAt", "desc"), limit(100)))
+      const [customSnap, coursesSnap] = await Promise.all([
+        getDocs(query(collection(db, "custom_orders"), orderBy("createdAt", "desc"), limit(100))),
+        getDocs(collection(db, "courses"))
       ]);
-
-      const allOrders = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-      setOrders(allOrders);
-      try {
-        const cleanOrders = allOrders.slice(0, 20).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
-        localStorage.setItem("cache_orders", JSON.stringify(cleanOrders));
-      } catch (e) {}
-
-      const allExt = extSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-      setExternalOrders(allExt);
-      try {
-        const cleanExt = allExt.slice(0, 20).map(o => ({ ...o, tempImageUrl: o.imageUrl ? undefined : o.tempImageUrl }));
-        localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
-      } catch (e) {}
-
-      const allCustom = customSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-      setCustomOrders(allCustom);
-
-      // Unblock UI immediately
+      setCustomOrders(customSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setCourses(coursesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
-
-      // Fetch heavy/secondary data in background
-      Promise.all([
-        getDocs(collection(db, "courses")),
-        getDocs(collection(db, "store_sales"))
-      ]).then(([coursesSnap, storeSnap]) => {
-        const allCourses = coursesSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-        setCourses(allCourses);
-        const allStoreSales = storeSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-
-      // Stats and Notifications
-      let todaySales = 0, weekSales = 0, monthSales = 0, allTimeSales = 0;
-      let todayExtSales = 0, weekExtSales = 0, monthExtSales = 0, allTimeExtSales = 0;
-      let extOweUs = 0, extWeOwe = 0;
-      
-      let breakdown = { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 };
-      let totalProfit = 0;
-
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      const pendingOrders = allOrders.filter(o => ["pending", "processing"].includes(o.status));
-      
-      const calcSales = (o: any, amt: number, isExternal: boolean) => {
-        const isDelivered = o.status === 'delivered' || o.status === 'completed';
-        if (!isDelivered) return;
-        
-        const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
-        d.setHours(0,0,0,0);
-        
-        if (isExternal) {
-          allTimeExtSales += amt;
-          if (d.getTime() === today.getTime()) todayExtSales += amt;
-          if (d >= weekAgo) weekExtSales += amt;
-          if (d >= thirtyDaysAgo) monthExtSales += amt;
-        } else {
-          allTimeSales += amt;
-          if (d.getTime() === today.getTime()) todaySales += amt;
-          if (d >= weekAgo) weekSales += amt;
-          if (d >= thirtyDaysAgo) monthSales += amt;
-        }
-      };
-
-      allOrders.forEach(o => {
-        if (["rejected", "cancelled"].includes(o.status)) return;
-        const amt = Number(o.toPayNow) || Number(o.total) || 0;
-        calcSales(o, amt, false);
-        
-        const isDelivered = o.status === 'delivered' || o.status === 'completed';
-        if (isDelivered) {
-          totalProfit += (amt * 0.3); // Rough estimate for app profit
-        }
-        
-        if (o.items && Array.isArray(o.items)) {
-           let hasAcademy = o.items.some((i: any) => i.type === "course" || i.id?.includes("course"));
-           let hasSupplies = o.items.some((i: any) => i.type === "supply" || i.id?.includes("supply"));
-           if (hasAcademy) breakdown.appAcademy += amt;
-           else if (hasSupplies) breakdown.appSupplies += amt;
-           else breakdown.appCakes += amt;
-        } else {
-           breakdown.appCakes += amt;
-        }
-      });
-      
-      allExt.forEach(o => {
-        if (["rejected", "cancelled"].includes(o.status)) return;
-        const amt = o.paidAmount !== undefined ? Number(o.paidAmount) : (Number(o.price) || 0);
-        const price = Number(o.price) || 0;
-        
-        const isDelivered = o.status === 'delivered' || o.status === 'completed';
-        
-        if (isDelivered && amt !== price && !o.isDebtSettled) {
-          if (amt < price) {
-            extOweUs += (price - amt);
-          } else if (amt > price) {
-            extWeOwe += (amt - price);
-          }
-        }
-
-        calcSales(o, amt, true);
-        if (isDelivered) {
-          totalProfit += Number(o.profit) || 0;
-        }
-        breakdown.social += amt;
-      });
-
-      allStoreSales.forEach(o => {
-        const amt = Number(o.price) || 0;
-        const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0);
-        d.setHours(0,0,0,0);
-        
-        allTimeSales += amt; // Add to all time sales
-        if (d.getTime() === today.getTime()) todaySales += amt;
-        if (d >= weekAgo) weekSales += amt;
-        if (d >= thirtyDaysAgo) monthSales += amt;
-        
-        totalProfit += Number(o.profit) || 0;
-        breakdown.storeSupplies += amt;
-      });
-
-      // Notification Logic for External Orders
-      allExt.forEach(o => {
-        const rawDate = o.deliveryDate || o.deliveryTime;
-        if (rawDate) {
-          const deliveryDateObj = new Date(rawDate);
-          const now = new Date();
-          const diffMs = deliveryDateObj.getTime() - now.getTime();
-          const diffHours = diffMs / (1000 * 60 * 60);
-          
-          let title = "";
-          let message = "";
-          let updateObj: any = null;
-
-          if (diffHours <= 1 && diffHours >= 0 && !o.notified1h) {
-             title = `طلب الزبون: ${o.customerName || 'مجهول'} ⚠️`;
-             message = `الوقت يقترب! يجب تسليم كيكة (${o.cakeName || 'بدون اسم'}) بعد ساعة.`;
-             updateObj = { notified1h: true };
-          } else if (diffHours <= 10 && diffHours > 1 && !o.notified10h) {
-             title = `طلب الزبون: ${o.customerName || 'مجهول'} ⚠️`;
-             message = `يجب إكمال كيكة (${o.cakeName || 'بدون اسم'}) الآن!`;
-             updateObj = { notified10h: true };
-          } else if (diffHours <= 24 && diffHours > 10 && !o.notified24h) {
-             title = `طلب الزبون: ${o.customerName || 'مجهول'} ⚠️`;
-             message = `تذكير: يجب تحضير كيكة (${o.cakeName || 'بدون اسم'}) بسرعة.`;
-             updateObj = { notified24h: true };
-          }
-
-          if (updateObj) {
-            addDoc(collection(db, "notifications"), {
-              userId: "admin",
-              title,
-              message,
-              type: "order",
-              imageUrl: o.imageUrl || "",
-              customerName: o.customerName || "",
-              read: false,
-              link: "/admin/hub?tab=external",
-              createdAt: serverTimestamp()
-            });
-            updateDoc(doc(db, "external_orders", o.id || o._id), updateObj).catch(console.error);
-          }
-        }
-      });
-
-      // thirtyDaysAgo is already defined and set on line 124
-      const recentExt = allExt.filter(o => {
-        if (!o.createdAt) return false;
-        const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0);
-        return d >= thirtyDaysAgo;
-      });
-
-      const externalSales = recentExt.reduce((s, o) => s + Number(o.price || 0), 0);
-      const externalProfit = recentExt.reduce((s, o) => s + Number(o.profit || 0), 0);
-      
-      const pendingExtOrders = allExt.filter(o => ["pending", "processing"].includes(o.status || 'pending')).length;
-
-      setStats((prev: any) => ({
-        ...prev,
-        todaySales, weekSales, monthSales, allTimeSales, 
-        todayExtSales, weekExtSales, monthExtSales, allTimeExtSales, 
-        extOweUs, extWeOwe,
-        totalOrders: allOrders.length, pendingOrders: pendingOrders.length, 
-        pendingExtOrders, externalSales, externalProfit, 
-        totalProfit, netProfit: totalProfit - prev.expenses, breakdown 
-      }));
-      });
     } catch (e) {
       console.error(e);
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -470,15 +280,143 @@ function AdminHubContent() {
     };
   }, [fetchAll]);
 
-  // Real-time listener for external orders to prevent stale cache issues
+  // Real-time listeners for orders, external_orders, and store_sales
   useEffect(() => {
-    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
-    const unsub = onSnapshot(q, (snap) => {
+    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
+    const unsubExt = onSnapshot(qExt, (snap) => {
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setExternalOrders(allExt);
     });
-    return () => unsub();
+
+    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200));
+    const unsubOrders = onSnapshot(qOrders, (snap) => {
+      const allOrd = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      setOrders(allOrd);
+    });
+
+    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100));
+    const unsubStore = onSnapshot(qStore, (snap) => {
+      const allStore = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      setStoreSales(allStore);
+    });
+
+    return () => { unsubExt(); unsubOrders(); unsubStore(); };
   }, []);
+
+  // Reactive Stats Calculation
+  useEffect(() => {
+    let todaySales = 0, weekSales = 0, monthSales = 0, allTimeSales = 0;
+    let todayExtSales = 0, weekExtSales = 0, monthExtSales = 0, allTimeExtSales = 0;
+    let extOweUs = 0, extWeOwe = 0;
+    
+    let breakdown = { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 };
+    let totalProfit = 0;
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const weekAgo = new Date(Date.now() - 7 * 86400000);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const pendingOrders = orders.filter(o => ["pending", "processing"].includes(o.status));
+    
+    const calcSales = (o: any, amt: number, isExternal: boolean) => {
+      const isDelivered = o.status === 'delivered' || o.status === 'completed';
+      if (!isDelivered) return;
+      
+      const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+      d.setHours(0,0,0,0);
+      
+      if (isExternal) {
+        allTimeExtSales += amt;
+        if (d.getTime() === today.getTime()) todayExtSales += amt;
+        if (d >= weekAgo) weekExtSales += amt;
+        if (d >= thirtyDaysAgo) monthExtSales += amt;
+      } else {
+        allTimeSales += amt;
+        if (d.getTime() === today.getTime()) todaySales += amt;
+        if (d >= weekAgo) weekSales += amt;
+        if (d >= thirtyDaysAgo) monthSales += amt;
+      }
+    };
+
+    orders.forEach(o => {
+      if (["rejected", "cancelled"].includes(o.status)) return;
+      const amt = Number(o.toPayNow) || Number(o.total) || 0;
+      calcSales(o, amt, false);
+      
+      const isDelivered = o.status === 'delivered' || o.status === 'completed';
+      if (isDelivered) {
+        totalProfit += (amt * 0.3); // Rough estimate for app profit
+      }
+      
+      if (o.items && Array.isArray(o.items)) {
+         let hasAcademy = o.items.some((i: any) => i.type === "course" || i.id?.includes("course"));
+         let hasSupplies = o.items.some((i: any) => i.type === "supply" || i.id?.includes("supply"));
+         if (hasAcademy) breakdown.appAcademy += amt;
+         else if (hasSupplies) breakdown.appSupplies += amt;
+         else breakdown.appCakes += amt;
+      } else {
+         breakdown.appCakes += amt;
+      }
+    });
+    
+    externalOrders.forEach(o => {
+      if (["rejected", "cancelled"].includes(o.status)) return;
+      const amt = o.paidAmount !== undefined ? Number(o.paidAmount) : (Number(o.price) || 0);
+      const price = Number(o.price) || 0;
+      
+      const isDelivered = o.status === 'delivered' || o.status === 'completed';
+      
+      if (isDelivered && amt !== price && !o.isDebtSettled) {
+        if (amt < price) {
+          extOweUs += (price - amt);
+        } else if (amt > price) {
+          extWeOwe += (amt - price);
+        }
+      }
+
+      calcSales(o, price, true); // Use full price for sales metrics
+      if (isDelivered) {
+        totalProfit += Number(o.profit) || 0;
+      }
+      breakdown.social += price; // Use full price for breakdown
+    });
+
+    storeSales.forEach(o => {
+      const amt = Number(o.price) || 0;
+      const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0);
+      d.setHours(0,0,0,0);
+      
+      allTimeSales += amt; 
+      if (d.getTime() === today.getTime()) todaySales += amt;
+      if (d >= weekAgo) weekSales += amt;
+      if (d >= thirtyDaysAgo) monthSales += amt;
+      
+      totalProfit += Number(o.profit) || 0;
+      breakdown.storeSupplies += amt;
+    });
+
+    const recentExt = externalOrders.filter(o => {
+      if (!o.createdAt) return false;
+      const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0);
+      return d >= thirtyDaysAgo;
+    });
+
+    const externalSales = recentExt.reduce((s, o) => s + Number(o.price || 0), 0);
+    const externalProfit = recentExt.reduce((s, o) => s + Number(o.profit || 0), 0);
+    
+    const pendingExtOrders = externalOrders.filter(o => ["pending", "processing"].includes(o.status || 'pending')).length;
+
+    setStats((prev: any) => ({
+      ...prev,
+      todaySales, weekSales, monthSales, allTimeSales, 
+      todayExtSales, weekExtSales, monthExtSales, allTimeExtSales, 
+      extOweUs, extWeOwe,
+      totalOrders: orders.length, pendingOrders: pendingOrders.length, 
+      pendingExtOrders, externalSales, externalProfit, 
+      totalProfit, netProfit: totalProfit - prev.expenses, breakdown 
+    }));
+  }, [orders, externalOrders, storeSales]);
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     if (newStatus === "delivered" || newStatus === "completed") {
