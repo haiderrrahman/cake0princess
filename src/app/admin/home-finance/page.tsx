@@ -13,6 +13,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { customConfirm } from "@/lib/customConfirm";
 import { db, storage } from "@/lib/firebase";
+import FamilyCompetition from "./FamilyCompetition";
+import FamilyCompetitionOverview from "./FamilyCompetitionOverview";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
@@ -2324,6 +2326,11 @@ setEditTrip(null);
               })}
             </div>
 
+            {/* Family Competition Overview */}
+            <div className="mb-4">
+              <FamilyCompetitionOverview onClick={() => setActiveTab("familyNeeds")} />
+            </div>
+
             {/* Alerts Banner */}
             {(unpaidBillsCount > 0 || delayedInstallmentsCount > 0 || totalShortages > 0) && (
               <div className="bg-gradient-to-br from-rose-500 to-orange-500 rounded-3xl p-5 shadow-[0_8px_30px_rgb(244,63,94,0.3)] space-y-3 relative overflow-hidden">
@@ -4044,6 +4051,11 @@ setEditTrip(null);
               </div>
             </div>
             
+            {/* Family Competition Feature */}
+            <div className="mb-8">
+              <FamilyCompetition />
+            </div>
+
             {/* Member Tabs - Wrapped exactly like the user's mockup */}
             <div className="flex flex-wrap justify-center pb-4 pt-2 gap-3 px-2">
               {FAMILY_MEMBERS.map(member => {

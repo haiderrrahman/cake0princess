@@ -45,5 +45,13 @@ service cloud.firestore {
       // Allow creation if the user is setting their own ID
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
     }
+
+    // Family Competition
+    match /familyCompetitionRounds/{roundId} {
+      allow read, write: if isAdmin();
+    }
+    match /familyCompetitionEntries/{entryId} {
+      allow read, write: if isAdmin();
+    }
   }
 }
