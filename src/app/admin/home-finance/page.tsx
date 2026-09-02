@@ -2292,6 +2292,30 @@ setEditTrip(null);
         {activeTab === "overview" && (
           <div className="space-y-4">
 
+            {/* Quick Actions Grid */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "مصروف", icon: TrendingDown, color: "from-rose-500 to-pink-500", action: () => setShowExpenseModal(true) },
+                { label: "واجبات عائلة", icon: Users, color: "from-purple-500 to-indigo-500", action: () => setShowFamilyNeedModal(true) },
+                { label: "احتياج ونواقص", icon: ShoppingCart, color: "from-orange-500 to-amber-500", action: () => setShowNeedModal(true) },
+                { label: "قسط / سلفة", icon: CreditCard, color: "from-indigo-500 to-violet-500", action: () => setShowInstallmentModal(true) },
+                { label: "فاتورة", icon: Receipt, color: "from-amber-500 to-yellow-500", action: () => setShowBillModal(true) },
+                { label: "إضافة دخل", icon: TrendingUp, color: "from-emerald-500 to-teal-500", action: () => setShowIncomeModal(true) },
+                { label: "دين", icon: Banknote, color: "from-cyan-500 to-blue-500", action: () => setShowDebtModal(true) },
+                { label: "خطة مستقبلية", icon: Target, color: "from-fuchsia-500 to-pink-500", action: () => setShowFuturePlanModal(true) },
+                { label: "رحلة ومصاريف", icon: Plane, color: "from-sky-500 to-blue-500", action: () => setShowTravelShortcutModal(true) },
+              ].map(q => {
+                const Icon = q.icon;
+                return (
+                  <button key={q.label} onClick={q.action}
+                    className={`bg-gradient-to-br ${q.color} rounded-2xl p-3 text-white shadow-lg active:scale-95 transition flex flex-col items-center gap-1.5`}>
+                    <Icon className="w-5 h-5" />
+                    <span className="text-[10px] font-black text-center">{q.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Financial Cycle moved from Header */}
           <div className="relative bg-gradient-to-br from-[#1a0533] via-[#2d1060] to-[#0f3460] rounded-[2rem] p-5 shadow-2xl overflow-hidden mt-6 mb-4">
             <div className="relative z-10 mb-4 bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/20 flex flex-col md:flex-row items-center justify-between gap-3">
@@ -2493,30 +2517,6 @@ setEditTrip(null);
           </div>
         </div>
           </div>
-            {/* Quick Actions Grid */}
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: "مصروف", icon: TrendingDown, color: "from-rose-500 to-pink-500", action: () => setShowExpenseModal(true) },
-                { label: "واجبات عائلة", icon: Users, color: "from-purple-500 to-indigo-500", action: () => setShowFamilyNeedModal(true) },
-                { label: "احتياج ونواقص", icon: ShoppingCart, color: "from-orange-500 to-amber-500", action: () => setShowNeedModal(true) },
-                { label: "قسط / سلفة", icon: CreditCard, color: "from-indigo-500 to-violet-500", action: () => setShowInstallmentModal(true) },
-                { label: "فاتورة", icon: Receipt, color: "from-amber-500 to-yellow-500", action: () => setShowBillModal(true) },
-                { label: "إضافة دخل", icon: TrendingUp, color: "from-emerald-500 to-teal-500", action: () => setShowIncomeModal(true) },
-                { label: "دين", icon: Banknote, color: "from-cyan-500 to-blue-500", action: () => setShowDebtModal(true) },
-                { label: "خطة مستقبلية", icon: Target, color: "from-fuchsia-500 to-pink-500", action: () => setShowFuturePlanModal(true) },
-                { label: "رحلة ومصاريف", icon: Plane, color: "from-sky-500 to-blue-500", action: () => setShowTravelShortcutModal(true) },
-              ].map(q => {
-                const Icon = q.icon;
-                return (
-                  <button key={q.label} onClick={q.action}
-                    className={`bg-gradient-to-br ${q.color} rounded-2xl p-3 text-white shadow-lg active:scale-95 transition flex flex-col items-center gap-1.5`}>
-                    <Icon className="w-5 h-5" />
-                    <span className="text-[10px] font-black text-center">{q.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
             {/* Family Competition Overview */}
             <div className="mb-4">
               <FamilyCompetitionOverview onClick={() => setActiveTab("familyNeeds")} />

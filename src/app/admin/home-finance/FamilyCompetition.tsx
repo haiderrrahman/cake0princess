@@ -237,7 +237,7 @@ export default function FamilyCompetition() {
         let resultType = "no_winner";
         let finalWinner = null;
 
-        if (highestScore >= targetPoints) {
+        if (highestScore >= 8) {
           if (winners.length === 1) {
             resultType = "winner";
             finalWinner = winners[0];
@@ -284,7 +284,7 @@ export default function FamilyCompetition() {
           <div>
             <h2 className="text-xl font-black text-gray-800 dark:text-white">منافسة العائلة</h2>
             {activeRound ? (
-              <p className="text-sm font-bold text-yellow-700/80 dark:text-yellow-400/80">الجولة رقم {activeRound.roundNumber} - شرط الفوز الأدنى: {activeRound.targetPoints} نقاط</p>
+              <p className="text-sm font-bold text-yellow-700/80 dark:text-yellow-400/80">الجولة رقم {activeRound.roundNumber} - شرط الفوز الأدنى: 8 نقاط</p>
             ) : (
               <p className="text-sm font-bold text-gray-500">لا توجد جولة نشطة حالياً</p>
             )}
@@ -331,7 +331,7 @@ export default function FamilyCompetition() {
               {/* Ranking & Actions */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {rankedParticipants.map((rp, index) => {
-                  const isWinner = rp.points >= activeRound.targetPoints;
+                  const isWinner = rp.points >= 8;
                   return (
                     <div key={rp.id} className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-gray-100 dark:border-zinc-800 shadow-sm relative overflow-hidden group hover:border-yellow-400/50 transition">
                       {isWinner && (

@@ -78,7 +78,7 @@ export default function FamilyCompetitionOverview({ onClick }: { onClick: () => 
               {activeRound ? `منافسة العائلة (جولة ${activeRound.roundNumber})` : "منافسة العائلة"}
             </h3>
             {activeRound ? (
-              <p className="text-[10px] font-bold text-yellow-700/80 dark:text-yellow-400/80">شرط الفوز الأدنى: {activeRound.targetPoints} نقاط</p>
+              <p className="text-[10px] font-bold text-yellow-700/80 dark:text-yellow-400/80">شرط الفوز الأدنى: 8 نقاط</p>
             ) : lastRound ? (
                <p className="text-[10px] font-bold text-gray-500">نتيجة الجولة السابقة</p>
             ) : null}
