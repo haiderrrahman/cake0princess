@@ -258,7 +258,11 @@ function AdminHubContent() {
         const amt = Number(o.toPayNow) || Number(o.total) || 0;
         calcSales(o, amt, false);
         
-        totalProfit += (amt * 0.3); // Rough estimate for app profit
+        const isDelivered = o.status === 'delivered' || o.status === 'completed';
+        if (isDelivered) {
+          totalProfit += (amt * 0.3); // Rough estimate for app profit
+        }
+        
         if (o.items && Array.isArray(o.items)) {
            let hasAcademy = o.items.some((i: any) => i.type === "course" || i.id?.includes("course"));
            let hasSupplies = o.items.some((i: any) => i.type === "supply" || i.id?.includes("supply"));
@@ -275,7 +279,9 @@ function AdminHubContent() {
         const amt = o.paidAmount !== undefined ? Number(o.paidAmount) : (Number(o.price) || 0);
         const price = Number(o.price) || 0;
         
-        if (o.status === "delivered" && amt !== price && !o.isDebtSettled) {
+        const isDelivered = o.status === 'delivered' || o.status === 'completed';
+        
+        if (isDelivered && amt !== price && !o.isDebtSettled) {
           if (amt < price) {
             extOweUs += (price - amt);
           } else if (amt > price) {
@@ -284,7 +290,9 @@ function AdminHubContent() {
         }
 
         calcSales(o, amt, true);
-        totalProfit += Number(o.profit) || 0;
+        if (isDelivered) {
+          totalProfit += Number(o.profit) || 0;
+        }
         breakdown.social += amt;
       });
 
@@ -788,15 +796,15 @@ function AdminHubContent() {
 
     // ── Social Orders (external_orders): uses `price` and `paidAmount` ──
     externalOrders.forEach((order: any) => {
-      if (order.status === 'rejected' || order.status === 'cancelled') return;
+      const isDelivered = order.status === 'delivered' || order.status === 'completed';
+      if (!isDelivered) return;
       result.social.ordersCount++;
 
       const price = Number(order.price || 0);
       const paid  = Number(order.paidAmount ?? price); // if paidAmount missing → fully paid
       result.social.totalExpected += price;
 
-      const isDebt = order.status === 'delivered'
-        && order.paidAmount !== undefined
+      const isDebt = order.paidAmount !== undefined
         && paid !== price
         && !order.isDebtSettled;
 
@@ -818,7 +826,8 @@ function AdminHubContent() {
 
     // ── App Orders (orders): uses `total`, `toPayNow`, `isDebt`, `debtAmount` ──
     orders.forEach((order: any) => {
-      if (order.status === 'rejected' || order.status === 'cancelled') return;
+      const isDelivered = order.status === 'delivered' || order.status === 'completed';
+      if (!isDelivered) return;
 
       const hasSupplies = order.items?.some((i: any) => i.isSupply || i.category === 'supplies' || i.id?.includes('supply'));
       const hasCourses  = order.items?.some((i: any) => i.type === 'course');
@@ -1240,15 +1249,15 @@ function AdminHubContent() {
                               </div>
                               {order.deliveryDate && (
                                 <div className="mt-2.5 w-full">
-                                  <div className="bg-gradient-to-r from-orange-400 via-amber-400 to-orange-400 p-[2px] rounded-lg shadow-md">
-                                    <div className="bg-amber-50/90 dark:bg-zinc-900/90 rounded-[6px] px-3 py-2 flex flex-col sm:flex-row items-center justify-center gap-1.5">
+                                  <div className="bg-gradient-to-r from-orange-400 via-amber-400 to-orange-400 p-[1.5px] rounded-lg shadow-sm">
+                                    <div className="bg-amber-50/90 dark:bg-zinc-900/90 rounded-[6px] px-2 py-1.5 flex flex-col sm:flex-row items-center justify-center gap-1">
                                       <div className="flex items-center gap-1.5 text-orange-700 dark:text-orange-400">
-                                        <Calendar className="w-4 h-4 animate-pulse" />
-                                        <span className="font-black text-[13px] sm:text-sm leading-none">
+                                        <Calendar className="w-3.5 h-3.5 animate-pulse" />
+                                        <span className="font-black text-[11px] sm:text-xs leading-none">
                                           {new Date(order.deliveryDate).toLocaleDateString('ar-IQ')}
                                         </span>
                                       </div>
-                                      <span className="text-orange-700 dark:text-orange-400 font-black text-xs sm:text-[13px] leading-none bg-orange-200/50 dark:bg-orange-900/40 px-2 py-0.5 rounded-md">
+                                      <span className="text-orange-600/80 dark:text-orange-500/80 font-bold text-[10px] sm:text-[11px] leading-none">
                                         الساعة {new Date(order.deliveryDate).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
                                       </span>
                                     </div>
@@ -1667,13 +1676,32 @@ function AdminHubContent() {
                   </div>
                 ))}
 
-                {/* ── Inventory Overview ── */}
+                {/* ── Net Balance Overview ── */}
                 <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-3xl p-6 shadow-xl border border-indigo-500/20">
-                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-4"><Package className="w-5 h-5 text-indigo-400" /> مطابقة المخزن</h3>
+                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-4"><Banknote className="w-5 h-5 text-indigo-400" /> صافي الأموال المتوفرة (بعد المصاريف)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-black/20 p-4 rounded-2xl border border-emerald-500/20 flex flex-col justify-center">
+                      <span className="text-gray-300 text-xs font-bold mb-1">إجمالي المُستلم من كافة الأقسام</span>
+                      <span className="text-emerald-400 text-xl font-black">{(auditData.social.totalReceived + auditData.appCakes.totalReceived + auditData.supplies.totalReceived).toLocaleString()} د.ع</span>
+                    </div>
+                    <div className="bg-black/20 p-4 rounded-2xl border border-rose-500/20 flex flex-col justify-center">
+                      <span className="text-gray-300 text-xs font-bold mb-1">إجمالي المصروفات</span>
+                      <span className="text-rose-400 text-xl font-black">{(stats.expenses || 0).toLocaleString()} د.ع</span>
+                    </div>
+                    <div className="bg-white/10 p-4 rounded-2xl border border-indigo-400/30 flex flex-col justify-center shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+                      <span className="text-indigo-200 text-xs font-bold mb-1">الرصيد الصافي الفعلي بالصندوق</span>
+                      <span className="text-white text-2xl font-black">{(auditData.social.totalReceived + auditData.appCakes.totalReceived + auditData.supplies.totalReceived - (stats.expenses || 0)).toLocaleString()} د.ع</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Inventory Overview ── */}
+                <div className="bg-gradient-to-br from-slate-900 to-zinc-900 rounded-3xl p-6 shadow-xl border border-zinc-500/20">
+                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-4"><Package className="w-5 h-5 text-gray-400" /> مطابقة المخزن</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl col-span-2">
                       <span className="text-gray-300 text-sm font-bold">قيمة البضاعة في المخزن:</span>
-                      <span className="text-indigo-300 font-black">{stats.inventoryValue.toLocaleString()} د.ع</span>
+                      <span className="text-gray-300 font-black">{stats.inventoryValue.toLocaleString()} د.ع</span>
                     </div>
                     <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl border border-rose-500/20 col-span-2">
                       <span className="text-gray-300 text-sm font-bold">نواقص المخزن (مواد تحت الصفر):</span>

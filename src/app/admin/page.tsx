@@ -31,7 +31,7 @@ export default function AdminDashboard() {
     }
     return {
       todaySales: 0, weekSales: 0, monthSales: 0,
-      totalRevenue: 0, netProfit: 0, totalExpenses: 0, cashInHand: 0,
+      totalRevenue: 0, netProfit: 0, totalExpenses: 0,
       totalSalaryDebt: 0, cakeMaterialsExpense: 0,
       breakdown: { social: 0, appCakes: 0, appAcademy: 0, storeSupplies: 0 },
     };
@@ -61,9 +61,8 @@ export default function AdminDashboard() {
 
         const processOrder = (o: any, isExternal: boolean) => {
           if (["rejected", "cancelled"].includes(o.status)) return;
-          const baseAmt = Number(isExternal ? o.price : (o.toPayNow || o.total)) || 0;
-          const amt = o.paidAmount !== undefined ? Number(o.paidAmount) : baseAmt;
-          const profit = Number(isExternal ? o.profit : (baseAmt * 0.3)) || 0;
+          const amt = Number(isExternal ? o.price : (o.toPayNow || o.total)) || 0;
+          const profit = Number(isExternal ? o.profit : (amt * 0.3)) || 0;
           const isDelivered = o.status === 'delivered' || o.status === 'completed';
           if (isDelivered) {
             totalRevenue += amt;
@@ -135,12 +134,11 @@ export default function AdminDashboard() {
           return cat === "مشتريات مخزنية" || cat === "مواد الكيك" || cat === "مواد كيك" || cat === "المواد الأولية (كيك وكريمة)" || 
                  desc.includes("المخزن") || desc.includes("مادة") || desc.includes("مواد");
         }).reduce((s, e: any) => s + (Number(e.amount) || 0), 0);
-        const netProfit = totalProfit - totalExpenses - totalSalaryDebt; // Fixed: Use totalProfit instead of totalRevenue
-        const cashInHand = totalRevenue - totalExpenses; // New: Cash in hand is revenue minus expenses
+        const netProfit = totalRevenue - totalExpenses - totalSalaryDebt;
 
         const result = { 
           todaySales, weekSales, monthSales, 
-          totalRevenue, netProfit, totalExpenses, cashInHand,
+          totalRevenue, netProfit, totalExpenses, 
           totalSalaryDebt, cakeMaterialsExpense,
           breakdown: { social, appCakes, appAcademy, storeSupplies } 
         };
@@ -205,28 +203,24 @@ export default function AdminDashboard() {
           </div>
 
           {/* Financial Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3 mt-4 relative z-10">
+          <div className="grid grid-cols-2 gap-3 mb-3 mt-4 relative z-10">
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
-              <p className="text-[10px] font-bold text-purple-200 mb-1 flex items-center gap-1"><Wallet className="w-3.5 h-3.5" /> إجمالي المبيعات (المستلمة)</p>
+              <p className="text-[10px] font-bold text-purple-200 mb-1 flex items-center gap-1"><Wallet className="w-3.5 h-3.5" /> إجمالي الإيرادات</p>
               <p className="text-xl font-black text-white">{statsLoading ? "…" : fmt(realStats.totalRevenue)} <span className="text-[10px]">د.ع</span></p>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
-              <p className="text-[10px] font-bold text-purple-200 mb-1 flex items-center gap-1"><Receipt className="w-3.5 h-3.5" /> إجمالي المصروفات</p>
+              <p className="text-[10px] font-bold text-purple-200 mb-1 flex items-center gap-1"><Receipt className="w-3.5 h-3.5" /> إجمالي المصروفات (أموال الكيك)</p>
               <p className="text-xl font-black text-red-300">{statsLoading ? "…" : fmt(realStats.totalExpenses)} <span className="text-[10px]">د.ع</span></p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 md:col-span-1 col-span-2">
-              <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> الأموال المتوفرة (الصندوق)</p>
-              <p className="text-xl font-black text-emerald-300">{statsLoading ? "…" : fmt(realStats.cashInHand || 0)} <span className="text-[10px]">د.ع</span></p>
             </div>
           </div>
           
           <div className="bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-4 relative z-10 flex justify-between items-center">
             <div>
-              <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> صافي الربح الحقيقي (بعد المصاريف)</p>
+              <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> صافي الربح التقديري (بعد المصاريف)</p>
               <p className="text-xl font-black text-white">{statsLoading ? "…" : fmt(realStats.netProfit)} <span className="text-[10px]">د.ع</span></p>
             </div>
             <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
-              <BarChart3 className="w-5 h-5 text-emerald-400" />
+              <DollarSign className="w-5 h-5 text-emerald-400" />
             </div>
           </div>
 

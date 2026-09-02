@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Camera, Upload, Phone, User, Calendar, Tag, Coins, Loader2, MapPin } from "lucide-react";
+import { Camera, Upload, Phone, User, Calendar, Tag, Coins, Loader2 } from "lucide-react";
 import { collection, addDoc, updateDoc, serverTimestamp, getDocs, doc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -17,8 +17,8 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
   const [submitting, setSubmitting] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [customerAddress, setCustomerAddress] = useState("");
   const [platform, setPlatform] = useState("واتساب");
+  const [address, setAddress] = useState("");
   const [cakeName, setCakeName] = useState("");
   const [price, setPrice] = useState("");
   const [cost, setCost] = useState("");
@@ -68,16 +68,16 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
     const existing = customers.find(c => c.name === name);
     if (existing) {
       if (existing.phone) setCustomerPhone(existing.phone);
-      if (existing.address) setCustomerAddress(existing.address);
+      if (existing.address) setAddress(existing.address);
       if (existing.platform) setPlatform(existing.platform);
     }
   };
 
-  const selectCustomer = (c: any) => {
-    setCustomerName(c.name);
-    if (c.phone) setCustomerPhone(c.phone);
-    if (c.address) setCustomerAddress(c.address);
-    if (c.platform) setPlatform(c.platform);
+  const selectCustomer = (name: string, phone: string, customerAddress: string, customerPlatform: string) => {
+    setCustomerName(name);
+    if (phone) setCustomerPhone(phone);
+    if (customerAddress) setAddress(customerAddress);
+    if (customerPlatform) setPlatform(customerPlatform);
     setShowCustomerDropdown(false);
   };
 
@@ -115,7 +115,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
       if (!existingCustomer) {
         const custRef = await addDoc(collection(db, "customers"), {
           name: customerName, phone: customerPhone,
-          address: customerAddress, platform: platform,
+          address, platform,
           points: Math.floor(numPrice / 1000), totalSpent: numPrice,
           ordersCount: 1, createdAt: serverTimestamp(),
         });
@@ -124,7 +124,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         const docRef = doc(db, "customers", customerId!);
         await updateDoc(docRef, {
           phone: customerPhone || existingCustomer.phone || "",
-          address: customerAddress || existingCustomer.address || "",
+          address: address || existingCustomer.address || "",
           platform: platform || existingCustomer.platform || "واتساب",
           points: (existingCustomer.points || 0) + Math.floor(numPrice / 1000),
           totalSpent: (existingCustomer.totalSpent || 0) + numPrice,
@@ -148,7 +148,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
       }
 
       const newOrderRef = await addDoc(collection(db, "external_orders"), {
-        customerId, customerName, customerPhone, customerAddress, platform, cakeName,
+        customerId, customerName, customerPhone, address, platform, cakeName,
         price: numPrice, cost: numCost, profit,
         deliveryDate,      // حقل موحد مع باقي التطبيق
         deliveryTime: deliveryDate, // توافق مع السجلات القديمة
@@ -230,15 +230,10 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
                 {customers.filter(c => c.name.includes(customerName)).map(c => (
                   <li 
                     key={c.id} 
-                    onClick={() => selectCustomer(c)}
-                    className="px-4 py-3 text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer text-gray-800 dark:text-gray-200 border-b border-gray-50 dark:border-zinc-700/50 last:border-0"
+                    onClick={() => selectCustomer(c.name, c.phone, c.address, c.platform)}
+                    className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer text-gray-800 dark:text-gray-200 border-b border-gray-50 dark:border-zinc-700/50 last:border-0"
                   >
-                    <div className="font-bold">{c.name}</div>
-                    <div className="text-[10px] text-gray-500 flex items-center gap-2 mt-1">
-                      {c.phone && <span>📞 {c.phone}</span>}
-                      {c.platform && <span>📱 {c.platform}</span>}
-                      {c.address && <span>📍 {c.address}</span>}
-                    </div>
+                    {c.name}
                   </li>
                 ))}
               </ul>
@@ -258,27 +253,28 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         </div>
       </div>
 
-      <div>
-        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">العنوان (المحافظة / المنطقة)</label>
-        <div className="relative">
-          <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input 
-            type="text" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
-            placeholder="مثال: بغداد - الكرادة"
-          />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الكيكة / المنتج</label>
+          <div className="relative">
+            <Tag className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input 
+              type="text" value={cakeName} onChange={e => setCakeName(e.target.value)}
+              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+              placeholder="مثال: كيكة شوكولاتة"
+            />
+          </div>
         </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الكيكة / المنتج</label>
-        <div className="relative">
-          <Tag className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input 
-            type="text" value={cakeName} onChange={e => setCakeName(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
-            placeholder="مثال: كيكة شوكولاتة"
-          />
+        <div>
+          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">العنوان</label>
+          <div className="relative">
+            <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input 
+              type="text" value={address} onChange={e => setAddress(e.target.value)}
+              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+              placeholder="مثال: بغداد, المنصور"
+            />
+          </div>
         </div>
       </div>
 
