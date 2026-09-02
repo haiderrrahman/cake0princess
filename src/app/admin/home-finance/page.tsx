@@ -2326,10 +2326,7 @@ setEditTrip(null);
               })}
             </div>
 
-            {/* Family Competition Overview */}
-            <div className="mb-4">
-              <FamilyCompetitionOverview onClick={() => setActiveTab("familyNeeds")} />
-            </div>
+
 
             {/* Alerts Banner */}
             {(unpaidBillsCount > 0 || delayedInstallmentsCount > 0 || totalShortages > 0) && (
@@ -2563,6 +2560,11 @@ setEditTrip(null);
           </div>
         </div>
           </div>
+            {/* Family Competition Overview */}
+            <div className="mt-4 mb-4">
+              <FamilyCompetitionOverview onClick={() => setActiveTab("familyNeeds")} />
+            </div>
+
             {/* ══════════════════════════════════════════
                 PREMIUM BUDGET BREAKDOWN SECTION
             ══════════════════════════════════════════ */}
