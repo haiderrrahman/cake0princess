@@ -25,10 +25,10 @@ import { getAuth } from "firebase/auth";
 // --- Types ---
 export type ParticipantId = "ruqayya" | "qunoot" | "eva";
 
-export const PARTICIPANTS: { id: ParticipantId; name: string; emoji: string }[] = [
-  { id: "ruqayya", name: "رقية", emoji: "👧" },
-  { id: "qunoot", name: "قنوت", emoji: "👧" },
-  { id: "eva", name: "إيفا", emoji: "👧" }
+export const PARTICIPANTS: { id: ParticipantId; name: string; emoji: string; avatar: string }[] = [
+  { id: "ruqayya", name: "رقية", emoji: "👧", avatar: "/avatars/ruqayya.jpg" },
+  { id: "qunoot", name: "قنوت", emoji: "👧", avatar: "/avatars/qunoot.jpg" },
+  { id: "eva", name: "إيفا", emoji: "👧", avatar: "/avatars/eva.jpg" }
 ];
 
 export interface FamilyCompetitionRound {
@@ -339,7 +339,9 @@ export default function FamilyCompetition() {
                       )}
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">
-                          <span className="text-3xl">{rp.participant.emoji}</span>
+                        <div className="w-16 h-16 rounded-full overflow-hidden border-4 border-yellow-100 dark:border-zinc-800 shadow-md">
+                          <img src={rp.participant.avatar} alt={rp.participant.name} className="w-full h-full object-cover" />
+                        </div>
                           <div>
                             <div className="font-black text-lg text-gray-800 dark:text-white flex items-center gap-2">
                               {rp.participant.name}
