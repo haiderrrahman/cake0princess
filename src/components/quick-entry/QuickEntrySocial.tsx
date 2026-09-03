@@ -228,7 +228,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
             />
             {showCustomerDropdown && customerName && (
               <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-lg max-h-40 overflow-y-auto custom-scrollbar">
-                {customers.filter(c => c.name.includes(customerName)).map(c => (
+                {customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase())).map(c => (
                   <li 
                     key={c.id} 
                     onClick={() => selectCustomer(c.name, c.phone, c.address, c.platform)}

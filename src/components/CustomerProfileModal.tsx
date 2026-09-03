@@ -113,19 +113,16 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
       >
         <div className="flex items-center justify-between p-5 sm:p-6 border-b border-gray-100 dark:border-zinc-800 bg-gradient-to-l from-gray-50 to-white dark:from-zinc-900/50 dark:to-zinc-950">
           <div>
-            <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-              <span className="w-10 h-10 rounded-full bg-[#FF3366]/10 text-[#FF3366] flex items-center justify-center text-lg">👤</span>
-              ملف الزبون
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-3">
+              <span className="w-12 h-12 rounded-full bg-[#FF3366]/10 text-[#FF3366] flex items-center justify-center text-2xl">👤</span>
+              {customerName}
               {customerProfile?.platform && (
-                <span className="text-xs bg-[#FF3366]/10 text-[#FF3366] px-2 py-0.5 rounded-full font-bold ml-2">
+                <span className="text-xs bg-[#FF3366]/10 text-[#FF3366] px-3 py-1 rounded-full font-bold ml-2">
                   {customerProfile.platform}
                 </span>
               )}
             </h2>
             <div className="mt-2 space-y-1">
-              <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                <User className="w-3.5 h-3.5" /> {customerName}
-              </p>
               {(customerPhone || customerProfile?.phone) && (
                 <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1" dir="ltr">
                   <Phone className="w-3.5 h-3.5" /> {customerPhone || customerProfile?.phone}

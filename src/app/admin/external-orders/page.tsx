@@ -14,6 +14,8 @@ import DatePicker from "react-datepicker";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale/ar";
 import "react-datepicker/dist/react-datepicker.css";
+import CustomerProfileModal from "@/components/CustomerProfileModal";
+import { MapPin } from "lucide-react";
 
 export default function ExternalOrdersAdmin() {
   const [orders, setOrders] = useState<any[]>(() => {
@@ -64,6 +66,9 @@ export default function ExternalOrdersAdmin() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [address, setAddress] = useState("");
   
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [selectedCustomerForProfile, setSelectedCustomerForProfile] = useState<{name: string, phone?: string} | null>(null);
+
   const [customers, setCustomers] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -592,9 +597,20 @@ export default function ExternalOrdersAdmin() {
                               <div className="flex justify-between items-start mb-1">
                                 <div>
                                   <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
-                                  <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1.5">
+                                  <p 
+                                    className="text-xs font-bold text-emerald-600 mt-1 flex items-center gap-1.5 cursor-pointer hover:underline"
+                                    onClick={() => {
+                                      setSelectedCustomerForProfile({ name: order.customerName, phone: order.customerPhone });
+                                      setProfileModalOpen(true);
+                                    }}
+                                  >
                                     <User className="w-3.5 h-3.5" /> {order.customerName}
                                   </p>
+                                  {order.address && (
+                                    <p className="text-[10px] font-bold text-gray-400 mt-0.5 flex items-center gap-1.5 line-clamp-1">
+                                      <MapPin className="w-3 h-3" /> {order.address}
+                                    </p>
+                                  )}
                                 </div>
                                 <div className="flex gap-2 items-center">
                                   <div className={`px-3 py-1 rounded-lg text-xs font-black ${customerOwesUs ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
@@ -646,11 +662,22 @@ export default function ExternalOrdersAdmin() {
                   <div className="flex justify-between items-start mb-1">
                     <div>
                       <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
-                      <p className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1.5">
+                      <p 
+                        className="text-xs font-bold text-emerald-600 mt-1 flex items-center gap-1.5 cursor-pointer hover:underline"
+                        onClick={() => {
+                          setSelectedCustomerForProfile({ name: order.customerName, phone: order.customerPhone });
+                          setProfileModalOpen(true);
+                        }}
+                      >
                         <User className="w-3.5 h-3.5" /> {order.customerName}
                         <span className="text-gray-300 mx-1">•</span>
-                        <Smartphone className="w-3.5 h-3.5" /> {order.platform}
+                        <Smartphone className="w-3.5 h-3.5 text-gray-500" /> <span className="text-gray-500">{order.platform}</span>
                       </p>
+                      {order.address && (
+                        <p className="text-[10px] font-bold text-gray-400 mt-0.5 flex items-center gap-1.5 line-clamp-1">
+                          <MapPin className="w-3 h-3" /> {order.address}
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-2 items-center">
                       <select 
@@ -856,12 +883,24 @@ export default function ExternalOrdersAdmin() {
             <form onSubmit={handleAddOrder} className="p-6 space-y-4">
               {/* Row 1: Name and Platform */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-bold mb-2">اسم الزبون</label>
-                  <input required type="text" value={customerName} onChange={handleCustomerNameChange} list="customers-list-external" className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: سارة محمد" />
-                  <datalist id="customers-list-external">
-                    {customerName.length > 0 && customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase())).slice(0, 15).map(c => <option key={c.id} value={c.name}>{c.phone ? `(${c.phone})` : ""}</option>)}
-                  </datalist>
+                  <input required type="text" value={customerName} onChange={handleCustomerNameChange} className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: سارة محمد" />
+                  
+                  {customerName.length > 0 && !customers.find(c => c.name === customerName) && (
+                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase())).slice(0, 15).map(c => (
+                         <div key={c.id} className="p-3 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 cursor-pointer text-sm font-bold border-b border-gray-50 dark:border-zinc-700/50 last:border-0" onClick={() => {
+                           setCustomerName(c.name);
+                           if (c.phone) setCustomerPhone(c.phone);
+                           if (c.address) setAddress(c.address);
+                           if (c.platform) setPlatform(c.platform);
+                         }}>
+                           {c.name} {c.phone && <span className="text-gray-400 text-xs ml-2 font-normal" dir="ltr">({c.phone})</span>}
+                         </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-2">منصة الطلب</label>
@@ -966,6 +1005,19 @@ export default function ExternalOrdersAdmin() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Customer Profile Modal */}
+      {selectedCustomerForProfile && (
+        <CustomerProfileModal
+          isOpen={profileModalOpen}
+          onClose={() => {
+            setProfileModalOpen(false);
+            setSelectedCustomerForProfile(null);
+          }}
+          customerName={selectedCustomerForProfile.name}
+          customerPhone={selectedCustomerForProfile.phone}
+        />
       )}
     </div>
   );

@@ -1192,6 +1192,13 @@ function AdminHubContent() {
                                   {order.platform === "انستغرام" ? "📸" : order.platform === "واتساب" ? "💬" : "📱"} {order.platform}
                                 </span>
                               </div>
+                              {order.address && (
+                                <div className="flex justify-center mt-1 text-[9px] sm:text-[10px]">
+                                  <span className="text-gray-400 dark:text-gray-500 flex items-center gap-1 font-bold line-clamp-1 max-w-[150px]">
+                                    <MapPin className="w-3 h-3 flex-shrink-0" /> {order.address}
+                                  </span>
+                                </div>
+                              )}
                               {order.deliveryDate && (
                                 <div className="mt-2.5 w-full">
                                   <div className="bg-gradient-to-r from-orange-400 via-amber-400 to-orange-400 p-[2px] rounded-xl shadow-md">
