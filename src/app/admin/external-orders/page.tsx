@@ -114,15 +114,35 @@ export default function ExternalOrdersAdmin() {
     return () => unsubscribe();
   }, []);
 
+  const fillCustomerData = (name: string, existingPhone: string, existingAddress: string, existingPlatform: string) => {
+    let finalPhone = existingPhone;
+    let finalAddress = existingAddress;
+    let finalPlatform = existingPlatform;
+
+    if (!finalPhone || !finalAddress || !finalPlatform) {
+      const orderWithPhone = orders.find(o => o.customerName.trim().toLowerCase() === name.trim().toLowerCase() && o.customerPhone);
+      const orderWithAddress = orders.find(o => o.customerName.trim().toLowerCase() === name.trim().toLowerCase() && o.address);
+      const anyOrder = orders.find(o => o.customerName.trim().toLowerCase() === name.trim().toLowerCase());
+      
+      if (!finalPhone && orderWithPhone) finalPhone = orderWithPhone.customerPhone;
+      if (!finalAddress && orderWithAddress) finalAddress = orderWithAddress.address;
+      if (!finalPlatform && anyOrder) finalPlatform = anyOrder.platform;
+    }
+
+    if (finalPhone) setCustomerPhone(finalPhone);
+    if (finalAddress) setAddress(finalAddress);
+    if (finalPlatform) setPlatform(finalPlatform);
+  };
+
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
     setCustomerName(name);
     
     const exactMatch = customers.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (exactMatch) {
-      if (exactMatch.phone && !customerPhone) setCustomerPhone(exactMatch.phone);
-      if (exactMatch.address && !address) setAddress(exactMatch.address);
-      if (exactMatch.platform) setPlatform(exactMatch.platform);
+      fillCustomerData(exactMatch.name, exactMatch.phone || "", exactMatch.address || "", exactMatch.platform || "");
+    } else {
+      fillCustomerData(name, "", "", "");
     }
   };
 
@@ -893,9 +913,7 @@ export default function ExternalOrdersAdmin() {
                       {customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase())).slice(0, 15).map(c => (
                          <div key={c.id} className="p-3 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 cursor-pointer text-sm font-bold border-b border-gray-50 dark:border-zinc-700/50 last:border-0" onClick={() => {
                            setCustomerName(c.name);
-                           if (c.phone) setCustomerPhone(c.phone);
-                           if (c.address) setAddress(c.address);
-                           if (c.platform) setPlatform(c.platform);
+                           fillCustomerData(c.name, c.phone || "", c.address || "", c.platform || "");
                          }}>
                            {c.name} {c.phone && <span className="text-gray-400 text-xs ml-2 font-normal" dir="ltr">({c.phone})</span>}
                          </div>

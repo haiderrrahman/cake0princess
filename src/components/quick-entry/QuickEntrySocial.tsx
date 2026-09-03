@@ -61,26 +61,47 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
     }
   };
 
+  const fillCustomerData = async (name: string, existingPhone: string, existingAddress: string, existingPlatform: string) => {
+    let finalPhone = existingPhone;
+    let finalAddress = existingAddress;
+    let finalPlatform = existingPlatform;
+
+    if (!finalPhone || !finalAddress) {
+      try {
+        const { query, collection, where, limit, getDocs } = await import("firebase/firestore");
+        const q = query(collection(db, "external_orders"), where("customerName", "==", name), limit(10));
+        const snap = await getDocs(q);
+        const orderWithPhone = snap.docs.find(d => d.data().customerPhone);
+        const orderWithAddress = snap.docs.find(d => d.data().address);
+        
+        if (!finalPhone && orderWithPhone) finalPhone = orderWithPhone.data().customerPhone;
+        if (!finalAddress && orderWithAddress) finalAddress = orderWithAddress.data().address;
+        if (!finalPlatform && snap.docs.length > 0) finalPlatform = snap.docs[0].data().platform;
+      } catch (e) {
+        console.error("Error fetching past orders for autofill", e);
+      }
+    }
+
+    if (finalPhone) setCustomerPhone(finalPhone);
+    if (finalAddress) setAddress(finalAddress);
+    if (finalPlatform) setPlatform(finalPlatform);
+  };
+
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
     setCustomerName(name);
     setShowCustomerDropdown(true);
     
-    // Auto-fill if exact match (case-insensitive)
     const exactMatch = customers.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (exactMatch) {
-      if (exactMatch.phone && !customerPhone) setCustomerPhone(exactMatch.phone);
-      if (exactMatch.address && !address) setAddress(exactMatch.address);
-      if (exactMatch.platform) setPlatform(exactMatch.platform);
+      fillCustomerData(exactMatch.name, exactMatch.phone || "", exactMatch.address || "", exactMatch.platform || "");
     }
   };
 
   const selectCustomer = (name: string, phone: string, customerAddress: string, customerPlatform: string) => {
     setCustomerName(name);
-    if (phone) setCustomerPhone(phone);
-    if (customerAddress) setAddress(customerAddress);
-    if (customerPlatform) setPlatform(customerPlatform);
     setShowCustomerDropdown(false);
+    fillCustomerData(name, phone || "", customerAddress || "", customerPlatform || "");
   };
 
   const parseIqdInput = (val: string | number) => {
