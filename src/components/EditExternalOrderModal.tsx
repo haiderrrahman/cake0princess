@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Check, Loader2, Camera, Upload, Phone, User, Calendar, Tag, Coins, MapPin } from "lucide-react";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, collection, getDocs, addDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import imageCompression from 'browser-image-compression';
@@ -36,6 +36,15 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+
+  useEffect(() => {
+    getDocs(collection(db, "customers")).then(snap => {
+      setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  }, []);
+
   useEffect(() => {
     if (order && isOpen) {
       setCustomerName(order.customerName || "");
@@ -65,6 +74,26 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         setImageFile(file);
       }
     }
+  };
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const name = e.target.value;
+    setCustomerName(name);
+    setShowCustomerDropdown(true);
+    const existing = customers.find(c => c.name === name);
+    if (existing) {
+      if (existing.phone) setCustomerPhone(existing.phone);
+      if (existing.address) setAddress(existing.address);
+      if (existing.platform) setPlatform(existing.platform);
+    }
+  };
+
+  const selectCustomer = (name: string, phone: string, addr: string, plat: string) => {
+    setCustomerName(name);
+    if (phone) setCustomerPhone(phone);
+    if (addr) setAddress(addr);
+    if (plat) setPlatform(plat);
+    setShowCustomerDropdown(false);
   };
 
   const parseIqdInput = (val: string | number) => {
@@ -106,6 +135,26 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         deliveryDate,
         ...(tempImageUrl ? { tempImageUrl } : {})
       });
+
+      // Update customer profile
+      const existingCustomer = customers.find(c => c.name === customerName);
+      if (existingCustomer) {
+        await updateDoc(doc(db, "customers", existingCustomer.id), {
+          phone: customerPhone || existingCustomer.phone || "",
+          address: address || existingCustomer.address || "",
+          platform: platform || existingCustomer.platform || "واتساب",
+          totalSpent: (existingCustomer.totalSpent || 0) - parseIqdInput(order.price) + numPrice
+        });
+      } else {
+        await addDoc(collection(db, "customers"), {
+          name: customerName,
+          phone: customerPhone,
+          address,
+          platform: platform || "واتساب",
+          points: Math.floor(numPrice / 1000),
+          totalSpent: numPrice
+        });
+      }
 
       if (imageFile) {
         if (navigator.onLine) {
@@ -196,16 +245,41 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
 
             {/* الصف الأول: اسم الزبون والمنصة */}
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className="relative">
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الزبون</label>
                 <div className="relative">
                   <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input 
-                    type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} required
+                    type="text" value={customerName} onChange={handleNameChange} required
+                    onFocus={() => setShowCustomerDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
                     className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                     placeholder="اسم الزبون"
                   />
                 </div>
+                {showCustomerDropdown && customerName && (
+                  <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-lg max-h-40 overflow-y-auto custom-scrollbar">
+                    {customers.filter(c => c.name.includes(customerName)).map(c => (
+                      <li 
+                        key={c.id} 
+                        onClick={() => selectCustomer(c.name, c.phone, c.address, c.platform)}
+                        className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700/50 cursor-pointer flex justify-between items-center transition"
+                      >
+                        <span className="font-bold text-gray-900 dark:text-white text-sm">{c.name}</span>
+                        {(c.phone || c.platform) && (
+                          <span className="text-xs text-gray-400 font-medium">
+                            {c.platform} {c.phone ? `- ${c.phone}` : ''}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                    {customers.filter(c => c.name.includes(customerName)).length === 0 && (
+                      <li className="px-4 py-3 text-sm text-gray-500 font-bold text-center">
+                        زبون جديد
+                      </li>
+                    )}
+                  </ul>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">منصة الطلب</label>

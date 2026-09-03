@@ -1179,8 +1179,9 @@ function AdminHubContent() {
 
                           <div className="flex-1 flex flex-col justify-between">
                             <div className="text-center">
-                              <button onClick={() => setCustomerProfile({ name: order.customerName, phone: order.customerPhone })} className="text-center group mx-auto block">
-                                <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base leading-tight line-clamp-1 group-hover:text-[#FF3366] transition underline decoration-transparent group-hover:decoration-[#FF3366] underline-offset-4 inline-flex items-center gap-1">
+                              <button onClick={() => setCustomerProfile({ name: order.customerName, phone: order.customerPhone })} className="text-center group mx-auto flex items-center justify-center gap-1.5 bg-gray-50 dark:bg-zinc-800/80 hover:bg-gray-100 dark:hover:bg-zinc-700 px-3 py-1.5 rounded-xl transition active:scale-95 border border-gray-100 dark:border-zinc-700 shadow-sm">
+                                <span className="text-[#FF3366] text-sm">👤</span>
+                                <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base leading-tight line-clamp-1 underline decoration-gray-300 dark:decoration-zinc-600 underline-offset-4">
                                   {order.customerName}
                                 </h3>
                               </button>
