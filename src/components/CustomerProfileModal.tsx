@@ -123,16 +123,22 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
               )}
             </h2>
             <div className="mt-2 space-y-1">
-              {(customerPhone || customerProfile?.phone) && (
-                <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1" dir="ltr">
-                  <Phone className="w-3.5 h-3.5" /> {customerPhone || customerProfile?.phone}
-                </p>
-              )}
-              {customerProfile?.address && (
-                <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5" /> {customerProfile.address}
-                </p>
-              )}
+              {(() => {
+                const phone = customerPhone || customerProfile?.phone || socialOrders.find(o => o.customerPhone)?.customerPhone || appOrders.find(o => o.shippingAddress?.phone)?.shippingAddress?.phone;
+                return phone ? (
+                  <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1" dir="ltr">
+                    <Phone className="w-3.5 h-3.5" /> {phone}
+                  </p>
+                ) : null;
+              })()}
+              {(() => {
+                const address = customerProfile?.address || socialOrders.find(o => o.address)?.address || appOrders.find(o => o.shippingAddress?.address)?.shippingAddress?.address;
+                return address ? (
+                  <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 flex-shrink-0" /> {address}
+                  </p>
+                ) : null;
+              })()}
             </div>
           </div>
           <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition active:scale-90">

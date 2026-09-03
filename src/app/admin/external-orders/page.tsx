@@ -117,11 +117,12 @@ export default function ExternalOrdersAdmin() {
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
     setCustomerName(name);
-    const existing = customers.find(c => c.name === name);
-    if (existing) {
-      if (existing.phone) setCustomerPhone(existing.phone);
-      if (existing.address) setAddress(existing.address);
-      if (existing.platform) setPlatform(existing.platform);
+    
+    const exactMatch = customers.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (exactMatch) {
+      if (exactMatch.phone && !customerPhone) setCustomerPhone(exactMatch.phone);
+      if (exactMatch.address && !address) setAddress(exactMatch.address);
+      if (exactMatch.platform) setPlatform(exactMatch.platform);
     }
   };
 

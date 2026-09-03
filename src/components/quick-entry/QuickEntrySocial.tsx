@@ -65,11 +65,13 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
     const name = e.target.value;
     setCustomerName(name);
     setShowCustomerDropdown(true);
-    const existing = customers.find(c => c.name === name);
-    if (existing) {
-      if (existing.phone) setCustomerPhone(existing.phone);
-      if (existing.address) setAddress(existing.address);
-      if (existing.platform) setPlatform(existing.platform);
+    
+    // Auto-fill if exact match (case-insensitive)
+    const exactMatch = customers.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (exactMatch) {
+      if (exactMatch.phone && !customerPhone) setCustomerPhone(exactMatch.phone);
+      if (exactMatch.address && !address) setAddress(exactMatch.address);
+      if (exactMatch.platform) setPlatform(exactMatch.platform);
     }
   };
 
@@ -213,7 +215,6 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         </div>
       </div>
 
-      {/* الصف الأول: اسم الزبون والمنصة */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الزبون</label>
