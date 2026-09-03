@@ -147,7 +147,7 @@ export default function AdminDashboard() {
                desc.includes("المخزن") || desc.includes("مادة") || desc.includes("مواد");
       }).reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
-      const netProfit = totalProfit - totalExpenses; // Profit minus expenses
+      const netProfit = totalRevenue - totalExpenses - totalSalaryDebt; // Profit based on Revenue - Expenses - Debt
       
       const result = {
         todaySales, weekSales, monthSales,

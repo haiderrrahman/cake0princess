@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Check, Loader2, Plus, ImageIcon } from "lucide-react";
+import { X, Check, Loader2, Camera, Upload, Phone, User, Calendar, Tag, Coins, MapPin } from "lucide-react";
 import { doc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -7,8 +7,10 @@ import imageCompression from 'browser-image-compression';
 import FormattedNumberInput from "@/components/FormattedNumberInput";
 import { toast } from "sonner";
 import DatePicker from "react-datepicker";
-import { format } from "date-fns";
 import { ar } from "date-fns/locale/ar";
+import "react-datepicker/dist/react-datepicker.css";
+
+const PLATFORMS = ["إنستجرام", "واتساب", "فيسبوك", "تيك توك", "هاتف", "أخرى"];
 
 export default function EditExternalOrderModal({ isOpen, onClose, order, onEditSuccess }: any) {
   const fileToBase64 = (file: File): Promise<string> => {
@@ -22,6 +24,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [platform, setPlatform] = useState("واتساب");
+  const [address, setAddress] = useState("");
   const [cakeName, setCakeName] = useState("");
   const [price, setPrice] = useState("");
   const [paidAmount, setPaidAmount] = useState<string | number>("");
@@ -36,6 +40,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
     if (order && isOpen) {
       setCustomerName(order.customerName || "");
       setCustomerPhone(order.customerPhone || "");
+      setPlatform(order.platform || "واتساب");
+      setAddress(order.address || "");
       setCakeName(order.cakeName || "");
       setPrice(order.price || "");
       setPaidAmount(order.paidAmount !== undefined ? order.paidAmount : (order.price || ""));
@@ -89,6 +95,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       await updateDoc(doc(db, "external_orders", order.id), {
         customerName,
         customerPhone,
+        platform,
+        address,
         cakeName,
         price: numPrice,
         paidAmount: numPaidAmount,
@@ -123,6 +131,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         ...order,
         customerName,
         customerPhone,
+        platform,
+        address,
         cakeName,
         price: numPrice,
         paidAmount: numPaidAmount,
@@ -145,91 +155,186 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       <div className="flex min-h-full items-center justify-center p-4 text-center">
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
         
-        <div className="relative bg-white dark:bg-zinc-900 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl text-right flex flex-col">
+        <div className="relative bg-white dark:bg-zinc-900 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl text-right flex flex-col">
           <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center">
-            <h3 className="font-black text-xl">تعديل الطلب</h3>
+            <h3 className="font-black text-xl text-gray-900 dark:text-white">تعديل الطلب</h3>
             <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition">
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <form onSubmit={handleSave} className="p-5 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold text-gray-500 mb-1.5 block">اسم الزبون</label>
-                <input required type="text" value={customerName} onChange={e => setCustomerName(e.target.value)}
-                  className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 mb-1.5 block">رقم الموبايل (اختياري)</label>
-                <input type="tel" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
-                  className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none text-right"
-                  dir="ltr" placeholder="07..." />
-              </div>
-            </div>
+          <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
             
+            {/* Upload Image */}
             <div>
-              <label className="text-xs font-bold text-gray-500 mb-1.5 block">وصف الطلب</label>
-              <textarea required value={cakeName} onChange={e => setCakeName(e.target.value)} rows={2}
-                className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none resize-none" />
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">صورة الطلب / الكيكة</label>
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-gray-300 dark:border-zinc-700 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition relative overflow-hidden group"
+              >
+                {imagePreview ? (
+                  <div className="absolute inset-0 w-full h-full">
+                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                      <Camera className="w-8 h-8 text-white" />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-black text-gray-800 dark:text-gray-200">التقط صورة للطلب</p>
+                      <p className="text-xs text-gray-500 mt-1">اضغط لفتح الكاميرا أو المعرض</p>
+                    </div>
+                  </>
+                )}
+                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
+              </div>
             </div>
 
+            {/* الصف الأول: اسم الزبون والمنصة */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الزبون</label>
+                <div className="relative">
+                  <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input 
+                    type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} required
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    placeholder="اسم الزبون"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">منصة الطلب</label>
+                <div className="relative">
+                  <select
+                    value={platform}
+                    onChange={e => setPlatform(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none appearance-none font-bold text-gray-700 dark:text-gray-200"
+                  >
+                    {PLATFORMS.map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* الصف الثاني: رقم الهاتف والعنوان */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">رقم الهاتف</label>
+                <div className="relative">
+                  <Phone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input 
+                    type="tel" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-left"
+                    placeholder="07..." dir="ltr"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">العنوان</label>
+                <div className="relative">
+                  <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input 
+                    type="text" value={address} onChange={e => setAddress(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    placeholder="مثال: مجمع A..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* الصف الثالث: اسم الكيكة */}
             <div>
-              <label className="text-xs font-bold text-gray-500 mb-1.5 block">تاريخ ووقت التسليم</label>
-              <DatePicker
-                selected={deliveryDate ? new Date(deliveryDate) : null}
-                onChange={(date: Date | null) => setDeliveryDate(date ? date.toISOString() : '')}
-                locale={ar}
-                showTimeSelect
-                timeFormat="h:mm aa"
-                timeIntervals={30}
-                timeCaption="الوقت"
-                dateFormat="yyyy/MM/dd h:mm aa"
-                placeholderText="اختر التاريخ والوقت..."
-                className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none"
-                wrapperClassName="w-full"
-                withPortal
-                required
-              />
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الكيكة / المنتج</label>
+              <div className="relative">
+                <Tag className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input 
+                  type="text" value={cakeName} onChange={e => setCakeName(e.target.value)} required
+                  className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="مثال: كيكة شوكولاتة"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-medium mb-1 dark:text-gray-300">السعر (د.ع)</label>
-                <FormattedNumberInput required value={price} onChange={val => setPrice(val)}
-                  className="w-full border dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#e8456b] text-sm" />
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">سعر البيع</label>
+                <div className="relative">
+                  <Coins className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <FormattedNumberInput
+                    required
+                    value={price}
+                    onChange={setPrice}
+                    placeholder="السعر"
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-left"
+                  />
+                </div>
               </div>
-              
               <div>
-                <label className="block text-sm font-medium mb-1 dark:text-gray-300">المُستلم (د.ع)</label>
-                <FormattedNumberInput required value={paidAmount} onChange={val => setPaidAmount(val)}
-                  className="w-full border dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm" />
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">المُستلم</label>
+                <div className="relative">
+                  <Coins className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <FormattedNumberInput
+                    required
+                    value={paidAmount}
+                    onChange={setPaidAmount}
+                    placeholder="المُستلم"
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-left"
+                  />
+                </div>
               </div>
-
               <div>
-                <label className="block text-sm font-medium mb-1 dark:text-gray-300">الكلفة (د.ع)</label>
-                <FormattedNumberInput required value={cost} onChange={val => setCost(val)}
-                  className="w-full border dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#e8456b] text-sm" />
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">التكلفة</label>
+                <div className="relative">
+                  <Coins className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <FormattedNumberInput
+                    value={cost}
+                    onChange={setCost}
+                    placeholder="التكلفة"
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-left"
+                  />
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-bold text-gray-500 mb-1.5 block">صورة الكيكة</label>
-              <div onClick={() => fileInputRef.current?.click()}
-                className={`w-full h-24 border-2 border-dashed ${!imagePreview ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/10' : 'border-gray-200 dark:border-zinc-700'} rounded-xl flex items-center justify-center gap-3 cursor-pointer transition relative overflow-hidden`}>
-                {imagePreview ? (
-                  <img src={imagePreview} alt="preview" className="absolute inset-0 w-full h-full object-cover opacity-60" />
-                ) : null}
-                <div className="relative z-10 flex items-center gap-2">
-                  <ImageIcon className={`w-5 h-5 ${!imagePreview ? 'text-emerald-500' : 'text-gray-900 dark:text-white drop-shadow-md'}`} />
-                  <span className={`text-sm font-bold ${!imagePreview ? 'text-emerald-600' : 'text-gray-900 dark:text-white drop-shadow-md'}`}>تغيير الصورة</span>
-                </div>
+            <div className="z-20 relative">
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">وقت وتاريخ التسليم</label>
+              <div className="relative">
+                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
+                <DatePicker
+                  selected={deliveryDate ? new Date(deliveryDate) : null}
+                  onChange={(date: Date | null) => setDeliveryDate(date ? date.toISOString() : '')}
+                  locale={ar}
+                  showTimeSelect
+                  timeFormat="h:mm aa"
+                  timeIntervals={30}
+                  timeCaption="الوقت"
+                  dateFormat="yyyy/MM/dd h:mm aa"
+                  placeholderText="اختر التاريخ والوقت"
+                  className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:border-emerald-400 focus:outline-none text-right"
+                  withPortal
+                  required
+                >
+                  <div className="p-2 border-t border-gray-200 dark:border-zinc-700 mt-2 flex justify-end">
+                    <button type="button" className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm" onClick={() => {
+                      document.querySelector('.react-datepicker__portal')?.remove();
+                      document.body.classList.remove('react-datepicker-portal-open');
+                      const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape' });
+                      document.dispatchEvent(escapeEvent);
+                    }}>تم ✔</button>
+                  </div>
+                </DatePicker>
               </div>
-              <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" className="hidden" />
             </div>
 
             <button type="submit" disabled={loading}
-              className="w-full bg-emerald-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-emerald-200 dark:shadow-none hover:bg-emerald-600 transition flex items-center justify-center gap-2 mt-4 disabled:opacity-50">
+              className="w-full bg-gradient-to-l from-emerald-600 to-emerald-500 text-white py-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 mt-6 shadow-lg shadow-emerald-500/20 active:scale-95 transition disabled:opacity-50">
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />} حفظ التعديلات
             </button>
           </form>

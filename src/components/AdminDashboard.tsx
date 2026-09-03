@@ -56,56 +56,88 @@ export default function AdminDashboard() {
       let todaySales = 0, weekSales = 0, monthSales = 0, totalRevenue = 0, totalProfit = 0;
       let social = 0, appCakes = 0, appAcademy = 0, storeSupplies = 0;
 
-      const processOrder = (o: any, isExternal: boolean) => {
-        if (["rejected", "cancelled"].includes(o.status)) return;
+      let socialReceived = 0, appReceived = 0, suppliesReceived = 0;
+
+      // ── External Orders (Social) ──
+      externalOrders.forEach(o => {
         const isDelivered = o.status === 'delivered' || o.status === 'completed';
         if (!isDelivered) return;
 
-        const amt = Number(isExternal ? o.price : (o.toPayNow || o.total)) || 0;
-        const profit = Number(isExternal ? o.profit : (amt * 0.3)) || 0;
-        
-        totalRevenue += amt;
-        totalProfit += profit;
-        
-        if (isExternal) {
-          social += amt;
+        const price = Number(o.price || 0);
+        const paid = Number(o.paidAmount ?? price);
+        const isDebt = o.paidAmount !== undefined && paid !== price && !o.isDebtSettled;
+
+        let received = price;
+        if (isDebt) {
+          const diff = price - paid;
+          if (diff > 0) received = paid; // Customer owes us
+          else received = price; // We owe customer
+        }
+
+        socialReceived += received;
+        social += received; // Use received for breakdown
+        totalProfit += Number(o.profit || 0);
+
+        const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        d.setHours(0, 0, 0, 0);
+        if (d.getTime() === today.getTime()) todaySales += received;
+        if (d >= weekAgo) weekSales += received;
+        if (d >= monthAgo) monthSales += received;
+      });
+
+      // ── App Orders (orders) ──
+      orders.forEach(o => {
+        const isDelivered = o.status === 'delivered' || o.status === 'completed';
+        if (!isDelivered) return;
+
+        const hasSupplies = o.items?.some((i: any) => i.isSupply || i.category === 'supplies' || i.id?.includes('supply'));
+        const hasCourses = o.items?.some((i: any) => i.type === 'course');
+
+        const total = Number(o.total || o.toPayNow || 0);
+        const isDebt = o.isDebt === true;
+        const debtAmount = Number(o.debtAmount || 0);
+        const weOwe = o.customerOwesUs === false;
+
+        let received = total;
+        if (isDebt && debtAmount > 0) {
+          if (weOwe) received = total;
+          else received = total - debtAmount;
+        }
+
+        appReceived += received;
+        if (hasCourses && !hasSupplies && o.items?.length === 1) {
+          appAcademy += received;
         } else {
-          if (o.type === 'course') appAcademy += amt;
-          else appCakes += amt;
+          appCakes += received;
         }
-        
-        const d = (o.deliveryDate || o.deliveryTime) ? new Date(o.deliveryDate || o.deliveryTime) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
-        d.setHours(0,0,0,0);
 
-        if (d.getTime() === today.getTime()) {
-          todaySales += amt;
-        }
-        
-        if (d >= weekAgo) {
-           weekSales += amt;
-        }
-        if (d >= monthAgo) {
-           monthSales += amt;
-        }
-      };
+        totalProfit += (total * 0.3); // App profit estimate
 
-      orders.forEach(o => processOrder(o, false));
-      externalOrders.forEach(o => processOrder(o, true));
+        const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        d.setHours(0, 0, 0, 0);
+        if (d.getTime() === today.getTime()) todaySales += received;
+        if (d >= weekAgo) weekSales += received;
+        if (d >= monthAgo) monthSales += received;
+      });
 
+      // ── Store Sales (store_sales) ──
       storeSales.forEach(o => {
         if (["rejected", "cancelled"].includes(o.status)) return;
-        const amt = Number(o.price) || 0;
-        const profit = Number(o.profit) || 0;
-        totalRevenue += amt;
-        totalProfit += profit;
-        storeSupplies += amt;
+        const amt = Number(o.price || 0);
+        const profit = Number(o.profit || 0);
         
+        suppliesReceived += amt;
+        storeSupplies += amt;
+        totalProfit += profit;
+
         const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || o.date || 0);
         d.setHours(0, 0, 0, 0);
         if (d.getTime() === today.getTime()) todaySales += amt;
         if (d >= weekAgo) weekSales += amt;
         if (d >= monthAgo) monthSales += amt;
       });
+
+      totalRevenue = socialReceived + appReceived + suppliesReceived;
 
       const totalExpenses = expenses.filter((e: any) => !e.isDebt).reduce((sum, e: any) => sum + (Number(e.amount) || 0), 0);
       const totalSalaryDebt = expenses.filter((e: any) => e.isDebt).reduce((s, e: any) => s + (Number(e.amount) || 0), 0);
