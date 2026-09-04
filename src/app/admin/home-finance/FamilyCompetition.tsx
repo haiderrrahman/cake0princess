@@ -154,11 +154,13 @@ export default function FamilyCompetition() {
     if (viewMode === "history") {
       const q = query(
         collection(db, "familyCompetitionRounds"),
-        where("status", "==", "completed"),
-        orderBy("roundNumber", "desc")
+        where("status", "==", "completed")
       );
       getDocs(q).then(snapshot => {
-        setRoundsHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FamilyCompetitionRound)));
+        const rounds = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FamilyCompetitionRound));
+        setRoundsHistory(rounds.sort((a, b) => b.roundNumber - a.roundNumber));
+      }).catch(err => {
+        console.error("Error fetching rounds history:", err);
       });
     }
   }, [viewMode]);
@@ -512,7 +514,7 @@ export default function FamilyCompetition() {
                 <div>
                   <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">عدد النقاط</label>
                   <div className="grid grid-cols-4 gap-2 mb-2">
-                    {[1, 2, 3, 5].map(pts => (
+                    {[5, 10, 15, 20].map(pts => (
                       <button
                         key={pts}
                         type="button"

@@ -24,11 +24,16 @@ export default function FamilyCompetitionOverview({ onClick }: { onClick: () => 
       } else {
         setActiveRound(null);
         // Fetch last round
-        const lastQ = query(collection(db, "familyCompetitionRounds"), where("status", "==", "completed"), orderBy("roundNumber", "desc"), limit(1));
+        const lastQ = query(collection(db, "familyCompetitionRounds"), where("status", "==", "completed"));
         getDocs(lastQ).then(lastSnap => {
           if (!lastSnap.empty) {
-            setLastRound({ id: lastSnap.docs[0].id, ...lastSnap.docs[0].data() } as FamilyCompetitionRound);
+            const rounds = lastSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as FamilyCompetitionRound));
+            rounds.sort((a, b) => b.roundNumber - a.roundNumber);
+            setLastRound(rounds[0]);
           }
+          setLoading(false);
+        }).catch(err => {
+          console.error("Error fetching last round:", err);
           setLoading(false);
         });
       }
