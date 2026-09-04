@@ -195,6 +195,31 @@ export default function AdminDashboard() {
         </div>
 
         <div className="p-4">
+          {/* New Top Section: Home Finance & Quick Entry */}
+          <div className="flex flex-col gap-3 mb-4">
+            <Link 
+              href="/admin/home-finance" 
+              className="w-full bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white rounded-2xl p-4 flex items-center justify-between transition shadow-md shadow-red-500/20 border border-red-400"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md">
+                  <Home className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-right">
+                  <h3 className="font-black text-sm text-white">إدارة منزل حيدر وإيمان</h3>
+                  <p className="text-[10px] text-red-100 font-bold mt-0.5">مصاريف، فواتير، وواجبات العائلة</p>
+                </div>
+              </div>
+            </Link>
+
+            <button
+              onClick={() => setShowEntry(true)}
+              className="w-full bg-pink-600 hover:bg-pink-700 text-white rounded-2xl py-3 flex items-center justify-center gap-2 text-sm font-black transition shadow-md shadow-pink-500/20"
+            >
+              <Plus className="w-4 h-4" /> الإدخال
+            </button>
+          </div>
+
           {/* Top Stats Row */}
           <div className="grid grid-cols-3 gap-2 mb-4">
             <div className="bg-gray-50 dark:bg-zinc-800 rounded-2xl p-3 text-center border border-gray-100 dark:border-zinc-700 flex flex-col justify-center">
@@ -213,15 +238,8 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons & Modules */}
           <div className="flex flex-col gap-3">
-            <button
-              onClick={() => setShowEntry(true)}
-              className="w-full bg-pink-600 hover:bg-pink-700 text-white rounded-2xl py-3 flex items-center justify-center gap-2 text-sm font-black transition shadow-md shadow-pink-500/20"
-            >
-              <Plus className="w-4 h-4" /> الإدخال
-            </button>
-
             <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
               <Link href="/admin/hub?tab=external" className="bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-2xl p-2 flex flex-col items-center justify-center gap-1 text-center transition shadow-sm border border-emerald-100 dark:border-emerald-800/30 aspect-square">
                 <Smartphone className="w-5 h-5 mb-1" />
@@ -298,22 +316,6 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </div>
-
-            {/* Home Finance Prominent Block */}
-            <Link 
-              href="/admin/home-finance" 
-              className="w-full bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white rounded-2xl p-4 flex items-center justify-between transition shadow-md shadow-red-500/20 border border-red-400 mt-2"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md">
-                  <Home className="w-5 h-5 text-white" />
-                </div>
-                <div className="text-right">
-                  <h3 className="font-black text-sm text-white">إدارة منزل حيدر وإيمان</h3>
-                  <p className="text-[10px] text-red-100 font-bold mt-0.5">مصاريف، فواتير، وواجبات العائلة</p>
-                </div>
-              </div>
-            </Link>
           </div>
 
           <Link href="/admin" className="mt-4 w-full bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-300 rounded-2xl py-3 flex items-center justify-center gap-2 font-black text-sm transition shadow-sm">

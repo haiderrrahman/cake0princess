@@ -58,11 +58,11 @@ export interface FamilyCompetitionEntry {
 }
 
 // --- Helper Functions ---
-const getNextFriday8AM = () => {
+const getNextFriday9AM = () => {
   const now = new Date();
   const nextFriday = new Date(now);
   nextFriday.setDate(now.getDate() + ((5 - now.getDay() + 7) % 7 || 7));
-  nextFriday.setHours(8, 0, 0, 0); // Local time approximation for UI, will be handled securely in backend if needed
+  nextFriday.setHours(9, 0, 0, 0); // Local time approximation for UI
   return nextFriday;
 };
 
@@ -92,9 +92,41 @@ export default function FamilyCompetition() {
       where("status", "==", "active"),
       limit(1)
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
       if (!snapshot.empty) {
-        setActiveRound({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as FamilyCompetitionRound);
+        const roundData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as FamilyCompetitionRound;
+        
+        // Auto-finalize if past the end time (Friday 9 AM)
+        if (roundData.endsAt && Date.now() > roundData.endsAt.toMillis()) {
+          try {
+            await finalizeRound(roundData.id!);
+            
+            // Check if next round already exists before creating to prevent race conditions
+            const roundsRef = collection(db, "familyCompetitionRounds");
+            const nextRoundQ = query(roundsRef, where("roundNumber", "==", roundData.roundNumber + 1), limit(1));
+            const nextRoundSnap = await getDocs(nextRoundQ);
+            
+            if (nextRoundSnap.empty) {
+              const nextFriday = getNextFriday9AM();
+              await addDoc(roundsRef, {
+                roundNumber: roundData.roundNumber + 1,
+                targetPoints: 100,
+                participants: { ruqayya: 0, qunoot: 0, eva: 0 },
+                status: "active",
+                winner: null,
+                resultType: null,
+                startsAt: serverTimestamp(),
+                endsAt: Timestamp.fromDate(nextFriday),
+                finalizedAt: null
+              });
+              toast.success("تم إنهاء الجولة السابقة وبدء جولة جديدة تلقائياً.");
+            }
+          } catch (e) {
+            console.error("Auto finalize error", e);
+          }
+        } else {
+          setActiveRound(roundData);
+        }
       } else {
         setActiveRound(null);
       }
@@ -132,7 +164,7 @@ export default function FamilyCompetition() {
   }, [viewMode]);
 
   const handleStartNewRound = async () => {
-    const confirmed = await customConfirm(`هل أنت متأكد من بدء جولة جديدة بـ 8 نقاط كحد أدنى للفوز؟ جميع النقاط ستبدأ من 0.`);
+    const confirmed = await customConfirm(`هل أنت متأكد من بدء جولة جديدة بـ 80 نقطة كحد أدنى للفوز (من 100)؟ جميع النقاط ستبدأ من 0.`);
     
     if (!confirmed) return;
 
@@ -140,11 +172,11 @@ export default function FamilyCompetition() {
       const roundsSnapshot = await getDocs(query(collection(db, "familyCompetitionRounds"), orderBy("roundNumber", "desc"), limit(1)));
       const lastRoundNumber = roundsSnapshot.empty ? 0 : roundsSnapshot.docs[0].data().roundNumber;
 
-      const nextFriday = getNextFriday8AM();
+      const nextFriday = getNextFriday9AM();
 
       await addDoc(collection(db, "familyCompetitionRounds"), {
         roundNumber: lastRoundNumber + 1,
-        targetPoints: 8,
+        targetPoints: 100,
         participants: { ruqayya: 0, qunoot: 0, eva: 0 },
         status: "active",
         winner: null,
@@ -237,7 +269,7 @@ export default function FamilyCompetition() {
         let resultType = "no_winner";
         let finalWinner = null;
 
-        if (highestScore >= 8) {
+        if (highestScore >= 80) {
           if (winners.length === 1) {
             resultType = "winner";
             finalWinner = winners[0];
@@ -284,7 +316,7 @@ export default function FamilyCompetition() {
           <div>
             <h2 className="text-xl font-black text-gray-800 dark:text-white">منافسة العائلة</h2>
             {activeRound ? (
-              <p className="text-sm font-bold text-yellow-700/80 dark:text-yellow-400/80">الجولة رقم {activeRound.roundNumber} - شرط الفوز الأدنى: 8 نقاط</p>
+              <p className="text-sm font-bold text-yellow-700/80 dark:text-yellow-400/80">الجولة رقم {activeRound.roundNumber} - الفوز لمن يحصل على أعلى نتيجة (الحد الأدنى 80 نقطة)</p>
             ) : (
               <p className="text-sm font-bold text-gray-500">لا توجد جولة نشطة حالياً</p>
             )}
