@@ -82,6 +82,7 @@ export default function FamilyCompetition() {
   
   const [viewMode, setViewMode] = useState<"competition" | "history">("competition");
   const [selectedRoundHistory, setSelectedRoundHistory] = useState<string | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<FamilyCompetitionEntry[]>([]);
   
 
 
@@ -164,6 +165,19 @@ export default function FamilyCompetition() {
       });
     }
   }, [viewMode]);
+
+  // Fetch entries for selected history round
+  useEffect(() => {
+    if (!selectedRoundHistory) return;
+    const q = query(
+      collection(db, "familyCompetitionEntries"),
+      where("roundId", "==", selectedRoundHistory)
+    );
+    getDocs(q).then(snapshot => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FamilyCompetitionEntry));
+      setHistoryEntries(data.sort((a, b) => (b.createdAt?.toMillis?.() || Date.now()) - (a.createdAt?.toMillis?.() || Date.now())));
+    });
+  }, [selectedRoundHistory]);
 
   const handleStartNewRound = async () => {
     const confirmed = await customConfirm(`هل أنت متأكد من بدء جولة جديدة بـ 80 نقطة كحد أدنى للفوز (من 100)؟ جميع النقاط ستبدأ من 0.`);
@@ -474,7 +488,7 @@ export default function FamilyCompetition() {
             <div className="text-center py-10 text-gray-500">لا توجد جولات سابقة.</div>
           ) : (
             roundsHistory.map(round => (
-              <div key={round.id} className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-gray-100 dark:border-zinc-800 shadow-sm">
+              <div key={round.id} className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-gray-100 dark:border-zinc-800 shadow-sm transition-all">
                 <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100 dark:border-zinc-800">
                   <div>
                     <h4 className="font-black text-lg flex items-center gap-2">
@@ -494,6 +508,51 @@ export default function FamilyCompetition() {
                     ))}
                   </div>
                 </div>
+                
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => setSelectedRoundHistory(selectedRoundHistory === round.id ? null : round.id)}
+                    className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-800 dark:hover:text-white transition bg-gray-50 hover:bg-gray-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-4 py-2 rounded-xl"
+                  >
+                    {selectedRoundHistory === round.id ? (
+                      <>إخفاء سجل العمليات <ChevronDown className="w-3 h-3 rotate-180 transition-transform" /></>
+                    ) : (
+                      <>عرض سجل العمليات <ChevronDown className="w-3 h-3 transition-transform" /></>
+                    )}
+                  </button>
+                </div>
+                
+                {selectedRoundHistory === round.id && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-zinc-800 space-y-3 max-h-64 overflow-y-auto pr-2">
+                    {historyEntries.length === 0 ? (
+                      <div className="text-center text-sm text-gray-500 py-2">لا توجد عمليات مسجلة في هذه الجولة.</div>
+                    ) : (
+                      historyEntries.map(entry => (
+                        <div key={entry.id} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-800">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm ${entry.type === 'add' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                              {entry.type === 'add' ? '+' : '-'}{entry.points}
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-800 dark:text-white text-sm">
+                                {entry.participantName}
+                              </p>
+                              <p className="text-xs text-gray-600 dark:text-gray-300 font-normal mt-0.5">
+                                {entry.reason}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-left">
+                             <p className="text-[10px] text-gray-400 mb-0.5">الرصيد: <span className="font-bold text-gray-800 dark:text-gray-200">{entry.balanceAfter}</span></p>
+                             <p className="text-[10px] text-gray-400">
+                                {entry.createdAt?.toDate?.().toLocaleString('ar-IQ')}
+                             </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             ))
           )}
