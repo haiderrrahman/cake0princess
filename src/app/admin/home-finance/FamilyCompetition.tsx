@@ -511,7 +511,7 @@ export default function FamilyCompetition() {
                 
                 <div className="flex justify-center">
                   <button
-                    onClick={() => setSelectedRoundHistory(selectedRoundHistory === round.id ? null : round.id)}
+                    onClick={() => setSelectedRoundHistory(selectedRoundHistory === round.id ? null : round.id!)}
                     className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-800 dark:hover:text-white transition bg-gray-50 hover:bg-gray-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-4 py-2 rounded-xl"
                   >
                     {selectedRoundHistory === round.id ? (
