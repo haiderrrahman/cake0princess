@@ -139,7 +139,7 @@ function AdminHubContent() {
       todaySales: 0, weekSales: 0, monthSales: 0, allTimeSales: 0, 
       todayExtSales: 0, weekExtSales: 0, monthExtSales: 0, allTimeExtSales: 0,
       extOweUs: 0, extWeOwe: 0,
-      totalOrders: 0, pendingOrders: 0, pendingExtOrders: 0, externalSales: 0, externalProfit: 0,
+      totalOrders: 0, pendingOrders: 0, pendingExtOrders: 0, pendingExtOrdersAmount: 0, externalSales: 0, externalProfit: 0,
       expenses: 0, inventoryLow: 0, inventoryValue: 0,
       netProfit: 0, totalProfit: 0,
       breakdown: { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 }
@@ -411,7 +411,9 @@ function AdminHubContent() {
     const externalSales = recentExt.reduce((s, o) => s + Number(o.price || 0), 0);
     const externalProfit = recentExt.reduce((s, o) => s + Number(o.profit || 0), 0);
     
-    const pendingExtOrders = externalOrders.filter(o => ["pending", "processing"].includes(o.status || 'pending')).length;
+    const pendingExtOrdersList = externalOrders.filter(o => ["pending", "processing"].includes(o.status || 'pending'));
+    const pendingExtOrders = pendingExtOrdersList.length;
+    const pendingExtOrdersAmount = pendingExtOrdersList.reduce((s, o) => s + Number(o.price || 0), 0);
 
     setStats((prev: any) => ({
       ...prev,
@@ -419,7 +421,7 @@ function AdminHubContent() {
       todayExtSales, weekExtSales, monthExtSales, allTimeExtSales, 
       extOweUs, extWeOwe,
       totalOrders: orders.length, pendingOrders: pendingOrders.length, 
-      pendingExtOrders, externalSales, externalProfit, 
+      pendingExtOrders, pendingExtOrdersAmount, externalSales, externalProfit, 
       totalProfit, netProfit: totalProfit - prev.expenses, breakdown 
     }));
   }, [orders, externalOrders, storeSales]);
@@ -889,7 +891,10 @@ function AdminHubContent() {
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> طلبات معلقة</p>
-              <p className="text-lg font-black text-amber-300">{stats.pendingExtOrders || 0} <span className="text-[10px] font-normal">طلب</span></p>
+              <div className="flex justify-between items-end">
+                <p className="text-lg font-black text-amber-300">{stats.pendingExtOrders || 0} <span className="text-[10px] font-normal">طلب</span></p>
+                <p className="text-sm font-black text-amber-100 bg-amber-500/20 px-2 py-0.5 rounded-lg">{(stats.pendingExtOrdersAmount || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+              </div>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> مبيعات الأسبوع</p>
