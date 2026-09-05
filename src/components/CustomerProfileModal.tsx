@@ -1,10 +1,9 @@
 "use client";
 import { X, ShoppingBag, Receipt, MapPin, Phone, Package, Calendar, User } from "lucide-react";
 import { useEffect, useState } from "react";
-import { collection, query, where, getDocs, orderBy, updateDoc, doc } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Loader2, Ban } from "lucide-react";
-import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
 interface CustomerProfileModalProps {
   isOpen: boolean;
@@ -29,7 +28,7 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
         const custQ = query(collection(db, "customers"), where("name", "==", customerName));
         const custSnap = await getDocs(custQ);
         if (!custSnap.empty) {
-          setCustomerProfile({ id: custSnap.docs[0].id, ...custSnap.docs[0].data() });
+          setCustomerProfile(custSnap.docs[0].data());
         }
 
         // Fetch social orders
@@ -82,23 +81,6 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
   }, [isOpen, customerName, customerPhone]);
 
   if (!isOpen) return null;
-
-  const handleToggleBlacklist = async () => {
-    if (!customerProfile?.id) {
-      toast.error("لم يتم العثور على ملف الزبون في قاعدة البيانات");
-      return;
-    }
-    const newStatus = !customerProfile.isBlacklisted;
-    try {
-      await updateDoc(doc(db, "customers", customerProfile.id), {
-        isBlacklisted: newStatus
-      });
-      setCustomerProfile((prev: any) => ({ ...prev, isBlacklisted: newStatus }));
-      toast.success(newStatus ? "تم إضافة الزبون للقائمة السوداء" : "تم إزالة الزبون من القائمة السوداء");
-    } catch (e) {
-      toast.error("حدث خطأ أثناء التحديث");
-    }
-  };
 
   const totalAppSpent = appOrders.reduce((acc, order) => acc + Number(order.total || 0), 0);
   const totalSocialSpent = socialOrders.reduce((acc, order) => acc + Number(order.price || 0), 0);
@@ -159,20 +141,9 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
               })()}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {customerProfile && (
-              <button 
-                onClick={handleToggleBlacklist}
-                className={`flex items-center justify-center p-2 rounded-full transition active:scale-90 ${customerProfile.isBlacklisted ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-500 dark:text-gray-400 hover:text-red-500'}`}
-                title={customerProfile.isBlacklisted ? 'إزالة من القائمة السوداء' : 'إضافة للقائمة السوداء'}
-              >
-                <Ban className="w-5 h-5" />
-              </button>
-            )}
-            <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition active:scale-90">
-              <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-            </button>
-          </div>
+          <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition active:scale-90">
+            <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">

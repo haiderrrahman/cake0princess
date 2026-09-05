@@ -15,7 +15,7 @@ import { format } from "date-fns";
 import { ar } from "date-fns/locale/ar";
 import "react-datepicker/dist/react-datepicker.css";
 import CustomerProfileModal from "@/components/CustomerProfileModal";
-import { MapPin, Ban } from "lucide-react";
+import { MapPin } from "lucide-react";
 
 export default function ExternalOrdersAdmin() {
   const [orders, setOrders] = useState<any[]>(() => {
@@ -30,7 +30,6 @@ export default function ExternalOrdersAdmin() {
     }
     return [];
   });
-  const [socialProfiles, setSocialProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -77,11 +76,6 @@ export default function ExternalOrdersAdmin() {
     // Cache is now loaded synchronously in useState
     // 1. Fast network query with onSnapshot for real-time and local cache
     const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
-    
-    const unsubSocial = onSnapshot(collection(db, "social_customers"), (snap) => {
-      setSocialProfiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
     const unsubscribe = onSnapshot(q, (snap) => {
       const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
       setOrders(fetchedOrders);
@@ -117,7 +111,7 @@ export default function ExternalOrdersAdmin() {
       setCustomers(custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }).catch(e => console.error("Error fetching customers:", e));
 
-    return () => { unsubscribe(); unsubSocial(); };
+    return () => unsubscribe();
   }, []);
 
   const fillCustomerData = (name: string, existingPhone: string, existingAddress: string, existingPlatform: string) => {
@@ -391,15 +385,6 @@ export default function ExternalOrdersAdmin() {
     const matchesStatus = statusFilter === "all" || (o.status || "pending") === statusFilter;
     return matchesSearch && matchesStatus;
   }).sort((a, b) => {
-    const custA = customers.find(c => c.name.trim().toLowerCase() === a.customerName?.trim().toLowerCase());
-    const custB = customers.find(c => c.name.trim().toLowerCase() === b.customerName?.trim().toLowerCase());
-    const isBlacklistedA = custA?.isBlacklisted;
-    const isBlacklistedB = custB?.isBlacklisted;
-
-    // Blacklisted orders go to the absolute bottom
-    if (isBlacklistedA && !isBlacklistedB) return 1;
-    if (!isBlacklistedA && isBlacklistedB) return -1;
-
     const isDeliveredA = a.status === 'delivered' || a.status === 'completed';
     const isDeliveredB = b.status === 'delivered' || b.status === 'completed';
     
@@ -480,15 +465,8 @@ export default function ExternalOrdersAdmin() {
 
           let todaySales = 0, weekSales = 0, monthSales = 0;
           let totalOweUs = 0, totalWeOwe = 0;
-          let pendingOrdersAmount = 0;
 
           orders.forEach(o => {
-            const isDelivered = o.status === "delivered" || o.status === "completed";
-            
-            if (!isDelivered && o.status !== "cancelled") {
-              pendingOrdersAmount += Number(o.price || 0);
-            }
-
             if (o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled) {
               if (Number(o.paidAmount) < Number(o.price)) {
                 totalOweUs += (Number(o.price) - Number(o.paidAmount));
@@ -497,6 +475,7 @@ export default function ExternalOrdersAdmin() {
               }
             }
 
+            const isDelivered = o.status === "delivered" || o.status === "completed";
             if (!isDelivered) return;
 
             const price = Number(o.price || 0);
@@ -528,10 +507,6 @@ export default function ExternalOrdersAdmin() {
               <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
                 <p className="text-[9px] md:text-xs font-bold text-emerald-200 mb-1">مبيعات الشهر</p>
                 <p className="text-xs md:text-xl font-black text-white">{monthSales.toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
-              </div>
-              <div className="bg-amber-500/20 backdrop-blur-md border border-amber-500/30 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
-                <p className="text-[9px] md:text-xs font-bold text-amber-200 mb-1">الطلبات المعلقة</p>
-                <p className="text-xs md:text-xl font-black text-white">{pendingOrdersAmount.toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
               </div>
               <div className="bg-rose-500/20 backdrop-blur-md border border-rose-500/30 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
                 <p className="text-[9px] md:text-xs font-bold text-rose-200 mb-1">باقي نطلبه</p>
@@ -624,28 +599,13 @@ export default function ExternalOrdersAdmin() {
                       })()}
                     </div>
                     {debts.map(order => {
-                      const customer = customers.find(c => c.name.trim().toLowerCase() === order.customerName?.trim().toLowerCase());
-                      const isBlacklisted = customer?.isBlacklisted;
                       const customerOwesUs = Number(order.price) > Number(order.paidAmount || 0);
                       const diff = Math.abs(Number(order.price) - Number(order.paidAmount || 0));
-                      
-                      let cardBorderColor = customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50';
-                      if (isBlacklisted) cardBorderColor = 'border-black dark:border-zinc-700 bg-gray-200 dark:bg-zinc-950 opacity-90';
-                      
                       return (
-                        <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${cardBorderColor}`}>
+                        <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
                           <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                             {(order.imageUrl || order.tempImageUrl) ? (
-                              <Image 
-                                unoptimized 
-                                width={100} 
-                                height={100} 
-                                priority
-                                src={order.imageUrl || order.tempImageUrl} 
-                                alt={order.cakeName} 
-                                onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} 
-                                className="w-full h-full object-cover cursor-pointer bg-gray-200 dark:bg-zinc-800" 
-                              />
+                              <img loading="lazy" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-gray-300">
                                 <Smartphone className="w-8 h-8" />
@@ -657,12 +617,9 @@ export default function ExternalOrdersAdmin() {
                             <div>
                               <div className="flex justify-between items-start mb-1">
                                 <div>
-                                  <h3 className={`font-black text-lg leading-tight flex items-center gap-2 ${isBlacklisted ? 'text-black dark:text-gray-300 line-through decoration-red-500' : 'text-gray-900 dark:text-white'}`}>
-                                    {order.cakeName}
-                                    {isBlacklisted && <Ban className="w-4 h-4 text-red-500" />}
-                                  </h3>
+                                  <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
                                   <p 
-                                    className={`text-xs font-bold mt-1 flex items-center gap-1.5 cursor-pointer hover:underline ${isBlacklisted ? 'text-black dark:text-gray-400' : 'text-emerald-600'}`}
+                                    className="text-xs font-bold text-emerald-600 mt-1 flex items-center gap-1.5 cursor-pointer hover:underline"
                                     onClick={() => {
                                       setSelectedCustomerForProfile({ name: order.customerName, phone: order.customerPhone });
                                       setProfileModalOpen(true);
@@ -706,29 +663,13 @@ export default function ExternalOrdersAdmin() {
                   </div>
                 )}
                 <div className="space-y-3">
-                  {normals.map(order => {
-                    const customer = customers.find(c => c.name.trim().toLowerCase() === order.customerName?.trim().toLowerCase());
-                    const isBlacklisted = customer?.isBlacklisted;
-                    
-                    let cardBgColor = 'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800';
-                    if (isBlacklisted) cardBgColor = 'bg-gray-200 dark:bg-zinc-950 border-black dark:border-zinc-700 opacity-90';
-
-                    return (
-                    <div key={order.id} className={`${cardBgColor} rounded-[24px] p-4 border shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition`}>
+                  {normals.map(order => (
+                    <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[24px] p-4 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition">
 
               {/* Image / Icon */}
               <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                 {(order.imageUrl || order.tempImageUrl) ? (
-                  <Image 
-                    unoptimized 
-                    width={100} 
-                    height={100} 
-                    priority
-                    src={order.imageUrl || order.tempImageUrl} 
-                    alt={order.cakeName} 
-                    onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} 
-                    className="w-full h-full object-cover cursor-pointer bg-gray-200 dark:bg-zinc-800" 
-                  />
+                  <img loading="lazy" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-300">
                     <Smartphone className="w-8 h-8" />
@@ -741,12 +682,9 @@ export default function ExternalOrdersAdmin() {
                 <div>
                   <div className="flex justify-between items-start mb-1">
                     <div>
-                      <h3 className={`font-black text-lg leading-tight flex items-center gap-2 ${isBlacklisted ? 'text-black dark:text-gray-300 line-through decoration-red-500' : 'text-gray-900 dark:text-white'}`}>
-                        {order.cakeName}
-                        {isBlacklisted && <Ban className="w-4 h-4 text-red-500" />}
-                      </h3>
+                      <h3 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{order.cakeName}</h3>
                       <p 
-                        className={`text-xs font-bold mt-1 flex items-center gap-1.5 cursor-pointer hover:underline ${isBlacklisted ? 'text-black dark:text-gray-400' : 'text-emerald-600'}`}
+                        className="text-xs font-bold text-emerald-600 mt-1 flex items-center gap-1.5 cursor-pointer hover:underline"
                         onClick={() => {
                           setSelectedCustomerForProfile({ name: order.customerName, phone: order.customerPhone });
                           setProfileModalOpen(true);
@@ -807,8 +745,7 @@ export default function ExternalOrdersAdmin() {
                 </div>
               </div>
             </div>
-            );
-          })}
+          ))}
                 </div>
               </>
             );

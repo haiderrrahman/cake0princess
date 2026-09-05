@@ -290,7 +290,6 @@ export default function HomeFinanceDashboard() {
   const [travelInventory, setTravelInventory] = useState<InventoryItem[]>([]);
   const [needs, setNeeds] = useState<Need[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
-  const [cakeDebtAmount, setCakeDebtAmount] = useState<number>(0);
   const [familyNeeds, setFamilyNeeds] = useState<FamilyMemberNeed[]>([]);
   const [travelTrips, setTravelTrips] = useState<TravelTrip[]>([]);
   const [travelExpenses, setTravelExpenses] = useState<TravelExpense[]>([]);
@@ -497,13 +496,6 @@ export default function HomeFinanceDashboard() {
 
     let loadedCount = 0;
     
-    
-    const unsubExpenses = onSnapshot(collection(db, "expenses"), (snap) => {
-      const expensesList = snap.docs.map(doc => doc.data() as any);
-      const totalDebt = expensesList.filter((e: any) => e.isDebt).reduce((s, e: any) => s + (Number(e.amount) || 0), 0);
-      setCakeDebtAmount(totalDebt);
-    });
-
     const unsubscribers = keys.map(k => {
       return onSnapshot(doc(db, "home_finance", k), (snap) => {
         if (snap.exists() && snap.data().data) {
@@ -718,11 +710,8 @@ export default function HomeFinanceDashboard() {
   const unpaidInstallmentsMonthly = installments.filter(i => isInstallmentOwedThisCycle(i)).reduce((s, i) => s + i.monthlyInstallment, 0);
   const unpaidObligations = unpaidBillsAmt + unpaidInstallmentsMonthly;
 
-  const totalDebtsForMe = debts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
-  const totalDebtsOnMe = debts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
-
   // بناءً على طلبك السابق: يتم خصم القسط أو الفاتورة فقط عند دفعها (لتصبح ضمن المصاريف) لمنع الخصم المزدوج
-  const balance = totalIncome - totalExpensesAmt - totalDebtsOnMe + totalDebtsForMe;
+  const balance = totalIncome - totalExpensesAmt;
 
   const shoppingList = [
     ...inventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "inventory" as const })),
@@ -747,6 +736,8 @@ export default function HomeFinanceDashboard() {
   }, [shoppingList, familyNeeds]);
 
   const totalNeedsAmt = needs.filter(n => !n.isBought).reduce((s, n) => s + (n.estimatedPrice || 0), 0) + shoppingList.reduce((s, i) => s + (i.estimatedPrice || 0), 0);
+  const totalDebtsForMe = debts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
+  const totalDebtsOnMe = debts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
 
   // ──────────────────────────────────────────
   // FUTURE PLAN HANDLERS
