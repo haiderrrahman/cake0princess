@@ -418,7 +418,7 @@ export default function HomeFinanceDashboard() {
     return Array.from(new Set([
       ...inventory.map(i => i.name),
       ...expenses.map(e => e.name),
-      ...displayDebts.map(d => d.person),
+      ...debts.map(d => d.person),
       ...installments.map(i => i.name),
       ...bills.map(b => b.name)
     ])).filter(Boolean);
@@ -744,8 +744,8 @@ export default function HomeFinanceDashboard() {
   }, [shoppingList, familyNeeds]);
 
   const totalNeedsAmt = needs.filter(n => !n.isBought).reduce((s, n) => s + (n.estimatedPrice || 0), 0) + shoppingList.reduce((s, i) => s + (i.estimatedPrice || 0), 0);
-  const totalDebtsForMe = displayDebts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
-  const totalDebtsOnMe = displayDebts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
+  const totalDebtsForMe = debts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
+  const totalDebtsOnMe = debts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
 
   // ──────────────────────────────────────────
   // FUTURE PLAN HANDLERS
@@ -1681,7 +1681,7 @@ setNeedNameInput("");
     if (initialPaidMonths) item.initialPaidMonths = initialPaidMonths;
     if (downPayment) item.downPayment = downPayment;
     if (isEdit) {
-      const updated = displayDebts.map(x => x.id === item.id ? item : x);
+      const updated = debts.map(x => x.id === item.id ? item : x);
       setDebts(updated);
       syncToFirebase("debts", updated);
       toast.success("تم التعديل");
@@ -1701,7 +1701,7 @@ setNeedNameInput("");
 
   const handleDeleteDebt = async (id: string) => {
     if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
-    const updated = displayDebts.filter(x => x.id !== id);
+    const updated = debts.filter(x => x.id !== id);
     setDebts(updated);
     syncToFirebase("debts", updated);
   };
@@ -1745,7 +1745,7 @@ setNeedNameInput("");
       }
       
       const payment = { date: new Date().toISOString(), amount: paymentAmount, expenseOrIncomeId: recordId };
-      const updatedDebts = displayDebts.map(x => x.id === debt.id ? {
+      const updatedDebts = debts.map(x => x.id === debt.id ? {
         ...x,
         payments: [...x.payments, payment]
       } : x);
@@ -1792,7 +1792,7 @@ setNeedNameInput("");
       }
       
       const payment = { date: new Date().toISOString(), amount: actualAmount, expenseOrIncomeId: recordId };
-      const updatedDebts = displayDebts.map(x => x.id === debt.id ? {
+      const updatedDebts = debts.map(x => x.id === debt.id ? {
         ...x,
         payments: [...x.payments, payment]
       } : x);
@@ -1940,7 +1940,7 @@ setEditTrip(null);
       }
     }
     
-    const updatedDebts = displayDebts.map(x => x.id === debt.id ? { 
+    const updatedDebts = debts.map(x => x.id === debt.id ? { 
       ...x, 
       payments: x.payments.slice(0, -1) 
     } : x);
@@ -1957,7 +1957,7 @@ setEditTrip(null);
   const totalShortages = shoppingList.length + familyNeeds.filter(n => n.status === "pending" && n.type !== "duty").length;
   const unpaidBillsCount = bills.filter(b => !isBillPaidThisCycle(b)).length;
   const delayedInstallmentsCount = installments.filter(i => isInstallmentOwedThisCycle(i)).length;
-  const unsettledDebtsCount = displayDebts.filter(d => { const total = d.payments.reduce((s, p) => s + p.amount, 0); return d.amount - total > 0; }).length;
+  const unsettledDebtsCount = debts.filter(d => { const total = d.payments.reduce((s, p) => s + p.amount, 0); return d.amount - total > 0; }).length;
 
   const tabs = [
     { key: "overview",      label: "نظرة عامة",          emoji: "🏠", icon: BarChart3, badge: 0 },
@@ -2207,8 +2207,8 @@ setEditTrip(null);
             availCard = { title: "إجمالي المتوفر (منزل وعائلة)", count: totalAvailQty, countLabel: "عنصر متوفر", value: 0, color: "emerald", icon: "📦" };
             shortCard = { title: "إجمالي النواقص والاحتياجات", count: totalShortQty, countLabel: "طلب/عنصر ناقص", value: totalNeedsAmt, color: "orange", icon: "🚨" };
           } else if (activeTab === "debts") {
-            const myDebtsCount = displayDebts.filter(d => d.type === "دين لي").length;
-            const onMeDebtsCount = displayDebts.filter(d => d.type === "دين علي").length;
+            const myDebtsCount = debts.filter(d => d.type === "دين لي").length;
+            const onMeDebtsCount = debts.filter(d => d.type === "دين علي").length;
             availCard = { title: "ديون لي (عند الناس)", count: myDebtsCount, countLabel: "دين", value: totalDebtsForMe, color: "emerald", icon: "📈" };
             shortCard = { title: "ديون علي (مطلوبة مني)", count: onMeDebtsCount, countLabel: "دين", value: totalDebtsOnMe, color: "orange", icon: "📉" };
           } else if (activeTab === "expenses") {
@@ -3444,7 +3444,7 @@ setEditTrip(null);
               </button>
             </div>
             
-            {displayDebts.length === 0 ? (
+            {debts.length === 0 ? (
               <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
                 <Banknote className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-400 font-bold text-sm">لا توجد ديون أو فائض مسجل</p>
