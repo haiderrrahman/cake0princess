@@ -497,7 +497,6 @@ export default function ExternalOrdersAdmin() {
               }
             }
 
-            const isDelivered = o.status === "delivered" || o.status === "completed";
             if (!isDelivered) return;
 
             const price = Number(o.price || 0);
