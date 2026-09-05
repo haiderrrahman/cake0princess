@@ -129,6 +129,7 @@ function AdminHubContent() {
   // Track purchase source per item: 'haider' | 'cake'
   const [purchaseSource, setPurchaseSource] = useState<Record<string, 'salary' | 'cake'>>({});
   const [invExpSummary, setInvExpSummary] = useState({ haider: 0, cake: 0 });
+  const [blacklistedCustomers, setBlacklistedCustomers] = useState<string[]>([]);
 
   const [stats, setStats] = useState<any>(() => {
     if (typeof window !== 'undefined') {
@@ -273,6 +274,12 @@ function AdminHubContent() {
       else setHomeIncomes([]);
     });
 
+    const unsubCustomers = onSnapshot(query(collection(db, "customers"), where("isBlacklisted", "==", true)), (snap) => {
+      const names = snap.docs.map(d => d.data().name).filter(Boolean);
+      const phones = snap.docs.map(d => d.data().phone).filter(Boolean);
+      setBlacklistedCustomers([...names, ...phones]);
+    });
+
     return () => {
       window.removeEventListener('backgroundUploadSuccess', handleBackgroundUpload);
       unsubExpenses();
@@ -280,6 +287,7 @@ function AdminHubContent() {
       unsubHomeDebts();
       unsubHomeExpenses();
       unsubHomeIncomes();
+      unsubCustomers();
     };
   }, [fetchAll]);
 
@@ -641,9 +649,16 @@ function AdminHubContent() {
     const combined = [...appOrders];
     
     // Sort logic: 
-    // 1. Delivered / Completed at the bottom
-    // 2. Nearest delivery/creation date first (ascending order)
+    // 1. Blacklisted users at the bottom
+    // 2. Delivered / Completed at the bottom
+    // 3. Nearest delivery/creation date first (ascending order)
     return combined.sort((a, b) => {
+      const isBlacklistedA = blacklistedCustomers.includes(a.shippingAddress?.name || "") || blacklistedCustomers.includes(a.shippingAddress?.phone || "");
+      const isBlacklistedB = blacklistedCustomers.includes(b.shippingAddress?.name || "") || blacklistedCustomers.includes(b.shippingAddress?.phone || "");
+      
+      if (isBlacklistedA && !isBlacklistedB) return 1;
+      if (!isBlacklistedA && isBlacklistedB) return -1;
+
       const isDeliveredA = a.status === 'delivered' || a.status === 'completed';
       const isDeliveredB = b.status === 'delivered' || b.status === 'completed';
       
@@ -684,6 +699,12 @@ function AdminHubContent() {
     if (extSearch && !o.customerName?.includes(extSearch) && !o.cakeName?.includes(extSearch)) return false;
     return true;
   }).sort((a, b) => {
+    const isBlacklistedA = blacklistedCustomers.includes(a.customerName || "") || blacklistedCustomers.includes(a.customerPhone || "");
+    const isBlacklistedB = blacklistedCustomers.includes(b.customerName || "") || blacklistedCustomers.includes(b.customerPhone || "");
+    
+    if (isBlacklistedA && !isBlacklistedB) return 1;
+    if (!isBlacklistedA && isBlacklistedB) return -1;
+
     const isDeliveredA = a.status === 'delivered' || a.status === 'completed';
     const isDeliveredB = b.status === 'delivered' || b.status === 'completed';
     
@@ -1032,8 +1053,9 @@ function AdminHubContent() {
                     {filteredOrders.slice(0, 30).map(order => {
                       const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG["pending"];
                       const isUpdating = updatingOrder === order.id;
+                      const isBlacklisted = blacklistedCustomers.includes(order.shippingAddress?.name || "") || blacklistedCustomers.includes(order.shippingAddress?.phone || "");
                       return (
-                        <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-3xl p-3 sm:p-4 flex gap-4 border border-gray-100 dark:border-zinc-800 shadow-sm relative group overflow-hidden transition-all duration-300 hover:shadow-md">
+                        <div key={order.id} className={`rounded-3xl p-3 sm:p-4 flex gap-4 shadow-sm relative group overflow-hidden transition-all duration-300 hover:shadow-md ${isBlacklisted ? 'bg-zinc-900 border border-zinc-800' : 'bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800'}`}>
                           {/* Right: Image */}
                           <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 border border-gray-100 dark:border-zinc-700 flex items-center justify-center">
                             {order.items && order.items.length > 0 && (order.items[0].imageUrl || order.items[0].tempImageUrl) ? (
@@ -1047,8 +1069,9 @@ function AdminHubContent() {
                             <div>
                               <div className="flex justify-between items-start mb-1">
                               <button onClick={() => setCustomerProfile({ name: order.shippingAddress?.name || order.userName || "ضيف", phone: order.shippingAddress?.phone })} className="text-right group">
-                                <h3 className="font-black text-gray-900 dark:text-white text-base sm:text-lg leading-tight group-hover:text-[#FF3366] transition underline decoration-transparent group-hover:decoration-[#FF3366] underline-offset-4 flex items-center gap-1.5">
+                                <h3 className={`font-black text-base sm:text-lg leading-tight group-hover:text-[#FF3366] transition underline decoration-transparent group-hover:decoration-[#FF3366] underline-offset-4 flex items-center gap-1.5 ${isBlacklisted ? 'text-gray-500' : 'text-gray-900 dark:text-white'}`}>
                                   {order.shippingAddress?.name || order.userName || "ضيف"}
+                                  {isBlacklisted && <span className="text-[9px] bg-zinc-800 text-red-400 px-1.5 py-0.5 rounded-md whitespace-nowrap">محظور 🚫</span>}
                                 </h3>
                               </button>
                                 <span className={`text-[10px] font-black px-2 py-1 rounded-xl shrink-0 ml-1 ${cfg.bg} ${cfg.color}`}>
@@ -1160,8 +1183,11 @@ function AdminHubContent() {
                       const fullyPaidDelivered = order.status === "delivered" && !isDebt;
                       const diffAmt = isDebt ? Math.abs(Number(order.price) - Number(order.paidAmount || 0)) : 0;
 
+                      const isBlacklisted = blacklistedCustomers.includes(order.customerName || "") || blacklistedCustomers.includes(order.customerPhone || "");
+
                       return (
                         <div key={order.id} className={`rounded-3xl p-3 flex flex-col gap-3 shadow-sm relative group border-2 transition-all ${
+                          isBlacklisted ? 'bg-zinc-900 border-zinc-800' :
                           customerOwesUs ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-400 dark:border-rose-800' : 
                           weOweCustomer ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-400 dark:border-blue-800' : 
                           fullyPaidDelivered ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-400 dark:border-purple-800' :
@@ -1184,10 +1210,11 @@ function AdminHubContent() {
 
                           <div className="flex-1 flex flex-col justify-between">
                             <div className="text-center">
-                              <button onClick={() => setCustomerProfile({ name: order.customerName, phone: order.customerPhone })} className="text-center group mx-auto flex items-center justify-center gap-1.5 bg-gray-50 dark:bg-zinc-800/80 hover:bg-gray-100 dark:hover:bg-zinc-700 px-3 py-1.5 rounded-xl transition active:scale-95 border border-gray-100 dark:border-zinc-700 shadow-sm">
-                                <span className="text-[#FF3366] text-sm">👤</span>
-                                <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base leading-tight line-clamp-1 underline decoration-gray-300 dark:decoration-zinc-600 underline-offset-4">
+                              <button onClick={() => setCustomerProfile({ name: order.customerName, phone: order.customerPhone })} className={`text-center group mx-auto flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl transition active:scale-95 border shadow-sm ${isBlacklisted ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-50 dark:bg-zinc-800/80 hover:bg-gray-100 dark:hover:bg-zinc-700 border-gray-100 dark:border-zinc-700'}`}>
+                                <span className={`text-sm ${isBlacklisted ? 'text-gray-500' : 'text-[#FF3366]'}`}>👤</span>
+                                <h3 className={`font-black text-sm sm:text-base leading-tight line-clamp-1 underline underline-offset-4 flex items-center gap-1.5 ${isBlacklisted ? 'text-gray-500 decoration-transparent' : 'text-gray-900 dark:text-white decoration-gray-300 dark:decoration-zinc-600'}`}>
                                   {order.customerName}
+                                  {isBlacklisted && <span className="text-[9px] bg-zinc-700 text-red-400 px-1.5 py-0.5 rounded-md whitespace-nowrap decoration-transparent">محظور</span>}
                                 </h3>
                               </button>
                               <p className="text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1 font-bold">{order.cakeName}</p>

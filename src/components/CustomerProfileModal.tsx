@@ -1,7 +1,7 @@
 "use client";
 import { X, ShoppingBag, Receipt, MapPin, Phone, Package, Calendar, User } from "lucide-react";
 import { useEffect, useState } from "react";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, updateDoc, setDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Loader2 } from "lucide-react";
 
@@ -28,7 +28,7 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
         const custQ = query(collection(db, "customers"), where("name", "==", customerName));
         const custSnap = await getDocs(custQ);
         if (!custSnap.empty) {
-          setCustomerProfile(custSnap.docs[0].data());
+          setCustomerProfile({ id: custSnap.docs[0].id, ...custSnap.docs[0].data() });
         }
 
         // Fetch social orders
@@ -81,6 +81,39 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
   }, [isOpen, customerName, customerPhone]);
 
   if (!isOpen) return null;
+
+  const toggleBlacklist = async () => {
+    if (!customerName) return;
+    try {
+      const isCurrentlyBlacklisted = customerProfile?.isBlacklisted || false;
+      const newStatus = !isCurrentlyBlacklisted;
+      
+      if (customerProfile?.id) {
+        // Update existing customer profile
+        await updateDoc(doc(db, "customers", customerProfile.id), {
+          isBlacklisted: newStatus
+        });
+        setCustomerProfile({ ...customerProfile, isBlacklisted: newStatus });
+      } else {
+        // Create new customer profile just to blacklist
+        const newDocRef = doc(collection(db, "customers"));
+        const phone = customerPhone || socialOrders.find(o => o.customerPhone)?.customerPhone || appOrders.find(o => o.shippingAddress?.phone)?.shippingAddress?.phone || "";
+        const address = socialOrders.find(o => o.address)?.address || appOrders.find(o => o.shippingAddress?.address)?.shippingAddress?.address || "";
+        
+        const newData = {
+          name: customerName,
+          phone,
+          address,
+          isBlacklisted: newStatus,
+          createdAt: serverTimestamp()
+        };
+        await setDoc(newDocRef, newData);
+        setCustomerProfile({ id: newDocRef.id, ...newData });
+      }
+    } catch (e) {
+      console.error("Error toggling blacklist:", e);
+    }
+  };
 
   const totalAppSpent = appOrders.reduce((acc, order) => acc + Number(order.total || 0), 0);
   const totalSocialSpent = socialOrders.reduce((acc, order) => acc + Number(order.price || 0), 0);
@@ -141,9 +174,22 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
               })()}
             </div>
           </div>
-          <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition active:scale-90">
-            <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={toggleBlacklist}
+              className={`p-2 rounded-xl transition font-bold text-xs flex items-center gap-1 border ${
+                customerProfile?.isBlacklisted 
+                ? 'bg-zinc-900 text-white border-zinc-700 hover:bg-zinc-800' 
+                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-zinc-800 dark:text-gray-300 dark:border-zinc-700 dark:hover:bg-zinc-700'
+              }`}
+            >
+              <User className="w-4 h-4" />
+              {customerProfile?.isBlacklisted ? 'محظور (بالقائمة السوداء) 🚫' : 'حظر الزبون'}
+            </button>
+            <button onClick={onClose} className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition active:scale-90">
+              <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
