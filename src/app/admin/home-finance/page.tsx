@@ -718,6 +718,9 @@ export default function HomeFinanceDashboard() {
   const unpaidInstallmentsMonthly = installments.filter(i => isInstallmentOwedThisCycle(i)).reduce((s, i) => s + i.monthlyInstallment, 0);
   const unpaidObligations = unpaidBillsAmt + unpaidInstallmentsMonthly;
 
+  const totalDebtsForMe = debts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
+  const totalDebtsOnMe = debts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
+
   // بناءً على طلبك السابق: يتم خصم القسط أو الفاتورة فقط عند دفعها (لتصبح ضمن المصاريف) لمنع الخصم المزدوج
   const balance = totalIncome - totalExpensesAmt - totalDebtsOnMe + totalDebtsForMe;
 
@@ -744,8 +747,6 @@ export default function HomeFinanceDashboard() {
   }, [shoppingList, familyNeeds]);
 
   const totalNeedsAmt = needs.filter(n => !n.isBought).reduce((s, n) => s + (n.estimatedPrice || 0), 0) + shoppingList.reduce((s, i) => s + (i.estimatedPrice || 0), 0);
-  const totalDebtsForMe = debts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
-  const totalDebtsOnMe = debts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
 
   // ──────────────────────────────────────────
   // FUTURE PLAN HANDLERS
