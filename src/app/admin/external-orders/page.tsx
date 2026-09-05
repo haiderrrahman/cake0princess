@@ -30,6 +30,7 @@ export default function ExternalOrdersAdmin() {
     }
     return [];
   });
+  const [socialProfiles, setSocialProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -76,6 +77,11 @@ export default function ExternalOrdersAdmin() {
     // Cache is now loaded synchronously in useState
     // 1. Fast network query with onSnapshot for real-time and local cache
     const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
+    
+    const unsubSocial = onSnapshot(collection(db, "social_customers"), (snap) => {
+      setSocialProfiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
     const unsubscribe = onSnapshot(q, (snap) => {
       const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
       setOrders(fetchedOrders);
@@ -111,7 +117,7 @@ export default function ExternalOrdersAdmin() {
       setCustomers(custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }).catch(e => console.error("Error fetching customers:", e));
 
-    return () => unsubscribe();
+    return () => { unsubscribe(); unsubSocial(); };
   }, []);
 
   const fillCustomerData = (name: string, existingPhone: string, existingAddress: string, existingPlatform: string) => {
@@ -605,7 +611,7 @@ export default function ExternalOrdersAdmin() {
                         <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
                           <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                             {(order.imageUrl || order.tempImageUrl) ? (
-                              <img loading="lazy" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
+                              <img  src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-gray-300">
                                 <Smartphone className="w-8 h-8" />
@@ -669,7 +675,7 @@ export default function ExternalOrdersAdmin() {
               {/* Image / Icon */}
               <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                 {(order.imageUrl || order.tempImageUrl) ? (
-                  <img loading="lazy" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
+                  <img  src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-300">
                     <Smartphone className="w-8 h-8" />
