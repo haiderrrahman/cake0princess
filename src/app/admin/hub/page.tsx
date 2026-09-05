@@ -167,7 +167,9 @@ function AdminHubContent() {
       
       const cleanExt = externalOrders.slice(0, 150).map(o => {
         const clean = { ...o };
-        delete clean.tempImageUrl;
+        if (clean.imageUrl) {
+          delete clean.tempImageUrl;
+        }
         return clean;
       });
       try { localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt)); } catch (e) { console.error("Cache err ext:", e); }
