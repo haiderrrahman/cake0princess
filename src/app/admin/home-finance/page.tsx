@@ -418,7 +418,7 @@ export default function HomeFinanceDashboard() {
     return Array.from(new Set([
       ...inventory.map(i => i.name),
       ...expenses.map(e => e.name),
-      ...debts.map(d => d.person),
+      ...displayDebts.map(d => d.person),
       ...installments.map(i => i.name),
       ...bills.map(b => b.name)
     ])).filter(Boolean);
@@ -686,28 +686,6 @@ export default function HomeFinanceDashboard() {
 
   const totalInstallmentMonthly = installments.reduce((s, i) => s + i.monthlyInstallment, 0);
 
-  // Sync Cake Debt
-  const displayDebts = [...debts];
-  const existingCakeDebtIdx = displayDebts.findIndex(d => d.person === "الكيك" || (d as any).title?.includes("الكيك"));
-  if (existingCakeDebtIdx !== -1) {
-    const existing = displayDebts[existingCakeDebtIdx];
-    const totalPayments = existing.payments ? existing.payments.reduce((s, p) => s + p.amount, 0) : 0;
-    // Set the base amount such that (amount - payments) = cakeDebtAmount
-    // Thus amount = cakeDebtAmount + payments
-    displayDebts[existingCakeDebtIdx] = { ...existing, amount: cakeDebtAmount + totalPayments };
-  } else if (cakeDebtAmount > 0) {
-    displayDebts.push({
-      id: "cake_debt_auto",
-      person: "الكيك",
-      title: "دين الكيك (مستورد تلقائياً)",
-      amount: cakeDebtAmount,
-      type: "دين لي",
-      date: new Date().toISOString(),
-      payments: [],
-      createdAt: new Date().toISOString()
-    } as any);
-  }
-
   const isBillPaidThisCycle = (bill: Bill) => bill.paidDates && bill.paidDates.some(p => isInCycle(p.date));
   
   const getInstallmentDelayMonths = (i: Installment) => {
@@ -740,6 +718,9 @@ export default function HomeFinanceDashboard() {
   const unpaidInstallmentsMonthly = installments.filter(i => isInstallmentOwedThisCycle(i)).reduce((s, i) => s + i.monthlyInstallment, 0);
   const unpaidObligations = unpaidBillsAmt + unpaidInstallmentsMonthly;
 
+  // بناءً على طلبك السابق: يتم خصم القسط أو الفاتورة فقط عند دفعها (لتصبح ضمن المصاريف) لمنع الخصم المزدوج
+  const balance = totalIncome - totalExpensesAmt - totalDebtsOnMe + totalDebtsForMe;
+
   const shoppingList = [
     ...inventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "inventory" as const })),
     ...carInventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "car" as const })),
@@ -765,9 +746,6 @@ export default function HomeFinanceDashboard() {
   const totalNeedsAmt = needs.filter(n => !n.isBought).reduce((s, n) => s + (n.estimatedPrice || 0), 0) + shoppingList.reduce((s, i) => s + (i.estimatedPrice || 0), 0);
   const totalDebtsForMe = displayDebts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
   const totalDebtsOnMe = displayDebts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
-
-  // بناءً على طلبك السابق: يتم خصم القسط أو الفاتورة فقط عند دفعها (لتصبح ضمن المصاريف) لمنع الخصم المزدوج
-  const balance = totalIncome - totalExpensesAmt - totalDebtsOnMe + totalDebtsForMe;
 
   // ──────────────────────────────────────────
   // FUTURE PLAN HANDLERS

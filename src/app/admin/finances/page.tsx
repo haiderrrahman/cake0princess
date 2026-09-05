@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Receipt, Plus, Trash2, Loader2, DollarSign, BarChart3, Wallet, TrendingUp, Calendar, AlertCircle, Edit } from "lucide-react";
-import { collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, query, orderBy, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, query, orderBy, onSnapshot, updateDoc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 
@@ -189,6 +189,49 @@ export default function FinancesAdmin() {
     });
   }, [expenses, revenueData]);
 
+  const syncCakeDebtWithHomeFinance = async (debtAmountChange: number, paymentAmount: number, description: string) => {
+    if (debtAmountChange === 0 && paymentAmount === 0) return;
+    try {
+      const docRef = doc(db, "home_finance", "debts");
+      const snap = await getDoc(docRef);
+      let debtsList = [];
+      if (snap.exists() && snap.data().data) {
+        debtsList = snap.data().data;
+      }
+      
+      let cakeDebtIndex = debtsList.findIndex((d: any) => d.person === "دين الكيك" && d.type === "دين لي");
+      
+      if (cakeDebtIndex === -1) {
+        debtsList.push({
+          id: Date.now().toString(),
+          person: "دين الكيك",
+          amount: 0,
+          type: "دين لي",
+          date: new Date().toISOString().split('T')[0],
+          payments: [],
+          createdAt: new Date().toISOString(),
+        });
+        cakeDebtIndex = debtsList.length - 1;
+      }
+      
+      let cakeDebt = debtsList[cakeDebtIndex];
+      if (debtAmountChange !== 0) {
+        cakeDebt.amount += debtAmountChange;
+      }
+      if (paymentAmount > 0) {
+        cakeDebt.payments.push({
+          date: new Date().toISOString().split('T')[0],
+          amount: paymentAmount,
+          note: description
+        });
+      }
+      
+      await setDoc(docRef, { data: debtsList });
+    } catch (e) {
+      console.error("Error syncing with home finance", e);
+    }
+  };
+
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || !description) return;
@@ -210,6 +253,13 @@ export default function FinancesAdmin() {
               createdAt: editingExpense.createdAt || serverTimestamp(),
               isDebt: true
             });
+            // Editing a split expense from a previous split? We need to calculate the diff.
+            // For simplicity, we just subtract the old debt and add the new one.
+            const oldDebtAmount = editingExpense.isDebt ? Number(editingExpense.amount) : 0;
+            await syncCakeDebtWithHomeFinance(debtAmount - oldDebtAmount, 0, "");
+          } else {
+             const oldDebtAmount = editingExpense.isDebt ? Number(editingExpense.amount) : 0;
+             await syncCakeDebtWithHomeFinance(-oldDebtAmount, 0, "");
           }
           if (paidAmount > 0) {
             await addDoc(collection(db, "expenses"), {
@@ -222,6 +272,10 @@ export default function FinancesAdmin() {
             });
           }
         } else {
+          const oldDebtAmount = editingExpense.isDebt ? Number(editingExpense.amount) : 0;
+          const newDebtAmount = expenseSource === 'salary' ? Number(amount) : 0;
+          await syncCakeDebtWithHomeFinance(newDebtAmount - oldDebtAmount, 0, "");
+          
           await updateDoc(doc(db, "expenses", editingExpense.id), {
             amount: Number(amount),
             category,
@@ -245,6 +299,7 @@ export default function FinancesAdmin() {
             createdAt: serverTimestamp(),
             isDebt: true
           });
+          await syncCakeDebtWithHomeFinance(debtAmount, 0, "");
         }
         if (paidAmount > 0) {
           await addDoc(collection(db, "expenses"), {
@@ -265,6 +320,9 @@ export default function FinancesAdmin() {
           createdAt: serverTimestamp(),
           isDebt: expenseSource === 'salary'
         });
+        if (expenseSource === 'salary') {
+          await syncCakeDebtWithHomeFinance(Number(amount), 0, "");
+        }
       }
         toast.success("تمت إضافة المصروف بنجاح");
       }
@@ -304,6 +362,10 @@ export default function FinancesAdmin() {
   const handleDeleteExpense = async (id: string) => {
     if (!(await customConfirm("هل أنت متأكد من حذف هذا المصروف؟"))) return;
     try {
+      const exp = expenses.find(e => e.id === id);
+      if (exp && exp.isDebt) {
+         await syncCakeDebtWithHomeFinance(-Number(exp.amount), 0, "");
+      }
       await deleteDoc(doc(db, "expenses", id));
       // onSnapshot handles the update automatically
     } catch (e) {
@@ -338,6 +400,8 @@ export default function FinancesAdmin() {
         createdAt: serverTimestamp(),
         isDebt: false
       });
+      
+      await syncCakeDebtWithHomeFinance(0, sAmount, "تسديد جزء من دين الكيك");
       
       setSettleAmount("");
       setSettleDebtModalOpen(false);
