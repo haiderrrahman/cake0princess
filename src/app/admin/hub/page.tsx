@@ -163,19 +163,17 @@ function AdminHubContent() {
   useEffect(() => {
     try {
       const cleanOrders = orders.slice(0, 150).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
+      try { localStorage.setItem("cache_orders", JSON.stringify(cleanOrders)); } catch (e) { console.error("Cache err orders:", e); }
+      
       const cleanExt = externalOrders.slice(0, 150).map(o => {
         const clean = { ...o };
         delete clean.tempImageUrl;
         return clean;
       });
+      try { localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt)); } catch (e) { console.error("Cache err ext:", e); }
+      
       const cleanSales = storeSales.slice(0, 150);
-      try {
-        localStorage.setItem("cache_orders", JSON.stringify(cleanOrders));
-        localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
-        localStorage.setItem("cache_store_sales", JSON.stringify(cleanSales));
-      } catch (e) {
-        console.error("Cache error:", e);
-      }
+      try { localStorage.setItem("cache_store_sales", JSON.stringify(cleanSales)); } catch (e) { console.error("Cache err sales:", e); }
     } catch (e) {
       console.error("Cache error:", e);
     }
