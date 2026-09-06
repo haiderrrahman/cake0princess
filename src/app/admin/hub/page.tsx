@@ -329,6 +329,7 @@ function AdminHubContent() {
   useEffect(() => {
     let todaySales = 0, weekSales = 0, monthSales = 0, allTimeSales = 0;
     let todayExtSales = 0, weekExtSales = 0, monthExtSales = 0, allTimeExtSales = 0;
+    let todayExtDeliveriesCount = 0, todayExtDeliveriesAmount = 0;
     let extOweUs = 0, extWeOwe = 0;
     
     let breakdown = { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 };
@@ -387,6 +388,13 @@ function AdminHubContent() {
       const price = Number(o.price) || 0;
       const isDelivered = o.status === 'delivered' || o.status === 'completed';
       
+      const dDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+      dDate.setHours(0,0,0,0);
+      if (dDate.getTime() === today.getTime()) {
+        todayExtDeliveriesCount++;
+        todayExtDeliveriesAmount += price;
+      }
+      
       let received = price;
       if (o.paidAmount !== undefined && !o.isDebtSettled) {
         const amt = Number(o.paidAmount);
@@ -438,6 +446,7 @@ function AdminHubContent() {
       ...prev,
       todaySales, weekSales, monthSales, allTimeSales, 
       todayExtSales, weekExtSales, monthExtSales, allTimeExtSales, 
+      todayExtDeliveriesCount, todayExtDeliveriesAmount,
       extOweUs, extWeOwe,
       totalOrders: orders.length, pendingOrders: pendingOrders.length, 
       pendingExtOrders, pendingExtOrdersAmount, externalSales, externalProfit, 
@@ -919,7 +928,10 @@ function AdminHubContent() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 relative z-10">
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> مبيعات اليوم</p>
-              <p className="text-lg font-black text-white">{(stats.todayExtSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+              <div className="flex justify-between items-end">
+                <p className="text-lg font-black text-white">{stats.todayExtDeliveriesCount || 0} <span className="text-[10px] font-normal">طلب</span></p>
+                <p className="text-sm font-black text-emerald-100 bg-emerald-500/20 px-2 py-0.5 rounded-lg">{(stats.todayExtDeliveriesAmount || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+              </div>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> طلبات معلقة</p>

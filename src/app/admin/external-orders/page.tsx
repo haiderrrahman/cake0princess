@@ -477,6 +477,7 @@ export default function ExternalOrdersAdmin() {
           const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
           let todaySales = 0, weekSales = 0, monthSales = 0;
+          let todayDeliveriesCount = 0, todayDeliveriesAmount = 0;
           let totalOweUs = 0, totalWeOwe = 0;
 
           orders.forEach(o => {
@@ -499,19 +500,27 @@ export default function ExternalOrdersAdmin() {
             }
 
             const amt = received;
-            const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
-            d.setHours(0,0,0,0);
+            const dDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+            dDate.setHours(0,0,0,0);
             
-            if (d.getTime() === today.getTime()) todaySales += amt;
-            if (d >= weekAgo) weekSales += amt;
-            if (d >= thirtyDaysAgo) monthSales += amt;
+            if (dDate.getTime() === today.getTime() && o.status !== "rejected" && o.status !== "cancelled") {
+              todayDeliveriesCount++;
+              todayDeliveriesAmount += Number(o.price || 0);
+            }
+            
+            if (dDate.getTime() === today.getTime()) todaySales += amt;
+            if (dDate >= weekAgo) weekSales += amt;
+            if (dDate >= thirtyDaysAgo) monthSales += amt;
           });
 
           return (
             <div className="grid grid-cols-3 md:grid-cols-5 gap-2.5 mt-6 relative z-10">
               <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
                 <p className="text-[9px] md:text-xs font-bold text-emerald-200 mb-1">مبيعات اليوم</p>
-                <p className="text-xs md:text-xl font-black text-white">{todaySales.toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
+                <div className="flex justify-between items-end">
+                  <p className="text-xs md:text-xl font-black text-white">{todayDeliveriesCount || 0} <span className="text-[8px] md:text-[10px] font-normal">طلب</span></p>
+                  <p className="text-[10px] md:text-sm font-black text-emerald-100 bg-emerald-500/20 px-1 md:px-2 py-0.5 rounded-lg">{(todayDeliveriesAmount || 0).toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
+                </div>
               </div>
               <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
                 <p className="text-[9px] md:text-xs font-bold text-emerald-200 mb-1">مبيعات الأسبوع</p>
