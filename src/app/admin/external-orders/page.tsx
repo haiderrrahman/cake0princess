@@ -3,7 +3,7 @@ import { customConfirm } from '@/lib/customConfirm';
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ArrowRight, Search, Plus, Loader2, Image as ImageIcon, Trash2, Calendar, Smartphone, DollarSign, Calculator, User, Edit3 } from "lucide-react";
+import { Plus, Search, MapPin, Navigation, Edit3, CheckCircle, Clock, Trash2, ShieldCheck, User, Loader2, ArrowRight, Smartphone, Camera, FileImage, Image as ImageIcon, Phone, Calendar, Calculator } from 'lucide-react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit, onSnapshot } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -15,7 +15,6 @@ import { format } from "date-fns";
 import { ar } from "date-fns/locale/ar";
 import "react-datepicker/dist/react-datepicker.css";
 import CustomerProfileModal from "@/components/CustomerProfileModal";
-import { MapPin } from "lucide-react";
 import MapLink from "@/components/MapLink";
 
 export default function ExternalOrdersAdmin() {
@@ -654,14 +653,17 @@ export default function ExternalOrdersAdmin() {
                                   >
                                     <User className="w-3.5 h-3.5" /> {order.customerName}
                                   </p>
+                                  {order.customerPhone && (
+                                    <a href={`tel:${order.customerPhone}`} className="text-xs font-bold text-gray-500 mt-1 flex items-center gap-1.5 hover:text-emerald-500 transition">
+                                      <Phone className="w-3.5 h-3.5" /> {order.customerPhone}
+                                    </a>
+                                  )}
                                   {order.address && (
-                                    order.locationUrl ? (
-                                      <MapLink address={order.address} locationUrl={order.locationUrl} className="text-[10px] font-bold text-blue-500 mt-0.5 flex items-center gap-1.5 line-clamp-1 hover:underline underline-offset-2 decoration-blue-200 cursor-pointer" />
-                                    ) : (
-                                      <p className="text-[10px] font-bold text-gray-400 mt-0.5 flex items-center gap-1.5 line-clamp-1">
-                                        <MapPin className="w-3 h-3" /> {order.address}
-                                      </p>
-                                    )
+                                    <MapLink 
+                                      address={order.address} 
+                                      locationUrl={order.locationUrl || ""} 
+                                      className={`text-sm md:text-base font-bold mt-2 flex items-start gap-1.5 transition cursor-pointer ${order.locationUrl ? 'text-blue-500 hover:underline underline-offset-2 decoration-blue-200' : 'text-gray-500 hover:text-blue-500'}`} 
+                                    />
                                   )}
                                 </div>
                                 <div className="flex gap-2 items-center">
@@ -682,11 +684,11 @@ export default function ExternalOrdersAdmin() {
                                 <span className="text-[10px] text-gray-400 font-bold">
                                   {Number(order.deliveryFee || 0) > 0 || order.isBismayah ? "الإجمالي (مع التوصيل)" : "إجمالي الطلب"}
                                 </span>
-                                <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.totalPriceWithDelivery || order.price).toLocaleString()} د.ع</span>
+                                <span className="text-lg md:text-xl font-black text-emerald-600 dark:text-emerald-400">{Number(order.totalPriceWithDelivery || order.price).toLocaleString()} د.ع</span>
                               </div>
                               <div className="flex flex-col">
                                 <span className="text-[10px] text-gray-400 font-bold">الواصل</span>
-                                <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.paidAmount || 0).toLocaleString()} د.ع</span>
+                                <span className="text-lg md:text-xl font-black text-emerald-600 dark:text-emerald-400">{Number(order.paidAmount || 0).toLocaleString()} د.ع</span>
                               </div>
                             </div>
                           </div>

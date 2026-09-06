@@ -1245,7 +1245,12 @@ function AdminHubContent() {
                                   {isBlacklisted && <span className="text-[9px] bg-zinc-700 text-red-400 px-1.5 py-0.5 rounded-md whitespace-nowrap decoration-transparent">محظور</span>}
                                 </h3>
                               </button>
-                              <p className="text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1 font-bold">{order.cakeName}</p>
+                              {order.customerPhone && (
+                                <a href={`tel:${order.customerPhone}`} className="text-[10px] font-bold text-gray-500 mt-1.5 flex items-center justify-center gap-1.5 hover:text-emerald-500 transition">
+                                  <Phone className="w-3 h-3" /> {order.customerPhone}
+                                </a>
+                              )}
+                              <p className="text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1 font-bold mt-1">{order.cakeName}</p>
                               
                               <div className="flex justify-center mt-1.5 text-[9px] sm:text-[10px]">
                                 <span className="bg-gray-50 dark:bg-zinc-800 px-1.5 py-0.5 rounded-lg text-gray-600 dark:text-gray-300 flex items-center gap-0.5 font-bold">
@@ -1253,14 +1258,12 @@ function AdminHubContent() {
                                 </span>
                               </div>
                               {order.address && (
-                                <div className="flex justify-center mt-1 text-[9px] sm:text-[10px]">
-                                  {order.locationUrl ? (
-                                    <MapLink address={order.address} locationUrl={order.locationUrl} className="text-blue-500 hover:text-blue-600 flex items-center gap-1 font-bold line-clamp-1 max-w-[150px] transition underline underline-offset-2 decoration-blue-200 dark:decoration-blue-900/50 cursor-pointer text-[9px] sm:text-[10px]" />
-                                  ) : (
-                                    <span className="text-gray-400 dark:text-gray-500 flex items-center gap-1 font-bold line-clamp-1 max-w-[150px]">
-                                      <MapPin className="w-3 h-3 flex-shrink-0" /> {order.address}
-                                    </span>
-                                  )}
+                                <div className="flex justify-center mt-1">
+                                  <MapLink 
+                                    address={order.address} 
+                                    locationUrl={order.locationUrl || ""} 
+                                    className={`text-xs sm:text-sm font-bold flex items-center gap-1 line-clamp-1 max-w-[150px] transition cursor-pointer ${order.locationUrl ? 'text-blue-500 hover:text-blue-600 underline underline-offset-2 decoration-blue-200 dark:decoration-blue-900/50' : 'text-gray-500 hover:text-blue-500'}`} 
+                                  />
                                 </div>
                               )}
                               {order.deliveryDate && (
@@ -1288,7 +1291,7 @@ function AdminHubContent() {
                                   {Number(order.deliveryFee || 0) > 0 || order.isBismayah ? "المبلغ (الطلب+التوصيل):" : "مبلغ الطلب:"}
                                 </span>
                                 <div className="flex flex-col items-end">
-                                  <span className="font-black text-emerald-600 dark:text-emerald-400">{Number(order.totalPriceWithDelivery || order.price || 0).toLocaleString()} د.ع</span>
+                                  <span className="font-black text-sm sm:text-lg text-emerald-600 dark:text-emerald-400">{Number(order.totalPriceWithDelivery || order.price || 0).toLocaleString()} د.ع</span>
                                 </div>
                               </div>
                               {isDebt && (

@@ -11,8 +11,8 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
   const [showOptions, setShowOptions] = useState(false);
 
   const extractCoordinates = (url: string) => {
-    // try to match q=lat,lng or ll=lat,lng or @lat,lng
-    const match = url.match(/(?:q=|ll=|@)([-+]?\d*\.\d+),([-+]?\d*\.\d+)/);
+    // try to match lat, lng anywhere in the string
+    const match = url.match(/([-+]?\d{1,2}\.\d+),\s*([-+]?\d{1,3}\.\d+)/);
     if (match) {
       return { lat: match[1], lng: match[2] };
     }
@@ -24,11 +24,15 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
     setShowOptions(false);
     
     if (type === 'original') {
-      window.open(locationUrl, '_blank');
+      if (locationUrl && locationUrl.startsWith('http')) {
+        window.open(locationUrl, '_blank');
+      } else {
+        window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationUrl || address)}`, '_blank');
+      }
       return;
     }
 
-    const coords = extractCoordinates(locationUrl);
+    const coords = extractCoordinates(locationUrl || address);
     if (coords) {
       if (type === 'google') {
         window.open(`https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`, '_blank');
@@ -36,22 +40,22 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
         window.open(`https://waze.com/ul?ll=${coords.lat},${coords.lng}&navigate=yes`, '_blank');
       }
     } else {
-      // If no coords could be parsed, just fallback to original url
-      window.open(locationUrl, '_blank');
+      if (type === 'google') {
+        if (locationUrl && locationUrl.includes('maps.app.goo.gl')) {
+           window.open(locationUrl, '_blank');
+        } else {
+           window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank');
+        }
+      } else if (type === 'waze') {
+        window.open(`https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`, '_blank');
+      }
     }
   };
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    const coords = extractCoordinates(locationUrl);
-    if (coords) {
-      setShowOptions(true);
-    } else {
-      // If we can't parse coordinates, just open the link directly
-      window.open(locationUrl, '_blank');
-    }
+    setShowOptions(true);
   };
 
   return (
