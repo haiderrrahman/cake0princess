@@ -1236,9 +1236,15 @@ function AdminHubContent() {
                               </div>
                               {order.address && (
                                 <div className="flex justify-center mt-1 text-[9px] sm:text-[10px]">
-                                  <span className="text-gray-400 dark:text-gray-500 flex items-center gap-1 font-bold line-clamp-1 max-w-[150px]">
-                                    <MapPin className="w-3 h-3 flex-shrink-0" /> {order.address}
-                                  </span>
+                                  {order.locationUrl ? (
+                                    <a href={order.locationUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 flex items-center gap-1 font-bold line-clamp-1 max-w-[150px] transition underline underline-offset-2 decoration-blue-200 dark:decoration-blue-900/50 cursor-pointer">
+                                      <MapPin className="w-3 h-3 flex-shrink-0" /> {order.address}
+                                    </a>
+                                  ) : (
+                                    <span className="text-gray-400 dark:text-gray-500 flex items-center gap-1 font-bold line-clamp-1 max-w-[150px]">
+                                      <MapPin className="w-3 h-3 flex-shrink-0" /> {order.address}
+                                    </span>
+                                  )}
                                 </div>
                               )}
                               {order.deliveryDate && (
@@ -1262,8 +1268,10 @@ function AdminHubContent() {
 
                             <div className="flex flex-col gap-1.5 mt-auto border-t border-gray-100 dark:border-zinc-800/50 pt-1.5">
                               <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-gray-400 font-bold">المبلغ:</span>
-                                <span className="font-black text-emerald-600 dark:text-emerald-400">{Number(order.price || 0).toLocaleString()} د.ع</span>
+                                <span className="text-gray-400 font-bold">المبلغ (الطلب+التوصيل):</span>
+                                <div className="flex flex-col items-end">
+                                  <span className="font-black text-emerald-600 dark:text-emerald-400">{Number(order.totalPriceWithDelivery || order.price || 0).toLocaleString()} د.ع</span>
+                                </div>
                               </div>
                               {isDebt && (
                                 <div className="flex flex-col gap-1.5 mt-1">

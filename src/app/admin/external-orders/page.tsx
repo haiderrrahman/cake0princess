@@ -640,9 +640,15 @@ export default function ExternalOrdersAdmin() {
                                     <User className="w-3.5 h-3.5" /> {order.customerName}
                                   </p>
                                   {order.address && (
-                                    <p className="text-[10px] font-bold text-gray-400 mt-0.5 flex items-center gap-1.5 line-clamp-1">
-                                      <MapPin className="w-3 h-3" /> {order.address}
-                                    </p>
+                                    order.locationUrl ? (
+                                      <a href={order.locationUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-500 mt-0.5 flex items-center gap-1.5 line-clamp-1 hover:underline underline-offset-2 decoration-blue-200 cursor-pointer">
+                                        <MapPin className="w-3 h-3" /> {order.address}
+                                      </a>
+                                    ) : (
+                                      <p className="text-[10px] font-bold text-gray-400 mt-0.5 flex items-center gap-1.5 line-clamp-1">
+                                        <MapPin className="w-3 h-3" /> {order.address}
+                                      </p>
+                                    )
                                   )}
                                 </div>
                                 <div className="flex gap-2 items-center">
@@ -660,8 +666,8 @@ export default function ExternalOrdersAdmin() {
                             </div>
                             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 pt-3 border-t border-gray-50 dark:border-zinc-800/50">
                               <div className="flex flex-col">
-                                <span className="text-[10px] text-gray-400 font-bold">الإجمالي</span>
-                                <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.price).toLocaleString()} د.ع</span>
+                                <span className="text-[10px] text-gray-400 font-bold">الإجمالي (مع التوصيل)</span>
+                                <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.totalPriceWithDelivery || order.price).toLocaleString()} د.ع</span>
                               </div>
                               <div className="flex flex-col">
                                 <span className="text-[10px] text-gray-400 font-bold">الواصل</span>
@@ -707,9 +713,15 @@ export default function ExternalOrdersAdmin() {
                         <Smartphone className="w-3.5 h-3.5 text-gray-500" /> <span className="text-gray-500">{order.platform}</span>
                       </p>
                       {order.address && (
-                        <p className="text-[10px] font-bold text-gray-400 mt-0.5 flex items-center gap-1.5 line-clamp-1">
-                          <MapPin className="w-3 h-3" /> {order.address}
-                        </p>
+                        order.locationUrl ? (
+                          <a href={order.locationUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-500 mt-0.5 flex items-center gap-1.5 line-clamp-1 hover:underline underline-offset-2 decoration-blue-200 cursor-pointer">
+                            <MapPin className="w-3 h-3" /> {order.address}
+                          </a>
+                        ) : (
+                          <p className="text-[10px] font-bold text-gray-400 mt-0.5 flex items-center gap-1.5 line-clamp-1">
+                            <MapPin className="w-3 h-3" /> {order.address}
+                          </p>
+                        )
                       )}
                     </div>
                     <div className="flex gap-2 items-center">
@@ -751,8 +763,8 @@ export default function ExternalOrdersAdmin() {
                     <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">{Number(order.profit).toLocaleString()} د.ع</span>
                   </div>
                   <div className="flex flex-col ml-auto text-left">
-                    <span className="text-[10px] text-gray-400 font-bold">الإجمالي</span>
-                    <span className="text-sm font-black text-blue-600 dark:text-blue-400">{Number(order.price).toLocaleString()} د.ع</span>
+                    <span className="text-[10px] text-gray-400 font-bold">الإجمالي (مع التوصيل)</span>
+                    <span className="text-sm font-black text-blue-600 dark:text-blue-400">{Number(order.totalPriceWithDelivery || order.price).toLocaleString()} د.ع</span>
                   </div>
                 </div>
               </div>

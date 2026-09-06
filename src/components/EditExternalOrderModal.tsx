@@ -36,6 +36,14 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // New location states
+  const [isBismayah, setIsBismayah] = useState(false);
+  const [bismayahComplex, setBismayahComplex] = useState("A");
+  const [bismayahBuilding, setBismayahBuilding] = useState("");
+  const [bismayahApt, setBismayahApt] = useState("");
+  const [locationUrl, setLocationUrl] = useState("");
+  const [manualDeliveryFee, setManualDeliveryFee] = useState("");
+
   const [customers, setCustomers] = useState<any[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
@@ -57,6 +65,13 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       setCost(order.cost || "");
       setDeliveryDate(order.deliveryDate || "");
       setImagePreview(order.imageUrl || null);
+      
+      setIsBismayah(order.isBismayah || false);
+      setBismayahComplex(order.bismayahComplex || "A");
+      setBismayahBuilding(order.bismayahBuilding || "");
+      setBismayahApt(order.bismayahApt || "");
+      setLocationUrl(order.locationUrl || "");
+      setManualDeliveryFee(order.isBismayah ? "" : (order.deliveryFee || ""));
     }
   }, [order, isOpen]);
 
@@ -85,6 +100,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       if (existing.phone) setCustomerPhone(existing.phone);
       if (existing.address) setAddress(existing.address);
       if (existing.platform) setPlatform(existing.platform);
+      if (existing.locationUrl) setLocationUrl(existing.locationUrl);
     }
   };
 
@@ -120,18 +136,30 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         }
       }
 
+      const computedDeliveryFee = isBismayah 
+        ? (bismayahComplex === "A" ? 1000 : 2000) 
+        : parseIqdInput(manualDeliveryFee);
+        
+      const totalPriceWithDelivery = numPrice + computedDeliveryFee;
+      
+      const computedAddress = isBismayah
+        ? `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} شقة ${bismayahApt}`
+        : address;
+
       // Instantly update the document so the UI responds without waiting for image
       await updateDoc(doc(db, "external_orders", order.id), {
         customerName,
         customerPhone,
         platform,
-        address,
+        address: computedAddress,
         cakeName,
         price: numPrice,
         paidAmount: numPaidAmount,
         isDebtSettled,
         cost: numCost,
         profit: numCost > 0 ? numPrice - numCost : numPrice,
+        isBismayah, bismayahComplex, bismayahBuilding, bismayahApt, 
+        deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl,
         deliveryDate,
         ...(tempImageUrl ? { tempImageUrl } : {})
       });
@@ -141,15 +169,16 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       if (existingCustomer) {
         await updateDoc(doc(db, "customers", existingCustomer.id), {
           phone: customerPhone || existingCustomer.phone || "",
-          address: address || existingCustomer.address || "",
+          address: computedAddress || existingCustomer.address || "",
           platform: platform || existingCustomer.platform || "واتساب",
+          ...(locationUrl ? { locationUrl } : {}),
           totalSpent: (existingCustomer.totalSpent || 0) - parseIqdInput(order.price) + numPrice
         });
       } else {
         await addDoc(collection(db, "customers"), {
           name: customerName,
           phone: customerPhone,
-          address,
+          address: computedAddress,
           platform: platform || "واتساب",
           points: Math.floor(numPrice / 1000),
           totalSpent: numPrice
@@ -181,13 +210,15 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         customerName,
         customerPhone,
         platform,
-        address,
+        address: computedAddress,
         cakeName,
         price: numPrice,
         paidAmount: numPaidAmount,
         isDebtSettled,
         cost: numCost,
         profit: numCost > 0 ? numPrice - numCost : numPrice,
+        isBismayah, bismayahComplex, bismayahBuilding, bismayahApt, 
+        deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl,
         deliveryDate,
         ...(tempImageUrl ? { tempImageUrl } : {})
       });
@@ -297,9 +328,9 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
               </div>
             </div>
 
-            {/* الصف الثاني: رقم الهاتف والعنوان */}
+            {/* الصف الثاني: رقم الهاتف */}
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className="col-span-2">
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">رقم الهاتف</label>
                 <div className="relative">
                   <Phone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -310,16 +341,62 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">العنوان</label>
+            </div>
+
+            <div className="col-span-2 border border-gray-200 dark:border-zinc-700 rounded-2xl p-4 space-y-3">
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-xs font-bold text-gray-700 dark:text-gray-300">العنوان</label>
+                <div className="flex gap-1 bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
+                  <button 
+                    type="button"
+                    onClick={() => setIsBismayah(true)}
+                    className={`text-[10px] px-3 py-1 font-bold rounded-md transition ${isBismayah ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                    داخل بسماية
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setIsBismayah(false)}
+                    className={`text-[10px] px-3 py-1 font-bold rounded-md transition ${!isBismayah ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                    مناطق أخرى
+                  </button>
+                </div>
+              </div>
+              
+              {isBismayah ? (
+                <div className="grid grid-cols-3 gap-2">
+                  <select value={bismayahComplex} onChange={e => setBismayahComplex(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
+                    <option value="A">مجمع A</option>
+                    <option value="B">مجمع B</option>
+                    <option value="C">مجمع C</option>
+                    <option value="D">مجمع D</option>
+                    <option value="E">مجمع E</option>
+                    <option value="F">مجمع F</option>
+                    <option value="G">مجمع G</option>
+                    <option value="H">مجمع H</option>
+                  </select>
+                  <input type="text" placeholder="عمارة (101 - 920)" value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold" />
+                  <input type="text" placeholder="شقة (ارضي 1 - 912)" value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold" />
+                </div>
+              ) : (
                 <div className="relative">
                   <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input 
                     type="text" value={address} onChange={e => setAddress(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                    placeholder="مثال: مجمع A..."
+                    className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    placeholder="المنطقة، الشارع، أقرب دالة..."
                   />
                 </div>
+              )}
+              
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي (Google Maps / Waze)</label>
+                <input 
+                  type="url" value={locationUrl} onChange={e => setLocationUrl(e.target.value)}
+                  className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left placeholder:text-right"
+                  placeholder="لصق الرابط هنا..." dir="ltr"
+                />
               </div>
             </div>
 
@@ -374,6 +451,36 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
                     className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-left"
                   />
                 </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {isBismayah ? (
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل (تلقائي)</label>
+                  <div className="w-full bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-black text-center text-gray-600 dark:text-gray-300">
+                    {bismayahComplex === "A" ? "1,000" : "2,000"} د.ع
+                  </div>
+                </div>
+              ) : (
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل (يدوي)</label>
+                  <FormattedNumberInput
+                    value={manualDeliveryFee}
+                    onChange={setManualDeliveryFee}
+                    placeholder="مبلغ التوصيل"
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
+              <div className="flex justify-between items-center text-sm font-black">
+                <span className="text-gray-700 dark:text-gray-300">المبلغ الكلي مع التوصيل:</span>
+                <span className="text-emerald-600 dark:text-emerald-400 text-lg">
+                  {((Number(price.toString().replace(/,/g, '')) || 0) + (isBismayah ? (bismayahComplex === "A" ? 1000 : 2000) : (Number(manualDeliveryFee.toString().replace(/,/g, '')) || 0))).toLocaleString()} <span className="text-[10px]">د.ع</span>
+                </span>
               </div>
             </div>
 

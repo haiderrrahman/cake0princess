@@ -24,6 +24,14 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
   const [cost, setCost] = useState("");
   const [deliveryDate, setDeliveryDate] = useState<string>(new Date().toISOString());
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+
+  // New location states
+  const [isBismayah, setIsBismayah] = useState(false);
+  const [bismayahComplex, setBismayahComplex] = useState("A");
+  const [bismayahBuilding, setBismayahBuilding] = useState("");
+  const [bismayahApt, setBismayahApt] = useState("");
+  const [locationUrl, setLocationUrl] = useState("");
+  const [manualDeliveryFee, setManualDeliveryFee] = useState("");
   const [isOffline, setIsOffline] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -95,13 +103,15 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
     const exactMatch = customers.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (exactMatch) {
       fillCustomerData(exactMatch.name, exactMatch.phone || "", exactMatch.address || "", exactMatch.platform || "");
+      if (exactMatch.locationUrl) setLocationUrl(exactMatch.locationUrl);
     }
   };
 
-  const selectCustomer = (name: string, phone: string, customerAddress: string, customerPlatform: string) => {
+  const selectCustomer = (name: string, phone: string, customerAddress: string, customerPlatform: string, customerLocationUrl?: string) => {
     setCustomerName(name);
     setShowCustomerDropdown(false);
     fillCustomerData(name, phone || "", customerAddress || "", customerPlatform || "");
+    if (customerLocationUrl) setLocationUrl(customerLocationUrl);
   };
 
   const parseIqdInput = (val: string | number) => {
@@ -130,7 +140,17 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
     try {
       const numPrice = parseIqdInput(price);
       const numCost = cost ? parseIqdInput(cost) : 0;
+      
+      const computedDeliveryFee = isBismayah 
+        ? (bismayahComplex === "A" ? 1000 : 2000) 
+        : parseIqdInput(manualDeliveryFee);
+        
+      const totalPriceWithDelivery = numPrice + computedDeliveryFee;
       const profit = numCost > 0 ? numPrice - numCost : numPrice;
+
+      const computedAddress = isBismayah
+        ? `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} شقة ${bismayahApt}`
+        : address;
 
       const existingCustomer = customers.find(c => c.name === customerName);
       let customerId = existingCustomer?.id;
@@ -138,7 +158,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
       if (!existingCustomer) {
         const custRef = await addDoc(collection(db, "customers"), {
           name: customerName, phone: customerPhone,
-          address, platform,
+          address: computedAddress, platform, locationUrl,
           points: Math.floor(numPrice / 1000), totalSpent: numPrice,
           ordersCount: 1, createdAt: serverTimestamp(),
         });
@@ -147,8 +167,9 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         const docRef = doc(db, "customers", customerId!);
         await updateDoc(docRef, {
           phone: customerPhone || existingCustomer.phone || "",
-          address: address || existingCustomer.address || "",
+          address: computedAddress || existingCustomer.address || "",
           platform: platform || existingCustomer.platform || "واتساب",
+          ...(locationUrl ? { locationUrl } : {}),
           points: (existingCustomer.points || 0) + Math.floor(numPrice / 1000),
           totalSpent: (existingCustomer.totalSpent || 0) + numPrice,
           ordersCount: (existingCustomer.ordersCount || 0) + 1,
@@ -171,8 +192,10 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
       }
 
       const newOrderRef = await addDoc(collection(db, "external_orders"), {
-        customerId, customerName, customerPhone, address, platform, cakeName,
+        customerId, customerName, customerPhone, address: computedAddress, platform, cakeName,
         price: numPrice, cost: numCost, profit,
+        isBismayah, bismayahComplex, bismayahBuilding, bismayahApt, 
+        deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl,
         deliveryDate,      // حقل موحد مع باقي التطبيق
         deliveryTime: deliveryDate, // توافق مع السجلات القديمة
         imageUrl: "", tempImageUrl: tempImageUrl, createdAt: serverTimestamp(),
@@ -253,7 +276,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
                 {customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase())).map(c => (
                   <li 
                     key={c.id} 
-                    onClick={() => selectCustomer(c.name, c.phone, c.address, c.platform)}
+                    onClick={() => selectCustomer(c.name, c.phone, c.address, c.platform, c.locationUrl)}
                     className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer text-gray-800 dark:text-gray-200 border-b border-gray-50 dark:border-zinc-700/50 last:border-0 flex justify-between items-center"
                   >
                     <span>{c.name}</span>
@@ -282,7 +305,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
 
       {/* الصف الثاني: رقم الهاتف والعنوان */}
       <div className="grid grid-cols-2 gap-3">
-        <div>
+        <div className="col-span-2">
           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">رقم الهاتف</label>
           <div className="relative">
             <Phone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -293,16 +316,62 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
             />
           </div>
         </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">العنوان</label>
+      </div>
+
+      <div className="col-span-2 border border-gray-200 dark:border-zinc-700 rounded-2xl p-4 space-y-3">
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-xs font-bold text-gray-700 dark:text-gray-300">العنوان</label>
+          <div className="flex gap-1 bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
+            <button 
+              type="button"
+              onClick={() => setIsBismayah(true)}
+              className={`text-[10px] px-3 py-1 font-bold rounded-md transition ${isBismayah ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+            >
+              داخل بسماية
+            </button>
+            <button 
+              type="button"
+              onClick={() => setIsBismayah(false)}
+              className={`text-[10px] px-3 py-1 font-bold rounded-md transition ${!isBismayah ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+            >
+              مناطق أخرى
+            </button>
+          </div>
+        </div>
+        
+        {isBismayah ? (
+          <div className="grid grid-cols-3 gap-2">
+            <select value={bismayahComplex} onChange={e => setBismayahComplex(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none font-bold">
+              <option value="A">مجمع A</option>
+              <option value="B">مجمع B</option>
+              <option value="C">مجمع C</option>
+              <option value="D">مجمع D</option>
+              <option value="E">مجمع E</option>
+              <option value="F">مجمع F</option>
+              <option value="G">مجمع G</option>
+              <option value="H">مجمع H</option>
+            </select>
+            <input type="text" placeholder="عمارة (101 - 920)" value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold" />
+            <input type="text" placeholder="شقة (ارضي 1 - 912)" value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold" />
+          </div>
+        ) : (
           <div className="relative">
             <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="text" value={address} onChange={e => setAddress(e.target.value)}
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
-              placeholder="مثال: مجمع A بلوك 5 عمارة 508 شقة 511"
+              className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+              placeholder="المنطقة، الشارع، أقرب دالة..."
             />
           </div>
+        )}
+        
+        <div>
+          <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي (Google Maps / Waze)</label>
+          <input 
+            type="url" value={locationUrl} onChange={e => setLocationUrl(e.target.value)}
+            className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left placeholder:text-right"
+            placeholder="لصق الرابط هنا..." dir="ltr"
+          />
         </div>
       </div>
 
@@ -328,21 +397,37 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
               value={price}
               onChange={setPrice}
               placeholder="السعر"
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-left"
+              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-left font-black text-pink-600 dark:text-pink-400"
             />
           </div>
         </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">التكلفة (اختياري)</label>
-          <div className="relative">
-            <Coins className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        
+        {isBismayah ? (
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل (تلقائي)</label>
+            <div className="w-full bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-black text-center text-gray-600 dark:text-gray-300">
+              {bismayahComplex === "A" ? "1,000" : "2,000"} د.ع
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل (يدوي)</label>
             <FormattedNumberInput
-              value={cost}
-              onChange={setCost}
-              placeholder="التكلفة"
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-left"
+              value={manualDeliveryFee}
+              onChange={setManualDeliveryFee}
+              placeholder="مبلغ التوصيل"
+              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold"
             />
           </div>
+        )}
+      </div>
+
+      <div className="bg-pink-50 dark:bg-pink-900/20 p-4 rounded-xl border border-pink-100 dark:border-pink-900/30">
+        <div className="flex justify-between items-center text-sm font-black">
+          <span className="text-gray-700 dark:text-gray-300">المبلغ الكلي مع التوصيل:</span>
+          <span className="text-pink-600 dark:text-pink-400 text-lg">
+            {((Number(price.replace(/,/g, '')) || 0) + (isBismayah ? (bismayahComplex === "A" ? 1000 : 2000) : (Number(manualDeliveryFee.replace(/,/g, '')) || 0))).toLocaleString()} <span className="text-[10px]">د.ع</span>
+          </span>
         </div>
       </div>
 
