@@ -84,7 +84,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
          if (match) {
            setBismayahComplex(match[1]);
            setBismayahBuilding(match[2]);
-           setBismayahApt(match[3]); // match[3] will have "شقة 101" or "ارضي 1"
+           setBismayahApt(match[3].replace(/^(شقة\s*)+/g, '').trim()); // clean up any "شقة" from legacy DB
          } else {
            setBismayahComplex("A");
            setBismayahBuilding("");
@@ -168,8 +168,9 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         
       const totalPriceWithDelivery = numPrice + computedDeliveryFee;
       
+      const aptText = bismayahApt.startsWith("ارضي") ? bismayahApt : (bismayahApt ? `شقة ${bismayahApt.replace(/^(شقة\s*)+/g, '')}` : "");
       const computedAddress = isBismayah
-        ? `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} شقة ${bismayahApt}`
+        ? `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} ${aptText}`.trim()
         : address;
 
       // Instantly update the document so the UI responds without waiting for image
@@ -510,7 +511,9 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
 
             <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
               <div className="flex justify-between items-center text-sm font-black">
-                <span className="text-gray-700 dark:text-gray-300">المبلغ الكلي مع التوصيل:</span>
+                <span className="text-gray-700 dark:text-gray-300">
+                  {(isBismayah || (Number(manualDeliveryFee.toString().replace(/,/g, '')) || 0) > 0) ? "المبلغ الكلي مع التوصيل:" : "المبلغ الكلي:"}
+                </span>
                 <span className="text-emerald-600 dark:text-emerald-400 text-lg">
                   {((Number(price.toString().replace(/,/g, '')) || 0) + (isBismayah ? (bismayahComplex === "A" ? 1000 : 2000) : (Number(manualDeliveryFee.toString().replace(/,/g, '')) || 0))).toLocaleString()} <span className="text-[10px]">د.ع</span>
                 </span>

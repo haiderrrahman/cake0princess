@@ -665,7 +665,9 @@ export default function ExternalOrdersAdmin() {
                             </div>
                             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 pt-3 border-t border-gray-50 dark:border-zinc-800/50">
                               <div className="flex flex-col">
-                                <span className="text-[10px] text-gray-400 font-bold">الإجمالي (مع التوصيل)</span>
+                                <span className="text-[10px] text-gray-400 font-bold">
+                                  {Number(order.deliveryFee || 0) > 0 || order.isBismayah ? "الإجمالي (مع التوصيل)" : "إجمالي الطلب"}
+                                </span>
                                 <span className="text-sm font-black text-gray-700 dark:text-gray-300">{Number(order.totalPriceWithDelivery || order.price).toLocaleString()} د.ع</span>
                               </div>
                               <div className="flex flex-col">

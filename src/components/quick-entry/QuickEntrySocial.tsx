@@ -440,7 +440,9 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
 
       <div className="bg-pink-50 dark:bg-pink-900/20 p-4 rounded-xl border border-pink-100 dark:border-pink-900/30">
         <div className="flex justify-between items-center text-sm font-black">
-          <span className="text-gray-700 dark:text-gray-300">المبلغ الكلي مع التوصيل:</span>
+          <span className="text-gray-700 dark:text-gray-300">
+            {(isBismayah || (Number(manualDeliveryFee.replace(/,/g, '')) || 0) > 0) ? "المبلغ الكلي مع التوصيل:" : "المبلغ الكلي:"}
+          </span>
           <span className="text-pink-600 dark:text-pink-400 text-lg">
             {((Number(price.replace(/,/g, '')) || 0) + (isBismayah ? (bismayahComplex === "A" ? 1000 : 2000) : (Number(manualDeliveryFee.replace(/,/g, '')) || 0))).toLocaleString()} <span className="text-[10px]">د.ع</span>
           </span>

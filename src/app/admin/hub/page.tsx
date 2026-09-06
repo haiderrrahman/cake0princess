@@ -1267,7 +1267,9 @@ function AdminHubContent() {
 
                             <div className="flex flex-col gap-1.5 mt-auto border-t border-gray-100 dark:border-zinc-800/50 pt-1.5">
                               <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-gray-400 font-bold">المبلغ (الطلب+التوصيل):</span>
+                                <span className="text-gray-400 font-bold">
+                                  {Number(order.deliveryFee || 0) > 0 || order.isBismayah ? "المبلغ (الطلب+التوصيل):" : "مبلغ الطلب:"}
+                                </span>
                                 <div className="flex flex-col items-end">
                                   <span className="font-black text-emerald-600 dark:text-emerald-400">{Number(order.totalPriceWithDelivery || order.price || 0).toLocaleString()} د.ع</span>
                                 </div>
