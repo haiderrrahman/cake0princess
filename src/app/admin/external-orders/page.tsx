@@ -16,6 +16,7 @@ import { ar } from "date-fns/locale/ar";
 import "react-datepicker/dist/react-datepicker.css";
 import CustomerProfileModal from "@/components/CustomerProfileModal";
 import { MapPin } from "lucide-react";
+import MapLink from "@/components/MapLink";
 
 export default function ExternalOrdersAdmin() {
   const [orders, setOrders] = useState<any[]>(() => {
@@ -641,9 +642,7 @@ export default function ExternalOrdersAdmin() {
                                   </p>
                                   {order.address && (
                                     order.locationUrl ? (
-                                      <a href={order.locationUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-500 mt-0.5 flex items-center gap-1.5 line-clamp-1 hover:underline underline-offset-2 decoration-blue-200 cursor-pointer">
-                                        <MapPin className="w-3 h-3" /> {order.address}
-                                      </a>
+                                      <MapLink address={order.address} locationUrl={order.locationUrl} className="text-[10px] font-bold text-blue-500 mt-0.5 flex items-center gap-1.5 line-clamp-1 hover:underline underline-offset-2 decoration-blue-200 cursor-pointer" />
                                     ) : (
                                       <p className="text-[10px] font-bold text-gray-400 mt-0.5 flex items-center gap-1.5 line-clamp-1">
                                         <MapPin className="w-3 h-3" /> {order.address}
@@ -714,9 +713,7 @@ export default function ExternalOrdersAdmin() {
                       </p>
                       {order.address && (
                         order.locationUrl ? (
-                          <a href={order.locationUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-500 mt-0.5 flex items-center gap-1.5 line-clamp-1 hover:underline underline-offset-2 decoration-blue-200 cursor-pointer">
-                            <MapPin className="w-3 h-3" /> {order.address}
-                          </a>
+                          <MapLink address={order.address} locationUrl={order.locationUrl} className="text-[10px] font-bold text-blue-500 mt-0.5 flex items-center gap-1.5 line-clamp-1 hover:underline underline-offset-2 decoration-blue-200 cursor-pointer" />
                         ) : (
                           <p className="text-[10px] font-bold text-gray-400 mt-0.5 flex items-center gap-1.5 line-clamp-1">
                             <MapPin className="w-3 h-3" /> {order.address}

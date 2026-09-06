@@ -73,12 +73,31 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       setDeliveryDate(order.deliveryDate || "");
       setImagePreview(order.imageUrl || null);
       
-      setIsBismayah(order.isBismayah || false);
-      setBismayahComplex(order.bismayahComplex || "A");
-      setBismayahBuilding(order.bismayahBuilding || "");
-      setBismayahApt(order.bismayahApt || "");
+      
+      const oldAddress = order.address || "";
+      const looksLikeBismayah = order.isBismayah || (oldAddress.startsWith("مجمع") && oldAddress.includes("عمارة") && (oldAddress.includes("شقة") || oldAddress.includes("ارضي")));
+      setIsBismayah(looksLikeBismayah);
+
+      if (looksLikeBismayah && !order.isBismayah) {
+         // Legacy address parsing
+         const match = oldAddress.match(/مجمع\s+(.)\s+عمارة\s+(\d+)\s+(.+)/);
+         if (match) {
+           setBismayahComplex(match[1]);
+           setBismayahBuilding(match[2]);
+           setBismayahApt(match[3]); // match[3] will have "شقة 101" or "ارضي 1"
+         } else {
+           setBismayahComplex("A");
+           setBismayahBuilding("");
+           setBismayahApt("");
+         }
+      } else {
+         setBismayahComplex(order.bismayahComplex || "A");
+         setBismayahBuilding(order.bismayahBuilding || "");
+         setBismayahApt(order.bismayahApt || "");
+      }
+
       setLocationUrl(order.locationUrl || "");
-      setManualDeliveryFee(order.isBismayah ? "" : (order.deliveryFee || ""));
+      setManualDeliveryFee(looksLikeBismayah ? "" : (order.deliveryFee || ""));
     }
   }, [order, isOpen]);
 

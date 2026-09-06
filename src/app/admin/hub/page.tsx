@@ -16,6 +16,7 @@ import EditExternalOrderModal from "@/components/EditExternalOrderModal";
 import EditInventoryModal from "@/components/EditInventoryModal";
 import AdminQuickEntry from "@/components/AdminQuickEntry";
 import CustomerProfileModal from "@/components/CustomerProfileModal";
+import MapLink from "@/components/MapLink";
 import { customConfirm } from '@/lib/customConfirm';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -1237,9 +1238,7 @@ function AdminHubContent() {
                               {order.address && (
                                 <div className="flex justify-center mt-1 text-[9px] sm:text-[10px]">
                                   {order.locationUrl ? (
-                                    <a href={order.locationUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 flex items-center gap-1 font-bold line-clamp-1 max-w-[150px] transition underline underline-offset-2 decoration-blue-200 dark:decoration-blue-900/50 cursor-pointer">
-                                      <MapPin className="w-3 h-3 flex-shrink-0" /> {order.address}
-                                    </a>
+                                    <MapLink address={order.address} locationUrl={order.locationUrl} className="text-blue-500 hover:text-blue-600 flex items-center gap-1 font-bold line-clamp-1 max-w-[150px] transition underline underline-offset-2 decoration-blue-200 dark:decoration-blue-900/50 cursor-pointer text-[9px] sm:text-[10px]" />
                                   ) : (
                                     <span className="text-gray-400 dark:text-gray-500 flex items-center gap-1 font-bold line-clamp-1 max-w-[150px]">
                                       <MapPin className="w-3 h-3 flex-shrink-0" /> {order.address}

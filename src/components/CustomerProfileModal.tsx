@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { collection, query, where, getDocs, orderBy, updateDoc, setDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Loader2 } from "lucide-react";
+import MapLink from "./MapLink";
 
 interface CustomerProfileModalProps {
   isOpen: boolean;
@@ -166,10 +167,17 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
               })()}
               {(() => {
                 const address = customerProfile?.address || socialOrders.find(o => o.address)?.address || appOrders.find(o => o.shippingAddress?.address)?.shippingAddress?.address;
+                const locationUrl = customerProfile?.locationUrl || socialOrders.find(o => o.locationUrl)?.locationUrl;
                 return address ? (
-                  <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 flex-shrink-0" /> {address}
-                  </p>
+                  <div className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                    {locationUrl ? (
+                      <MapLink address={address} locationUrl={locationUrl} className="text-blue-500 hover:text-blue-600 flex items-center gap-1 font-bold transition underline underline-offset-2 decoration-blue-200 dark:decoration-blue-900/50 cursor-pointer" />
+                    ) : (
+                      <>
+                        <MapPin className="w-3.5 h-3.5 flex-shrink-0" /> {address}
+                      </>
+                    )}
+                  </div>
                 ) : null;
               })()}
             </div>
