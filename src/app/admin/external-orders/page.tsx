@@ -84,9 +84,7 @@ export default function ExternalOrdersAdmin() {
         // Strip tempImageUrl entirely to avoid localStorage quota limits (base64 strings are too large)
         const cleanExt = fetchedOrders.slice(0, 150).map(o => {
           const clean = { ...o };
-          if (clean.imageUrl) {
-            delete clean.tempImageUrl;
-          }
+          delete clean.tempImageUrl;
           return clean;
         });
         localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));

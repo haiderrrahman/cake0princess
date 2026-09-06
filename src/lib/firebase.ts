@@ -16,8 +16,15 @@ const firebaseConfig = {
 // تهيئة Firebase بطريقة آمنة لبيئة Next.js
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// تعطيل الكاش المحلي تماماً لاختبار إذا كان هو سبب تصفير البيانات
-let db = getFirestore(app);
+// إعادة تفعيل الكاش المحلي لتسريع جلب البيانات والصور المؤقتة (Base64) بدون انتظار الخادم
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+} catch (e) {
+  db = getFirestore(app);
+}
 
 const auth = getAuth(app);
 const storage = getStorage(app);
