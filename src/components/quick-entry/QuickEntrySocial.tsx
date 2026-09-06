@@ -10,8 +10,17 @@ import { toast } from "sonner";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { ar } from "date-fns/locale/ar";
+import { BISMAYAH_BUILDINGS, BISMAYAH_APARTMENTS } from "../BismayahData";
 
 const PLATFORMS = ["إنستجرام", "واتساب", "فيسبوك", "تيك توك", "هاتف", "أخرى"];
+
+const toDatetimeLocal = (isoString: string) => {
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return "";
+  const tzOffset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+};
 
 export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void }) {
   const [submitting, setSubmitting] = useState(false);
@@ -351,8 +360,15 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
               <option value="G">مجمع G</option>
               <option value="H">مجمع H</option>
             </select>
-            <input type="text" placeholder="عمارة (101 - 920)" value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold" />
-            <input type="text" placeholder="شقة (ارضي 1 - 912)" value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold" />
+            <input type="text" list="buildings-list" placeholder="عمارة (101 - 920)" value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold" />
+            <input type="text" list="apartments-list" placeholder="شقة (ارضي 1 - 912)" value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold" />
+            
+            <datalist id="buildings-list">
+              {BISMAYAH_BUILDINGS.map(b => <option key={b} value={b} />)}
+            </datalist>
+            <datalist id="apartments-list">
+              {BISMAYAH_APARTMENTS.map(a => <option key={a} value={a} />)}
+            </datalist>
           </div>
         ) : (
           <div className="relative">
@@ -435,29 +451,20 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">وقت وتاريخ التسليم</label>
         <div className="relative">
           <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
-          <DatePicker
-            selected={deliveryDate ? new Date(deliveryDate) : null}
-            onChange={(date: Date | null) => setDeliveryDate(date ? date.toISOString() : new Date().toISOString())}
-            locale={ar}
-            showTimeSelect
-            timeFormat="h:mm aa"
-            timeIntervals={30}
-            timeCaption="الوقت"
-            dateFormat="yyyy/MM/dd h:mm aa"
-            placeholderText="اختر التاريخ والوقت"
-            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:border-emerald-400 focus:outline-none text-right"
-            withPortal
+          <input
+            type="datetime-local"
+            value={toDatetimeLocal(deliveryDate)}
+            onChange={(e) => {
+              if (e.target.value) {
+                const d = new Date(e.target.value);
+                if (!isNaN(d.getTime())) setDeliveryDate(d.toISOString());
+              } else {
+                setDeliveryDate("");
+              }
+            }}
+            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm font-black focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500 text-right appearance-none"
             required
-          >
-            <div className="p-2 border-t border-gray-200 dark:border-zinc-700 mt-2 flex justify-end">
-              <button type="button" className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm" onClick={() => {
-                document.querySelector('.react-datepicker__portal')?.remove();
-                document.body.classList.remove('react-datepicker-portal-open');
-                const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape' });
-                document.dispatchEvent(escapeEvent);
-              }}>تم ✔</button>
-            </div>
-          </DatePicker>
+          />
         </div>
       </div>
 
