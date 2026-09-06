@@ -17,14 +17,16 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 // إعادة تفعيل الكاش المحلي لتسريع جلب البيانات والصور المؤقتة (Base64) بدون انتظار الخادم
-let db;
-try {
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-  });
-} catch (e) {
-  db = getFirestore(app);
-}
+const initDB = () => {
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    });
+  } catch (e) {
+    return getFirestore(app);
+  }
+};
+const db = initDB();
 
 const auth = getAuth(app);
 const storage = getStorage(app);
