@@ -281,6 +281,7 @@ export default function HomeFinanceDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "expenses" | "income" | "installments" | "needs" | "bills" | "debts" | "inventory" | "car" | "travel" | "familyNeeds" | "futurePlans">("overview");
 
   // Data state
+  const [cakeSalaryDebt, setCakeSalaryDebt] = useState<number>(0);
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -518,8 +519,15 @@ export default function HomeFinanceDashboard() {
 
     setMounted(true);
 
+    const unsubExpenses = onSnapshot(collection(db, "expenses"), (snap) => {
+      const exps = snap.docs.map(d => d.data() as any);
+      const debt = exps.filter(e => e.isDebt).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      setCakeSalaryDebt(debt);
+    });
+
     return () => {
       unsubscribers.forEach(unsub => unsub());
+      unsubExpenses();
     };
   }, []);
 
@@ -735,9 +743,26 @@ export default function HomeFinanceDashboard() {
     return summary;
   }, [shoppingList, familyNeeds]);
 
+  const effectiveDebts = useMemo(() => {
+    // إخفاء الدين القديم الذي كان يسجل يدوياً باسم "دين الكيك"
+    const cleaned = debts.filter(d => d.person !== "دين الكيك" && d.person !== "دين الكيك (اموال الراتب)");
+    if (cakeSalaryDebt > 0) {
+      cleaned.push({
+        id: "virtual-cake-debt",
+        person: "دين الكيك (اموال الراتب)",
+        amount: cakeSalaryDebt,
+        type: "دين لي",
+        date: today(),
+        payments: [], // المدفوعات تتم إدارتها داخل مقر القيادة المركزية مباشرة (expenses)
+        createdAt: today()
+      });
+    }
+    return cleaned;
+  }, [debts, cakeSalaryDebt]);
+
   const totalNeedsAmt = needs.filter(n => !n.isBought).reduce((s, n) => s + (n.estimatedPrice || 0), 0) + shoppingList.reduce((s, i) => s + (i.estimatedPrice || 0), 0);
-  const totalDebtsForMe = debts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
-  const totalDebtsOnMe = debts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
+  const totalDebtsForMe = effectiveDebts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
+  const totalDebtsOnMe = effectiveDebts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
 
   // ──────────────────────────────────────────
   // FUTURE PLAN HANDLERS
@@ -1704,6 +1729,40 @@ setNeedNameInput("");
     
     if (remaining <= 0) { toast.success("هذا الدين مسدد بالكامل"); return; }
     
+    if (debt.id === "virtual-cake-debt") {
+      showPrompt("تسديد جزء من دين الكيك (اموال الراتب)", async (amountStr) => {
+        const actualAmount = Number(amountStr);
+        if (isNaN(actualAmount) || actualAmount <= 0) { toast.error("مبلغ غير صحيح"); return; }
+        if (actualAmount > remaining) { toast.error("لا يمكن تسجيل مبلغ أكبر من المتبقي"); return; }
+
+        try {
+          // Exactly like finances/page.tsx
+          await addDoc(collection(db, "expenses"), {
+            amount: -actualAmount,
+            category: "تسديد دين",
+            description: `تسديد جزء من الدين المستحق (تحويل من إدارة المنزل)`,
+            month: new Date().getMonth() + 1,
+            createdAt: serverTimestamp(),
+            isDebt: true
+          });
+
+          await addDoc(collection(db, "expenses"), {
+            amount: actualAmount,
+            category: "تسديد دين",
+            description: `تسديد جزء من الدين المستحق (من إدارة المنزل)`,
+            month: new Date().getMonth() + 1,
+            createdAt: serverTimestamp(),
+            isDebt: false
+          });
+          
+          toast.success("تم تسديد جزء من دين الكيك بنجاح");
+        } catch (e) {
+          toast.error("حدث خطأ أثناء التسديد");
+        }
+      });
+      return;
+    }
+    
     // إذا كان ديناً متقدماً (بنظام الأقساط)، يتم سداد القسط الشهري تلقائياً
     if (debt.monthlyInstallment && debt.totalMonths) {
       const paymentAmount = Math.min(debt.monthlyInstallment, remaining);
@@ -1949,7 +2008,7 @@ setEditTrip(null);
   const totalShortages = shoppingList.length + familyNeeds.filter(n => n.status === "pending" && n.type !== "duty").length;
   const unpaidBillsCount = bills.filter(b => !isBillPaidThisCycle(b)).length;
   const delayedInstallmentsCount = installments.filter(i => isInstallmentOwedThisCycle(i)).length;
-  const unsettledDebtsCount = debts.filter(d => { const total = d.payments.reduce((s, p) => s + p.amount, 0); return d.amount - total > 0; }).length;
+  const unsettledDebtsCount = effectiveDebts.filter(d => { const total = d.payments.reduce((s, p) => s + p.amount, 0); return d.amount - total > 0; }).length;
 
   const tabs = [
     { key: "overview",      label: "نظرة عامة",          emoji: "🏠", icon: BarChart3, badge: 0 },
@@ -2199,8 +2258,8 @@ setEditTrip(null);
             availCard = { title: "إجمالي المتوفر (منزل وعائلة)", count: totalAvailQty, countLabel: "عنصر متوفر", value: 0, color: "emerald", icon: "📦" };
             shortCard = { title: "إجمالي النواقص والاحتياجات", count: totalShortQty, countLabel: "طلب/عنصر ناقص", value: totalNeedsAmt, color: "orange", icon: "🚨" };
           } else if (activeTab === "debts") {
-            const myDebtsCount = debts.filter(d => d.type === "دين لي").length;
-            const onMeDebtsCount = debts.filter(d => d.type === "دين علي").length;
+            const myDebtsCount = effectiveDebts.filter(d => d.type === "دين لي").length;
+            const onMeDebtsCount = effectiveDebts.filter(d => d.type === "دين علي").length;
             availCard = { title: "ديون لي (عند الناس)", count: myDebtsCount, countLabel: "دين", value: totalDebtsForMe, color: "emerald", icon: "📈" };
             shortCard = { title: "ديون علي (مطلوبة مني)", count: onMeDebtsCount, countLabel: "دين", value: totalDebtsOnMe, color: "orange", icon: "📉" };
           } else if (activeTab === "expenses") {
@@ -3436,14 +3495,14 @@ setEditTrip(null);
               </button>
             </div>
             
-            {debts.length === 0 ? (
+            {effectiveDebts.length === 0 ? (
               <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
                 <Banknote className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-400 font-bold text-sm">لا توجد ديون أو فائض مسجل</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                {[...debts].sort((a, b) => b.date.localeCompare(a.date)).map(debt => {
+                {[...effectiveDebts].sort((a, b) => b.date.localeCompare(a.date)).map(debt => {
                   const paymentsTotal = debt.payments.reduce((s, p) => s + p.amount, 0);
                   const remaining = debt.amount - paymentsTotal;
                   const isPaid = remaining <= 0;
@@ -3500,12 +3559,16 @@ setEditTrip(null);
                       
                       <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-zinc-800">
                         <div className="flex gap-1">
-                          <button onClick={() => { setEditDebt(debt); setShowDebtModal(true); }} className="p-1.5 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition">
-                            <Edit2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                          </button>
-                          <button onClick={() => handleDeleteDebt(debt.id)} className="p-1.5 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition">
-                            <Trash2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                          </button>
+                          {debt.id !== "virtual-cake-debt" && (
+                            <>
+                              <button onClick={() => { setEditDebt(debt); setShowDebtModal(true); }} className="p-1.5 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition">
+                                <Edit2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                              </button>
+                              <button onClick={() => handleDeleteDebt(debt.id)} className="p-1.5 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition">
+                                <Trash2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                              </button>
+                            </>
+                          )}
                           {debt.payments.length > 0 && (
                             <button onClick={() => setShowDebtHistory(showDebtHistory === debt.id ? null : debt.id)} className="p-1.5 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition text-gray-500 dark:text-gray-400 text-[10px] font-bold">
                               سجل
@@ -3514,7 +3577,7 @@ setEditTrip(null);
                         </div>
                         
                         <div className="flex gap-2">
-                          {debt.payments.length > 0 && (
+                          {debt.payments.length > 0 && debt.id !== "virtual-cake-debt" && (
                             <button onClick={() => handleUndoDebtPayment(debt)}
                                 className="bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[10px] font-bold px-3 py-1.5 rounded-lg active:scale-95 transition">
                                 تراجع

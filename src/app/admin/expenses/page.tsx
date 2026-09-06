@@ -63,41 +63,13 @@ export default function ExpensesAdmin() {
         createdAt: serverTimestamp(),
       });
 
-      // Sync with Home Finance Debts if paid by Cake
-      if (paidBy === 'cake') {
-        try {
-          const { getDoc, updateDoc } = await import("firebase/firestore");
-          const docRef = doc(db, "home_finance", "debts");
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data().data || [];
-            const debtIndex = data.findIndex((d: any) => d.person.includes("الكيك") && d.type === "دين علي");
-            if (debtIndex !== -1) {
-              data[debtIndex].amount += parseIqdInput(amount);
-            } else {
-              data.push({
-                id: "cake_debt_" + Date.now().toString(),
-                person: "دين الكيك",
-                amount: parseIqdInput(amount),
-                type: "دين علي",
-                date: new Date().toISOString().split('T')[0],
-                payments: [],
-                createdAt: new Date().toISOString()
-              });
-            }
-            await updateDoc(docRef, { data });
-          }
-        } catch (syncErr) {
-          console.error("Error syncing cake debt:", syncErr);
-        }
-      }
-
       // Reset form
       setTitle("");
       setAmount("");
       setNotes("");
       setPaidBy('');
       setIsModalOpen(false);
+      // No need to call fetchExpenses() — onSnapshot handles it automatically
     } catch (error) {
       console.error("Error adding expense:", error);
       toast.error("حدث خطأ أثناء إضافة المصروف");
@@ -108,25 +80,8 @@ export default function ExpensesAdmin() {
   const handleDelete = async (id: string) => {
     if (await customConfirm("هل أنت متأكد من حذف هذا المصروف؟ لا يمكن التراجع عن هذا الإجراء.")) {
       try {
-        const expense = expenses.find(e => e.id === id);
-        if (expense && expense.paidBy === 'cake') {
-          try {
-            const { getDoc, updateDoc } = await import("firebase/firestore");
-            const docRef = doc(db, "home_finance", "debts");
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-              const data = docSnap.data().data || [];
-              const debtIndex = data.findIndex((d: any) => d.person.includes("الكيك") && d.type === "دين علي");
-              if (debtIndex !== -1) {
-                data[debtIndex].amount = Math.max(0, data[debtIndex].amount - Number(expense.amount));
-                await updateDoc(docRef, { data });
-              }
-            }
-          } catch (syncErr) {
-            console.error("Error syncing cake debt deletion:", syncErr);
-          }
-        }
         await deleteDoc(doc(db, "expenses", id));
+        setExpenses(expenses.filter(e => e.id !== id));
       } catch (error) {
         console.error("Error deleting expense:", error);
       }
