@@ -929,8 +929,13 @@ function AdminHubContent() {
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> مبيعات اليوم</p>
               <div className="flex justify-between items-end">
-                <p className="text-lg font-black text-white">{stats.todayExtDeliveriesCount || 0} <span className="text-[10px] font-normal">طلب</span></p>
-                <p className="text-sm font-black text-emerald-100 bg-emerald-500/20 px-2 py-0.5 rounded-lg">{(stats.todayExtDeliveriesAmount || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+                <div className="flex flex-col">
+                  <p className="text-lg font-black text-white">{(stats.todayExtSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+                </div>
+                <div className="flex flex-col items-end">
+                  <p className="text-[9px] text-emerald-200 font-bold">الطلبات: {stats.todayExtDeliveriesCount || 0}</p>
+                  <p className="text-[9px] text-emerald-200 font-bold">الكلي: {(stats.todayExtDeliveriesAmount || 0).toLocaleString()}</p>
+                </div>
               </div>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">

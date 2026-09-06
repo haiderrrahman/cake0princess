@@ -518,8 +518,13 @@ export default function ExternalOrdersAdmin() {
               <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
                 <p className="text-[9px] md:text-xs font-bold text-emerald-200 mb-1">مبيعات اليوم</p>
                 <div className="flex justify-between items-end">
-                  <p className="text-xs md:text-xl font-black text-white">{todayDeliveriesCount || 0} <span className="text-[8px] md:text-[10px] font-normal">طلب</span></p>
-                  <p className="text-[10px] md:text-sm font-black text-emerald-100 bg-emerald-500/20 px-1 md:px-2 py-0.5 rounded-lg">{(todayDeliveriesAmount || 0).toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
+                  <div className="flex flex-col text-right">
+                    <p className="text-xs md:text-xl font-black text-white">{todaySales.toLocaleString()} <span className="text-[8px] md:text-[10px] font-normal">د.ع</span></p>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <p className="text-[8px] md:text-[10px] text-emerald-200 font-bold">الطلبات: {todayDeliveriesCount || 0}</p>
+                    <p className="text-[8px] md:text-[10px] text-emerald-200 font-bold">الكلي: {(todayDeliveriesAmount || 0).toLocaleString()}</p>
+                  </div>
                 </div>
               </div>
               <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-2 md:p-4 text-center flex flex-col justify-center">
