@@ -9,6 +9,7 @@ interface MapLinkProps {
 
 export default function MapLink({ address, locationUrl, className }: MapLinkProps) {
   const [showOptions, setShowOptions] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
 
   const extractCoordinates = (url: string) => {
     // try to match lat, lng anywhere in the string
@@ -19,11 +20,11 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
     return null;
   };
 
-  const handleOpenMap = (type: 'google' | 'waze' | 'original', e: React.MouseEvent) => {
+  const handleOpenMap = async (type: 'google' | 'waze' | 'original', e: React.MouseEvent) => {
     e.stopPropagation();
-    setShowOptions(false);
     
     if (type === 'original') {
+      setShowOptions(false);
       if (locationUrl && locationUrl.startsWith('http')) {
         window.open(locationUrl, '_blank');
       } else {
@@ -34,6 +35,7 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
 
     const coords = extractCoordinates(locationUrl || address);
     if (coords) {
+      setShowOptions(false);
       if (type === 'google') {
         window.open(`https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`, '_blank');
       } else if (type === 'waze') {
@@ -41,13 +43,38 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
       }
     } else {
       if (type === 'google') {
+        setShowOptions(false);
         if (locationUrl && locationUrl.includes('maps.app.goo.gl')) {
            window.open(locationUrl, '_blank');
         } else {
            window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank');
         }
       } else if (type === 'waze') {
-        window.open(`https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`, '_blank');
+        if ((locationUrl && locationUrl.includes('maps.app.goo.gl')) || (address && address.includes('maps.app.goo.gl'))) {
+          // Resolve short link to coordinates via our API
+          setIsResolving(true);
+          try {
+            const urlToResolve = locationUrl?.includes('http') ? locationUrl : address;
+            const res = await fetch('/api/resolve-location', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: urlToResolve })
+            });
+            const data = await res.json();
+            if (data.lat && data.lng) {
+              window.open(`https://waze.com/ul?ll=${data.lat},${data.lng}&navigate=yes`, '_blank');
+            } else {
+              alert('لم نتمكن من استخراج الإحداثيات من الرابط. يرجى استخدام Google Maps.');
+            }
+          } catch (error) {
+            alert('حدث خطأ أثناء تحليل الرابط.');
+          }
+          setIsResolving(false);
+          setShowOptions(false);
+        } else {
+          setShowOptions(false);
+          window.open(`https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`, '_blank');
+        }
       }
     }
   };
@@ -75,10 +102,11 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
             <div className="space-y-3">
               <button 
                 onClick={(e) => handleOpenMap('waze', e)}
-                className="w-full flex items-center justify-center gap-3 bg-[#33ccff] hover:bg-[#2bb4e3] text-white py-3 rounded-xl font-bold transition"
+                disabled={isResolving}
+                className={`w-full flex items-center justify-center gap-3 bg-[#33ccff] hover:bg-[#2bb4e3] text-white py-3 rounded-xl font-bold transition ${isResolving ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
-                <Navigation className="w-5 h-5" />
-                فتح باستخدام Waze
+                <Navigation className={`w-5 h-5 ${isResolving ? 'animate-pulse' : ''}`} />
+                {isResolving ? 'جاري تحديد الموقع...' : 'فتح باستخدام Waze'}
               </button>
               <button 
                 onClick={(e) => handleOpenMap('google', e)}
