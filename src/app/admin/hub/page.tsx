@@ -951,7 +951,12 @@ function AdminHubContent() {
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><BarChart3 className="w-3.5 h-3.5" /> المبيعات الكلية</p>
-              <p className="text-lg font-black text-teal-200">{(stats.allTimeExtSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+              <div className="flex justify-between items-end">
+                <p className="text-lg font-black text-teal-200">{(stats.allTimeExtSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+                <div className="flex flex-col items-end">
+                  <p className="text-[9px] text-emerald-200 font-bold">الشهرية: {(stats.monthExtSales || 0).toLocaleString()}</p>
+                </div>
+              </div>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-rose-200 mb-1 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> باقي نطلبه</p>
