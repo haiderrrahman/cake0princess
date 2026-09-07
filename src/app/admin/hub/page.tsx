@@ -1119,6 +1119,16 @@ function AdminHubContent() {
                                   {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString("ar-IQ", { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : "غير محدد"}
                                 </span>
                               </div>
+                              
+                              {order.address && (
+                                <div className="mt-2 text-[11px] sm:text-xs">
+                                  <MapLink 
+                                    address={`${order.deliveryZone || ''} - ${order.address}`}
+                                    locationUrl={order.location ? `https://www.google.com/maps/search/?api=1&query=${order.location.lat},${order.location.lng}` : ""}
+                                    className={`font-bold flex items-start gap-1.5 transition cursor-pointer w-fit ${order.location ? 'text-blue-500 hover:underline underline-offset-2 decoration-blue-200' : 'text-gray-500 hover:text-blue-500'}`} 
+                                  />
+                                </div>
+                              )}
                             </div>
 
                             <div className="flex items-end justify-between mt-3 sm:mt-2">
@@ -1147,8 +1157,8 @@ function AdminHubContent() {
 
                               <div className="flex flex-col text-left pl-1">
                                 <span className="text-[9px] text-gray-400 font-bold mb-0.5">الإجمالي</span>
-                                <span className="font-black text-[#e8456b] text-base sm:text-lg leading-none">
-                                  {Number(order.total).toLocaleString()} <span className="text-[10px] text-[#e8456b] font-bold">د.ع</span>
+                                <span className="font-black text-rose-500 text-xl sm:text-2xl leading-none">
+                                  {Number(order.total).toLocaleString()} <span className="text-[10px] text-rose-500 font-bold">د.ع</span>
                                 </span>
                               </div>
                             </div>
@@ -1379,9 +1389,29 @@ function AdminHubContent() {
                               </button>
                                 <span className={`text-[10px] font-black px-2 py-1 rounded-xl shrink-0 ml-1 ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
                               </div>
-                              <p className="text-[11px] text-gray-500 line-clamp-1 mb-2 font-bold">
+                              <p className="text-[11px] text-gray-500 line-clamp-1 mb-2 font-bold leading-relaxed">
                                 {(order.items || []).map((item: any) => `${item.quantity || 1}× ${item.name}`).join(' ، ')}
                               </p>
+                              <div className="flex flex-wrap gap-1.5 text-[10px] sm:text-[11px]">
+                                <span className="bg-gray-50 dark:bg-zinc-800 px-2 py-1 rounded-lg text-gray-600 dark:text-gray-300 flex items-center gap-1 font-bold">
+                                  <Phone className="w-3.5 h-3.5 text-emerald-500" />
+                                  {order.phone ? <a href={`tel:${order.phone}`} className="hover:underline">{order.phone}</a> : "غير محدد"}
+                                </span>
+                                <span className="bg-gray-50 dark:bg-zinc-800 px-2 py-1 rounded-lg text-gray-600 dark:text-gray-300 flex items-center gap-1 font-bold">
+                                  <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                                  {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString("ar-IQ", { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : "غير محدد"}
+                                </span>
+                              </div>
+                              
+                              {order.address && (
+                                <div className="mt-2 text-[11px] sm:text-xs">
+                                  <MapLink 
+                                    address={`${order.deliveryZone || ''} - ${order.address}`}
+                                    locationUrl={order.location ? `https://www.google.com/maps/search/?api=1&query=${order.location.lat},${order.location.lng}` : ""}
+                                    className={`font-bold flex items-start gap-1.5 transition cursor-pointer w-fit ${order.location ? 'text-blue-500 hover:underline underline-offset-2 decoration-blue-200' : 'text-gray-500 hover:text-blue-500'}`} 
+                                  />
+                                </div>
+                              )}
                             </div>
                             <div className="flex items-end justify-between mt-2">
                               <div className="relative w-32">
@@ -1399,7 +1429,12 @@ function AdminHubContent() {
                                 </select>
                                 <ChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-70 ${cfg.color}`} />
                               </div>
-                              <span className="font-black text-[#e8456b] text-lg">{Number(amount).toLocaleString()} <span className="text-[10px] font-bold">د.ع</span></span>
+                              <div className="flex flex-col text-left pl-1">
+                                <span className="text-[9px] text-gray-400 font-bold mb-0.5">الإجمالي</span>
+                                <span className="font-black text-rose-500 text-xl sm:text-2xl leading-none">
+                                  {Number(amount).toLocaleString()} <span className="text-[10px] text-rose-500 font-bold">د.ع</span>
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>

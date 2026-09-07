@@ -1,4 +1,5 @@
 "use client";
+import MapLink from "@/components/MapLink";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, ShoppingBag, Loader2, CheckCircle, Clock, MapPin, Search } from "lucide-react";
@@ -259,7 +260,11 @@ export default function AdminOrders() {
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 gap-2">
                   <div>
                     <h3 className="font-black text-gray-900 dark:text-white text-lg">{order.userName || "ضيف"}</h3>
-                    <p className="text-xs font-bold text-gray-500 mt-0.5">{order.phone || "لا يوجد رقم"}</p>
+                    {order.phone ? (
+                      <a href={`tel:${order.phone}`} className="text-xs font-bold text-blue-500 mt-0.5 hover:underline block w-fit" dir="ltr">{order.phone}</a>
+                    ) : (
+                      <p className="text-xs font-bold text-gray-500 mt-0.5">لا يوجد رقم</p>
+                    )}
                   </div>
                   <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center w-fit gap-1.5 ${
                     order.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
@@ -295,7 +300,7 @@ export default function AdminOrders() {
                   </div>
                   <div className="flex justify-between items-center text-sm mt-3 pt-3 border-t border-gray-200 dark:border-zinc-700">
                     <span className="text-gray-500 text-xs font-bold">الإجمالي الكلي:</span>
-                    <span className="font-black text-[#e8456b] text-base">{Number(order.total).toLocaleString()} د.ع</span>
+                    <span className="font-black text-rose-500 text-xl">{Number(order.total).toLocaleString()} د.ع</span>
                   </div>
                 </div>
 
@@ -317,22 +322,12 @@ export default function AdminOrders() {
                 )}
 
                 {order.address && (
-                  <div className="flex gap-2 items-start text-xs text-gray-600 dark:text-gray-400">
-                    <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="leading-relaxed font-bold">{order.deliveryZone} - {order.address}</p>
-                      {order.location && (
-                        <a 
-                          href={`https://www.google.com/maps/search/?api=1&query=${order.location.lat},${order.location.lng}`}
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black hover:bg-blue-100 transition"
-                        >
-                          <MapPin className="w-3 h-3" />
-                          عرض على خرائط جوجل
-                        </a>
-                      )}
-                    </div>
+                  <div className="mt-2 w-full justify-start flex flex-col gap-2 border-t border-gray-100 dark:border-zinc-800 pt-3">
+                    <MapLink 
+                      address={`${order.deliveryZone || ''} - ${order.address}`}
+                      locationUrl={order.location ? `https://www.google.com/maps/search/?api=1&query=${order.location.lat},${order.location.lng}` : ""}
+                      className={`text-sm md:text-base font-bold flex items-start gap-1.5 transition cursor-pointer ${order.location ? 'text-blue-500 hover:underline underline-offset-2 decoration-blue-200' : 'text-gray-500 hover:text-blue-500'}`} 
+                    />
                   </div>
                 )}
               </div>
