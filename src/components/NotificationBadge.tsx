@@ -104,8 +104,8 @@ export default function NotificationBadge() {
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 mt-2 w-[320px] sm:w-[380px] bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.5)] z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center justify-between p-4 border-b border-gray-50 dark:border-zinc-800">
+        <div className="absolute left-0 mt-2 w-[320px] sm:w-[380px] bg-white border border-gray-100 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between p-4 border-b border-gray-50">
             <h3 className="font-black">الإشعارات</h3>
             {unreadCount > 0 && <span className="text-xs font-bold text-[#e8456b] bg-[#e8456b]/10 px-2 py-1 rounded-lg">{unreadCount} جديد</span>}
           </div>

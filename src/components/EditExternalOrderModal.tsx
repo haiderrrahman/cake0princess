@@ -451,10 +451,14 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
                     <option value="E">مجمع E</option>
                     {["A","B","C","D","E","F","G","H"].map(c => <option key={c} value={c}>مجمع {c}</option>)}
                   </select>
-                  <input type="text" list="edit-buildings-list" placeholder="عمارة" value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold" />
-                  <input type="text" list="edit-apartments-list" placeholder="شقة" value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold" />
-                  <datalist id="edit-buildings-list">{BISMAYAH_BUILDINGS.map(b => <option key={b} value={b} />)}</datalist>
-                  <datalist id="edit-apartments-list">{BISMAYAH_APARTMENTS.map(a => <option key={a} value={a} />)}</datalist>
+                  <select value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold">
+                    <option value="">عمارة</option>
+                    {BISMAYAH_BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                  <select value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold">
+                    <option value="">شقة</option>
+                    {BISMAYAH_APARTMENTS.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
                 </div>
               ) : deliveryType === "other" ? (
                 <div className="relative">

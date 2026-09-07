@@ -401,15 +401,14 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
               <option value="G">مجمع G</option>
               <option value="H">مجمع H</option>
             </select>
-            <input type="text" list="buildings-list" placeholder="عمارة (101 - 920)" value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold" />
-            <input type="text" list="apartments-list" placeholder="شقة (ارضي 1 - 912)" value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold" />
-            
-            <datalist id="buildings-list">
-              {BISMAYAH_BUILDINGS.map(b => <option key={b} value={b} />)}
-            </datalist>
-            <datalist id="apartments-list">
-              {BISMAYAH_APARTMENTS.map(a => <option key={a} value={a} />)}
-            </datalist>
+            <select value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold">
+              <option value="">عمارة</option>
+              {BISMAYAH_BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <select value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold">
+              <option value="">شقة</option>
+              {BISMAYAH_APARTMENTS.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
           </div>
         ) : deliveryType === "other" ? (
           <div className="relative">

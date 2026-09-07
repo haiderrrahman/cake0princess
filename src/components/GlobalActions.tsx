@@ -215,9 +215,9 @@ export default function GlobalActions() {
 
       {/* ── Notifications Modal ── */}
       {isOpen && (
-        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center animate-in fade-in" onClick={() => setIsOpen(false)}>
+        <div className="fixed inset-0 z-[70] bg-black/20 backdrop-blur-sm flex items-end sm:items-center justify-center animate-in fade-in" onClick={() => setIsOpen(false)}>
           <div 
-            className="w-full sm:w-[400px] h-[85vh] sm:h-[600px] bg-white dark:bg-zinc-950 rounded-t-3xl sm:rounded-3xl flex flex-col animate-in slide-in-from-bottom-10 sm:zoom-in-95 shadow-2xl border border-gray-100 dark:border-zinc-800"
+            className="w-full sm:w-[400px] h-[85vh] sm:h-[600px] bg-white rounded-t-3xl sm:rounded-3xl flex flex-col animate-in slide-in-from-bottom-10 sm:zoom-in-95 shadow-2xl border border-gray-100"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-zinc-800">
