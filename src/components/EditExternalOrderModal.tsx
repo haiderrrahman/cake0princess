@@ -169,9 +169,31 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       const totalPriceWithDelivery = numPrice + computedDeliveryFee;
       
       const aptText = bismayahApt.startsWith("ارضي") ? bismayahApt : (bismayahApt ? `شقة ${bismayahApt.replace(/^(شقة\s*)+/g, '')}` : "");
-      const computedAddress = isBismayah
-        ? `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} ${aptText}`.trim()
-        : address;
+      let computedAddress = address;
+      if (isBismayah) {
+        computedAddress = `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} ${aptText}`.trim();
+      }
+
+      let finalLocationUrl = locationUrl;
+      
+      // Try to extract coordinates from locationUrl first, then from computedAddress
+      const extractCoords = (text: string) => {
+        if (!text) return null;
+        const match = text.match(/[(]?\s*([+-]?\d{1,2}\.\d+)[,\s]+([+-]?\d{1,3}\.\d+)\s*[)]?/);
+        if (match) {
+          return `https://www.google.com/maps/search/?api=1&query=${match[1]},${match[2]}`;
+        }
+        return null;
+      };
+
+      const extractedFromLoc = extractCoords(locationUrl);
+      const extractedFromAddr = extractCoords(computedAddress);
+      
+      if (extractedFromLoc) {
+        finalLocationUrl = extractedFromLoc;
+      } else if (extractedFromAddr) {
+        finalLocationUrl = extractedFromAddr;
+      }
 
       // Instantly update the document so the UI responds without waiting for image
       await updateDoc(doc(db, "external_orders", order.id), {
@@ -186,7 +208,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         cost: numCost,
         profit: numCost > 0 ? numPrice - numCost : numPrice,
         isBismayah, bismayahComplex, bismayahBuilding, bismayahApt, 
-        deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl,
+        deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,
         ...(tempImageUrl ? { tempImageUrl } : {})
       });
@@ -198,7 +220,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
           phone: customerPhone || existingCustomer.phone || "",
           address: computedAddress || existingCustomer.address || "",
           platform: platform || existingCustomer.platform || "واتساب",
-          ...(locationUrl ? { locationUrl } : {}),
+          ...(finalLocationUrl ? { locationUrl: finalLocationUrl } : {}),
           totalSpent: (existingCustomer.totalSpent || 0) - parseIqdInput(order.price) + numPrice
         });
       } else {

@@ -251,6 +251,15 @@ export default function ExternalOrdersAdmin() {
         new Promise(resolve => setTimeout(resolve, 1500))
       ]);
 
+      // Extract coordinates if user typed them in the address field
+      let extractedLocationUrl = "";
+      if (address) {
+        const match = address.match(/[(]?\s*([+-]?\d{1,2}\.\d+)[,\s]+([+-]?\d{1,3}\.\d+)\s*[)]?/);
+        if (match) {
+          extractedLocationUrl = `https://www.google.com/maps/search/?api=1&query=${match[1]},${match[2]}`;
+        }
+      }
+
       const orderData = {
         customerId: customerId || "offline-temp-id",
         customerName,
@@ -262,6 +271,7 @@ export default function ExternalOrdersAdmin() {
         cost: numCost,
         profit,
         deliveryDate,
+        ...(extractedLocationUrl && { locationUrl: extractedLocationUrl }),
         ...(imageUrl && { imageUrl }),
         ...(!isEditMode && { createdAt: serverTimestamp() }),
       };
