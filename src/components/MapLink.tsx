@@ -39,7 +39,7 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
       if (type === 'google') {
         window.open(`https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`, '_blank');
       } else if (type === 'waze') {
-        window.open(`https://waze.com/ul?ll=${coords.lat},${coords.lng}&navigate=yes`, '_blank');
+        window.open(`https://www.waze.com/ul?ll=${coords.lat},${coords.lng}`, '_blank');
       }
     } else {
       if (type === 'google') {
@@ -62,7 +62,7 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
             });
             const data = await res.json();
             if (data.lat && data.lng) {
-              window.open(`https://waze.com/ul?ll=${data.lat},${data.lng}&navigate=yes`, '_blank');
+              window.open(`https://www.waze.com/ul?ll=${data.lat},${data.lng}`, '_blank');
             } else {
               alert('لم نتمكن من استخراج الإحداثيات من الرابط. يرجى استخدام Google Maps.');
             }
@@ -73,7 +73,7 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
           setShowOptions(false);
         } else {
           setShowOptions(false);
-          window.open(`https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`, '_blank');
+          window.open(`https://www.waze.com/ul?q=${encodeURIComponent(address)}`, '_blank');
         }
       }
     }
