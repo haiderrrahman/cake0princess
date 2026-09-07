@@ -329,6 +329,7 @@ function AdminHubContent() {
   useEffect(() => {
     let todaySales = 0, weekSales = 0, monthSales = 0, allTimeSales = 0;
     let todayExtSales = 0, weekExtSales = 0, monthExtSales = 0, allTimeExtSales = 0;
+    let todayDeliveriesCount = 0, todayDeliveriesAmount = 0;
     let todayExtDeliveriesCount = 0, todayExtDeliveriesAmount = 0;
     let extOweUs = 0, extWeOwe = 0;
     
@@ -366,6 +367,13 @@ function AdminHubContent() {
       if (["rejected", "cancelled"].includes(o.status)) return;
       const amt = Number(o.toPayNow) || Number(o.total) || 0;
       calcSales(o, amt, false);
+      
+      const dDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+      dDate.setHours(0,0,0,0);
+      if (dDate.getTime() === today.getTime()) {
+        todayDeliveriesCount++;
+        todayDeliveriesAmount += amt;
+      }
       
       const isDelivered = o.status === 'delivered' || o.status === 'completed';
       if (isDelivered) {
@@ -441,14 +449,16 @@ function AdminHubContent() {
     const pendingExtOrdersList = externalOrders.filter(o => ["pending", "processing"].includes(o.status || 'pending'));
     const pendingExtOrders = pendingExtOrdersList.length;
     const pendingExtOrdersAmount = pendingExtOrdersList.reduce((s, o) => s + Number(o.price || 0), 0);
+    const pendingOrdersAmount = pendingOrders.reduce((s, o) => s + (Number(o.toPayNow) || Number(o.total) || 0), 0);
 
     setStats((prev: any) => ({
       ...prev,
       todaySales, weekSales, monthSales, allTimeSales, 
       todayExtSales, weekExtSales, monthExtSales, allTimeExtSales, 
+      todayDeliveriesCount, todayDeliveriesAmount,
       todayExtDeliveriesCount, todayExtDeliveriesAmount,
       extOweUs, extWeOwe,
-      totalOrders: orders.length, pendingOrders: pendingOrders.length, 
+      totalOrders: orders.length, pendingOrders: pendingOrders.length, pendingOrdersAmount,
       pendingExtOrders, pendingExtOrdersAmount, externalSales, externalProfit, 
       totalProfit, netProfit: totalProfit - prev.expenses, breakdown 
     }));
@@ -907,11 +917,22 @@ function AdminHubContent() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 relative z-10">
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-rose-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> مبيعات اليوم</p>
-              <p className="text-lg font-black text-white">{(stats.todaySales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+              <div className="flex justify-between items-end">
+                <div className="flex flex-col">
+                  <p className="text-lg font-black text-white">{(stats.todaySales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+                </div>
+                <div className="flex flex-col items-end">
+                  <p className="text-[9px] text-rose-200 font-bold">الطلبات: {stats.todayDeliveriesCount || 0}</p>
+                  <p className="text-[9px] text-rose-200 font-bold">الكلي: {(stats.todayDeliveriesAmount || 0).toLocaleString()}</p>
+                </div>
+              </div>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-rose-200 mb-1 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> طلبات معلقة</p>
-              <p className="text-lg font-black text-amber-300">{stats.pendingOrders || 0} <span className="text-[10px] font-normal">طلب</span></p>
+              <div className="flex justify-between items-end">
+                <p className="text-lg font-black text-amber-300">{stats.pendingOrders || 0} <span className="text-[10px] font-normal">طلب</span></p>
+                <p className="text-sm font-black text-amber-100 bg-amber-500/20 px-2 py-0.5 rounded-lg">{(stats.pendingOrdersAmount || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+              </div>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-rose-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> مبيعات الأسبوع</p>
@@ -919,7 +940,12 @@ function AdminHubContent() {
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-rose-200 mb-1 flex items-center gap-1"><BarChart3 className="w-3.5 h-3.5" /> المبيعات الكلية</p>
-              <p className="text-lg font-black text-purple-200">{(stats.allTimeSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+              <div className="flex justify-between items-end">
+                <p className="text-lg font-black text-purple-200">{(stats.allTimeSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+                <div className="flex flex-col items-end">
+                  <p className="text-xs text-white font-bold">الشهرية: {(stats.monthSales || 0).toLocaleString()}</p>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -954,7 +980,7 @@ function AdminHubContent() {
               <div className="flex justify-between items-end">
                 <p className="text-lg font-black text-teal-200">{(stats.allTimeExtSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
                 <div className="flex flex-col items-end">
-                  <p className="text-[9px] text-emerald-200 font-bold">الشهرية: {(stats.monthExtSales || 0).toLocaleString()}</p>
+                  <p className="text-xs text-white font-bold">الشهرية: {(stats.monthExtSales || 0).toLocaleString()}</p>
                 </div>
               </div>
             </div>
@@ -998,7 +1024,10 @@ function AdminHubContent() {
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-orange-200 mb-1 flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-amber-400" /> قيد التجهيز</p>
-              <p className="text-lg font-black text-amber-300">{suppliesOrders.filter(o => o.status === "pending" || o.status === "processing").length} <span className="text-[10px] font-normal">طلب</span></p>
+              <div className="flex justify-between items-end">
+                <p className="text-lg font-black text-amber-300">{suppliesOrders.filter(o => o.status === "pending" || o.status === "processing").length} <span className="text-[10px] font-normal">طلب</span></p>
+                <p className="text-sm font-black text-amber-100 bg-amber-500/20 px-2 py-0.5 rounded-lg">{suppliesOrders.filter(o => o.status === "pending" || o.status === "processing").reduce((sum, o) => sum + (Number(o.toPayNow) || Number(o.total) || 0), 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+              </div>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-orange-200 mb-1 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> طلبات مكتملة</p>

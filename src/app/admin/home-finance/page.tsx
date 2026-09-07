@@ -1707,6 +1707,36 @@ setNeedNameInput("");
       setDebts(updated);
       syncToFirebase("debts", updated);
       toast.success("تم إضافة الدين");
+
+      // التأثير على الرصيد الصافي للديون الجديدة (سلفة نقداً)
+      const recordId = Date.now().toString();
+      if (item.type === "دين علي") {
+        // استلمت سلفة -> دخل
+        const income: Income = {
+          id: recordId,
+          name: `استلام سلفة/دين من: ${item.person}`,
+          amount: item.amount,
+          type: "إضافي",
+          date: item.date,
+          createdAt: new Date().toISOString(),
+        };
+        const updatedIncomes = [income, ...incomes];
+        setIncomes(updatedIncomes);
+        syncToFirebase("incomes", updatedIncomes);
+      } else {
+        // أعطيت سلفة -> مصروف
+        const expense: Expense = {
+          id: recordId,
+          name: `إعطاء سلفة/دين لـ: ${item.person}`,
+          category: "أخرى",
+          amount: item.amount,
+          date: item.date,
+          createdAt: new Date().toISOString(),
+        };
+        const updatedExpenses = [expense, ...expenses];
+        setExpenses(updatedExpenses);
+        syncToFirebase("expenses", updatedExpenses);
+      }
     }
     e.currentTarget.reset();
     setDebtNameInput("");
@@ -1754,6 +1784,20 @@ setNeedNameInput("");
             createdAt: serverTimestamp(),
             isDebt: false
           });
+
+          // إضافة الدخل لإدارة المنزل حتى يزداد الرصيد الصافي
+          const recordId = Date.now().toString();
+          const income: Income = {
+            id: recordId,
+            name: `تسديد جزء من دين الكيك (اموال الراتب)`,
+            amount: actualAmount,
+            type: "إضافي",
+            date: today(),
+            createdAt: new Date().toISOString(),
+          };
+          const updatedIncomes = [income, ...incomes];
+          setIncomes(updatedIncomes);
+          syncToFirebase("incomes", updatedIncomes);
           
           toast.success("تم تسديد جزء من دين الكيك بنجاح");
         } catch (e) {
