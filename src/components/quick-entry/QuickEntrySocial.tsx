@@ -35,7 +35,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
   // New location states
-  const [isBismayah, setIsBismayah] = useState(false);
+  const [deliveryType, setDeliveryType] = useState<"bismayah" | "other" | "door">("other");
   const [bismayahComplex, setBismayahComplex] = useState("A");
   const [bismayahBuilding, setBismayahBuilding] = useState("");
   const [bismayahApt, setBismayahApt] = useState("");
@@ -83,6 +83,8 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
     let finalAddress = existingAddress;
     let finalPlatform = existingPlatform;
 
+    let finalLocationUrl = "";
+
     if (!finalPhone || !finalAddress) {
       try {
         const { query, collection, where, limit, getDocs } = await import("firebase/firestore");
@@ -90,18 +92,30 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         const snap = await getDocs(q);
         const orderWithPhone = snap.docs.find(d => d.data().customerPhone);
         const orderWithAddress = snap.docs.find(d => d.data().address);
+        const orderWithLocation = snap.docs.find(d => d.data().locationUrl);
         
         if (!finalPhone && orderWithPhone) finalPhone = orderWithPhone.data().customerPhone;
         if (!finalAddress && orderWithAddress) finalAddress = orderWithAddress.data().address;
         if (!finalPlatform && snap.docs.length > 0) finalPlatform = snap.docs[0].data().platform;
+        if (orderWithLocation) finalLocationUrl = orderWithLocation.data().locationUrl;
       } catch (e) {
         console.error("Error fetching past orders for autofill", e);
       }
     }
 
     if (finalPhone) setCustomerPhone(finalPhone);
-    if (finalAddress) setAddress(finalAddress);
+    if (finalAddress) {
+      setAddress(finalAddress);
+      if (finalAddress === "تسليم باب الشقة بدون توصيل") {
+        setDeliveryType("door");
+      } else if (finalAddress.includes("مجمع") && finalAddress.includes("عمارة")) {
+        setDeliveryType("bismayah");
+      } else {
+        setDeliveryType("other");
+      }
+    }
     if (finalPlatform) setPlatform(finalPlatform);
+    if (finalLocationUrl) setLocationUrl(finalLocationUrl);
   };
 
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -150,16 +164,17 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
       const numPrice = parseIqdInput(price);
       const numCost = cost ? parseIqdInput(cost) : 0;
       
-      const computedDeliveryFee = isBismayah 
+      const computedDeliveryFee = deliveryType === "bismayah" 
         ? (bismayahComplex === "A" ? 1000 : 2000) 
+        : deliveryType === "door" ? 0 
         : parseIqdInput(manualDeliveryFee);
         
       const totalPriceWithDelivery = numPrice + computedDeliveryFee;
       const profit = numCost > 0 ? numPrice - numCost : numPrice;
 
-      const computedAddress = isBismayah
+      const computedAddress = deliveryType === "bismayah"
         ? `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} شقة ${bismayahApt}`
-        : address;
+        : deliveryType === "door" ? "تسليم باب الشقة بدون توصيل" : address;
 
       let finalLocationUrl = locationUrl;
       const extractCoords = (text: string) => {
@@ -222,7 +237,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
       const newOrderRef = await addDoc(collection(db, "external_orders"), {
         customerId, customerName, customerPhone, address: computedAddress, platform, cakeName,
         price: numPrice, cost: numCost, profit,
-        isBismayah, bismayahComplex, bismayahBuilding, bismayahApt, 
+        isBismayah: deliveryType === "bismayah", bismayahComplex, bismayahBuilding, bismayahApt, deliveryType,
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,      // حقل موحد مع باقي التطبيق
         deliveryTime: deliveryDate, // توافق مع السجلات القديمة
@@ -352,22 +367,29 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
           <div className="flex gap-1 bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
             <button 
               type="button"
-              onClick={() => setIsBismayah(true)}
-              className={`text-[10px] px-3 py-1 font-bold rounded-md transition ${isBismayah ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+              onClick={() => setDeliveryType("bismayah")}
+              className={`text-[9px] sm:text-[10px] px-2 py-1 font-bold rounded-md transition flex-1 ${deliveryType === "bismayah" ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
             >
               داخل بسماية
             </button>
             <button 
               type="button"
-              onClick={() => setIsBismayah(false)}
-              className={`text-[10px] px-3 py-1 font-bold rounded-md transition ${!isBismayah ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+              onClick={() => setDeliveryType("other")}
+              className={`text-[9px] sm:text-[10px] px-2 py-1 font-bold rounded-md transition flex-1 ${deliveryType === "other" ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
             >
               مناطق أخرى
+            </button>
+            <button 
+              type="button"
+              onClick={() => setDeliveryType("door")}
+              className={`text-[9px] sm:text-[10px] px-2 py-1 font-bold rounded-md transition flex-1 ${deliveryType === "door" ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+            >
+              باب الشقة
             </button>
           </div>
         </div>
         
-        {isBismayah ? (
+        {deliveryType === "bismayah" ? (
           <div className="grid grid-cols-3 gap-2">
             <select value={bismayahComplex} onChange={e => setBismayahComplex(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none font-bold">
               <option value="A">مجمع A</option>
@@ -389,7 +411,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
               {BISMAYAH_APARTMENTS.map(a => <option key={a} value={a} />)}
             </datalist>
           </div>
-        ) : (
+        ) : deliveryType === "other" ? (
           <div className="relative">
             <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
@@ -398,7 +420,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
               placeholder="المنطقة، الشارع، أقرب دالة..."
             />
           </div>
-        )}
+        ) : null}
         
         <div>
           <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي (Google Maps / Waze)</label>
@@ -437,14 +459,14 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
           </div>
         </div>
         
-        {isBismayah ? (
+        {deliveryType === "bismayah" ? (
           <div>
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل (تلقائي)</label>
             <div className="w-full bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-black text-center text-gray-600 dark:text-gray-300">
               {bismayahComplex === "A" ? "1,000" : "2,000"} د.ع
             </div>
           </div>
-        ) : (
+        ) : deliveryType === "other" ? (
           <div>
             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل (يدوي)</label>
             <FormattedNumberInput
@@ -454,16 +476,23 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
               className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold"
             />
           </div>
+        ) : (
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل</label>
+            <div className="w-full bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-black text-center text-gray-600 dark:text-gray-300">
+              بدون توصيل (0 د.ع)
+            </div>
+          </div>
         )}
       </div>
 
       <div className="bg-pink-50 dark:bg-pink-900/20 p-4 rounded-xl border border-pink-100 dark:border-pink-900/30">
         <div className="flex justify-between items-center text-sm font-black">
           <span className="text-gray-700 dark:text-gray-300">
-            {(isBismayah || (Number(manualDeliveryFee.replace(/,/g, '')) || 0) > 0) ? "المبلغ الكلي مع التوصيل:" : "المبلغ الكلي:"}
+            {(deliveryType === "bismayah" || (Number(manualDeliveryFee.replace(/,/g, '')) || 0) > 0) ? "المبلغ الكلي مع التوصيل:" : "المبلغ الكلي:"}
           </span>
           <span className="text-pink-600 dark:text-pink-400 text-lg">
-            {((Number(price.replace(/,/g, '')) || 0) + (isBismayah ? (bismayahComplex === "A" ? 1000 : 2000) : (Number(manualDeliveryFee.replace(/,/g, '')) || 0))).toLocaleString()} <span className="text-[10px]">د.ع</span>
+            {((Number(price.replace(/,/g, '')) || 0) + (deliveryType === "bismayah" ? (bismayahComplex === "A" ? 1000 : 2000) : deliveryType === "door" ? 0 : (Number(manualDeliveryFee.replace(/,/g, '')) || 0))).toLocaleString()} <span className="text-[10px]">د.ع</span>
           </span>
         </div>
       </div>

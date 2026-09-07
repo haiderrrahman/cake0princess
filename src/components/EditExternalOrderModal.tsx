@@ -44,7 +44,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New location states
-  const [isBismayah, setIsBismayah] = useState(false);
+  const [deliveryType, setDeliveryType] = useState<"bismayah" | "other" | "door">("other");
   const [bismayahComplex, setBismayahComplex] = useState("A");
   const [bismayahBuilding, setBismayahBuilding] = useState("");
   const [bismayahApt, setBismayahApt] = useState("");
@@ -75,10 +75,18 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       
       
       const oldAddress = order.address || "";
-      const looksLikeBismayah = order.isBismayah || (oldAddress.startsWith("مجمع") && oldAddress.includes("عمارة") && (oldAddress.includes("شقة") || oldAddress.includes("ارضي")));
-      setIsBismayah(looksLikeBismayah);
+      let isDoor = oldAddress === "تسليم باب الشقة بدون توصيل" || order.deliveryType === "door";
+      let isBism = order.deliveryType === "bismayah" || order.isBismayah || (oldAddress.startsWith("مجمع") && oldAddress.includes("عمارة") && (oldAddress.includes("شقة") || oldAddress.includes("ارضي")));
+      
+      if (isDoor) {
+        setDeliveryType("door");
+      } else if (isBism) {
+        setDeliveryType("bismayah");
+      } else {
+        setDeliveryType("other");
+      }
 
-      if (looksLikeBismayah && !order.isBismayah) {
+      if (isBism && !order.isBismayah) {
          // Legacy address parsing
          const match = oldAddress.match(/مجمع\s+(.)\s+عمارة\s+(\d+)\s+(.+)/);
          if (match) {
@@ -97,7 +105,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       }
 
       setLocationUrl(order.locationUrl || "");
-      setManualDeliveryFee(looksLikeBismayah ? "" : (order.deliveryFee || ""));
+      setManualDeliveryFee(isBism || isDoor ? "" : (order.deliveryFee || ""));
     }
   }, [order, isOpen]);
 
@@ -130,11 +138,21 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
     }
   };
 
-  const selectCustomer = (name: string, phone: string, addr: string, plat: string) => {
+  const selectCustomer = (name: string, phone: string, addr: string, plat: string, locUrl?: string) => {
     setCustomerName(name);
     if (phone) setCustomerPhone(phone);
-    if (addr) setAddress(addr);
+    if (addr) {
+      setAddress(addr);
+      if (addr === "تسليم باب الشقة بدون توصيل") {
+        setDeliveryType("door");
+      } else if (addr.includes("مجمع") && addr.includes("عمارة")) {
+        setDeliveryType("bismayah");
+      } else {
+        setDeliveryType("other");
+      }
+    }
     if (plat) setPlatform(plat);
+    if (locUrl) setLocationUrl(locUrl);
     setShowCustomerDropdown(false);
   };
 
@@ -162,16 +180,19 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         }
       }
 
-      const computedDeliveryFee = isBismayah 
+      const computedDeliveryFee = deliveryType === "bismayah" 
         ? (bismayahComplex === "A" ? 1000 : 2000) 
+        : deliveryType === "door" ? 0
         : parseIqdInput(manualDeliveryFee);
         
       const totalPriceWithDelivery = numPrice + computedDeliveryFee;
       
       const aptText = bismayahApt.startsWith("ارضي") ? bismayahApt : (bismayahApt ? `شقة ${bismayahApt.replace(/^(شقة\s*)+/g, '')}` : "");
       let computedAddress = address;
-      if (isBismayah) {
+      if (deliveryType === "bismayah") {
         computedAddress = `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} ${aptText}`.trim();
+      } else if (deliveryType === "door") {
+        computedAddress = "تسليم باب الشقة بدون توصيل";
       }
 
       let finalLocationUrl = locationUrl;
@@ -207,7 +228,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         isDebtSettled,
         cost: numCost,
         profit: numCost > 0 ? numPrice - numCost : numPrice,
-        isBismayah, bismayahComplex, bismayahBuilding, bismayahApt, 
+        isBismayah: deliveryType === "bismayah", bismayahComplex, bismayahBuilding, bismayahApt, deliveryType,
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,
         ...(tempImageUrl ? { tempImageUrl } : {})
@@ -266,7 +287,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         isDebtSettled,
         cost: numCost,
         profit: numCost > 0 ? numPrice - numCost : numPrice,
-        isBismayah, bismayahComplex, bismayahBuilding, bismayahApt, 
+        isBismayah: deliveryType === "bismayah", bismayahComplex, bismayahBuilding, bismayahApt, deliveryType,
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl,
         deliveryDate,
         ...(tempImageUrl ? { tempImageUrl } : {})
@@ -398,22 +419,29 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
                 <div className="flex gap-1 bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
                   <button 
                     type="button"
-                    onClick={() => setIsBismayah(true)}
-                    className={`text-[10px] px-3 py-1 font-bold rounded-md transition ${isBismayah ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                    onClick={() => setDeliveryType("bismayah")}
+                    className={`text-[9px] sm:text-[10px] px-2 py-1 font-bold rounded-md transition flex-1 ${deliveryType === "bismayah" ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                   >
                     داخل بسماية
                   </button>
                   <button 
                     type="button"
-                    onClick={() => setIsBismayah(false)}
-                    className={`text-[10px] px-3 py-1 font-bold rounded-md transition ${!isBismayah ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                    onClick={() => setDeliveryType("other")}
+                    className={`text-[9px] sm:text-[10px] px-2 py-1 font-bold rounded-md transition flex-1 ${deliveryType === "other" ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                   >
                     مناطق أخرى
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setDeliveryType("door")}
+                    className={`text-[9px] sm:text-[10px] px-2 py-1 font-bold rounded-md transition flex-1 ${deliveryType === "door" ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                    باب الشقة
                   </button>
                 </div>
               </div>
               
-              {isBismayah ? (
+              {deliveryType === "bismayah" ? (
                 <div className="grid grid-cols-3 gap-2">
                   <select value={bismayahComplex} onChange={e => setBismayahComplex(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold">
                     <option value="A">مجمع A</option>
@@ -421,38 +449,23 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
                     <option value="C">مجمع C</option>
                     <option value="D">مجمع D</option>
                     <option value="E">مجمع E</option>
-                    <option value="F">مجمع F</option>
-                    <option value="G">مجمع G</option>
-                    <option value="H">مجمع H</option>
+                    {["A","B","C","D","E","F","G","H"].map(c => <option key={c} value={c}>مجمع {c}</option>)}
                   </select>
-                  <input type="text" list="edit-buildings-list" placeholder="عمارة (101 - 920)" value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold" />
-                  <input type="text" list="edit-apartments-list" placeholder="شقة (ارضي 1 - 912)" value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold" />
-                  
-                  <datalist id="edit-buildings-list">
-                    {BISMAYAH_BUILDINGS.map(b => <option key={b} value={b} />)}
-                  </datalist>
-                  <datalist id="edit-apartments-list">
-                    {BISMAYAH_APARTMENTS.map(a => <option key={a} value={a} />)}
-                  </datalist>
+                  <input type="text" list="edit-buildings-list" placeholder="عمارة" value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold" />
+                  <input type="text" list="edit-apartments-list" placeholder="شقة" value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold" />
+                  <datalist id="edit-buildings-list">{BISMAYAH_BUILDINGS.map(b => <option key={b} value={b} />)}</datalist>
+                  <datalist id="edit-apartments-list">{BISMAYAH_APARTMENTS.map(a => <option key={a} value={a} />)}</datalist>
                 </div>
-              ) : (
+              ) : deliveryType === "other" ? (
                 <div className="relative">
                   <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input 
-                    type="text" value={address} onChange={e => setAddress(e.target.value)}
-                    className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                    placeholder="المنطقة، الشارع، أقرب دالة..."
-                  />
+                  <input type="text" value={address} onChange={e => setAddress(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="العنوان..." />
                 </div>
-              )}
+              ) : null}
               
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي (Google Maps / Waze)</label>
-                <input 
-                  type="text" value={locationUrl} onChange={e => setLocationUrl(e.target.value)}
-                  className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left placeholder:text-right"
-                  placeholder="لصق الرابط هنا..." dir="ltr"
-                />
+                <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي</label>
+                <input type="text" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left" placeholder="لصق الرابط..." dir="ltr" />
               </div>
             </div>
 
@@ -511,14 +524,14 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              {isBismayah ? (
+              {deliveryType === "bismayah" ? (
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل (تلقائي)</label>
                   <div className="w-full bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-black text-center text-gray-600 dark:text-gray-300">
                     {bismayahComplex === "A" ? "1,000" : "2,000"} د.ع
                   </div>
                 </div>
-              ) : (
+              ) : deliveryType === "other" ? (
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل (يدوي)</label>
                   <FormattedNumberInput
@@ -528,16 +541,23 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
                     className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center font-bold"
                   />
                 </div>
+              ) : (
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل</label>
+                  <div className="w-full bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-black text-center text-gray-600 dark:text-gray-300">
+                    بدون توصيل (0 د.ع)
+                  </div>
+                </div>
               )}
             </div>
 
             <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
               <div className="flex justify-between items-center text-sm font-black">
                 <span className="text-gray-700 dark:text-gray-300">
-                  {(isBismayah || (Number(manualDeliveryFee.toString().replace(/,/g, '')) || 0) > 0) ? "المبلغ الكلي مع التوصيل:" : "المبلغ الكلي:"}
+                  {(deliveryType === "bismayah" || (Number(manualDeliveryFee.toString().replace(/,/g, '')) || 0) > 0) ? "المبلغ الكلي مع التوصيل:" : "المبلغ الكلي:"}
                 </span>
                 <span className="text-emerald-600 dark:text-emerald-400 text-lg">
-                  {((Number(price.toString().replace(/,/g, '')) || 0) + (isBismayah ? (bismayahComplex === "A" ? 1000 : 2000) : (Number(manualDeliveryFee.toString().replace(/,/g, '')) || 0))).toLocaleString()} <span className="text-[10px]">د.ع</span>
+                  {((Number(price.toString().replace(/,/g, '')) || 0) + (deliveryType === "bismayah" ? (bismayahComplex === "A" ? 1000 : 2000) : deliveryType === "door" ? 0 : (Number(manualDeliveryFee.toString().replace(/,/g, '')) || 0))).toLocaleString()} <span className="text-[10px]">د.ع</span>
                 </span>
               </div>
             </div>
