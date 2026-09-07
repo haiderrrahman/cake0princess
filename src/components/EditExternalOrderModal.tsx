@@ -195,7 +195,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         computedAddress = "تسليم باب الشقة بدون توصيل";
       }
 
-      let finalLocationUrl = locationUrl;
+      let finalLocationUrl = deliveryType === "door" ? "" : locationUrl;
       
       // Try to extract coordinates from locationUrl first, then from computedAddress
       const extractCoords = (text: string) => {
@@ -467,10 +467,12 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
                 </div>
               ) : null}
               
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي</label>
-                <input type="text" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left" placeholder="لصق الرابط..." dir="ltr" />
-              </div>
+              {deliveryType !== "door" && (
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي</label>
+                  <input type="text" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left" placeholder="لصق الرابط..." dir="ltr" />
+                </div>
+              )}
             </div>
 
             {/* الصف الثالث: اسم الكيكة */}

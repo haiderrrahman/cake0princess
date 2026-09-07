@@ -172,11 +172,15 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
       const totalPriceWithDelivery = numPrice + computedDeliveryFee;
       const profit = numCost > 0 ? numPrice - numCost : numPrice;
 
-      const computedAddress = deliveryType === "bismayah"
-        ? `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} شقة ${bismayahApt}`
-        : deliveryType === "door" ? "تسليم باب الشقة بدون توصيل" : address;
+      let computedAddress = address;
+      const aptText = bismayahApt ? `شقة ${bismayahApt}` : "";
+      if (deliveryType === "bismayah") {
+        computedAddress = `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} ${aptText}`.trim();
+      } else if (deliveryType === "door") {
+        computedAddress = "تسليم باب الشقة بدون توصيل";
+      }
 
-      let finalLocationUrl = locationUrl;
+      let finalLocationUrl = deliveryType === "door" ? "" : locationUrl;
       const extractCoords = (text: string) => {
         if (!text) return null;
         const match = text.match(/[(]?\s*([+-]?\d{1,2}\.\d+)[,\s]+([+-]?\d{1,3}\.\d+)\s*[)]?/);
@@ -421,14 +425,16 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
           </div>
         ) : null}
         
-        <div>
-          <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي (Google Maps / Waze)</label>
-          <input 
-            type="text" value={locationUrl} onChange={e => setLocationUrl(e.target.value)}
-            className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left"
-            placeholder="لصق الرابط هنا..." dir="ltr"
-          />
-        </div>
+        {deliveryType !== "door" && (
+          <div>
+            <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي (Google Maps / Waze)</label>
+            <input 
+              type="text" value={locationUrl} onChange={e => setLocationUrl(e.target.value)}
+              className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left"
+              placeholder="لصق الرابط هنا..." dir="ltr"
+            />
+          </div>
+        )}
       </div>
 
       {/* الصف الثالث: اسم الكيكة */}

@@ -98,11 +98,19 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
     setShowOptions(true);
   };
 
+  if (address === "تسليم باب الشقة بدون توصيل") {
+    return (
+      <div className={className || "text-[10px] font-bold text-gray-500 mt-0.5 flex items-center gap-1.5 line-clamp-1 text-right"} dir="rtl">
+        <MapPin className="w-3 h-3 flex-shrink-0" /> {address}
+      </div>
+    );
+  }
+
   return (
     <>
       <button 
         onClick={handleClick} 
-        className={className || "text-[10px] font-bold text-blue-500 mt-0.5 flex items-center gap-1.5 line-clamp-1 hover:underline underline-offset-2 decoration-blue-200 cursor-pointer text-right text-left"}
+        className={className || "text-[10px] font-bold text-blue-500 mt-0.5 flex items-center gap-1.5 line-clamp-1 hover:underline underline-offset-2 decoration-blue-200 cursor-pointer text-right"}
         dir="rtl"
       >
         <MapPin className="w-3 h-3 flex-shrink-0" /> {address}
