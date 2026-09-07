@@ -160,9 +160,9 @@ export default function CustomerProfileModal({ isOpen, onClose, customerName, cu
               {(() => {
                 const phone = customerPhone || customerProfile?.phone || socialOrders.find(o => o.customerPhone)?.customerPhone || appOrders.find(o => o.shippingAddress?.phone)?.shippingAddress?.phone;
                 return phone ? (
-                  <p className="text-sm font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1" dir="ltr">
+                  <a href={`tel:${phone}`} className="text-sm font-bold text-gray-500 dark:text-gray-400 flex w-fit items-center gap-1.5 hover:text-emerald-500 transition cursor-pointer" dir="ltr">
                     <Phone className="w-3.5 h-3.5" /> {phone}
-                  </p>
+                  </a>
                 ) : null;
               })()}
               {(() => {
