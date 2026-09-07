@@ -54,7 +54,20 @@ export default function MapLink({ address, locationUrl, className }: MapLinkProp
           // Resolve short link to coordinates via our API
           setIsResolving(true);
           try {
-            const urlToResolve = locationUrl?.includes('http') ? locationUrl : address;
+            let urlToResolve = '';
+            if (locationUrl?.includes('http')) {
+              urlToResolve = locationUrl;
+            } else if (address) {
+              const match = address.match(/(https?:\/\/[^\s]+)/);
+              if (match) urlToResolve = match[1];
+            }
+            
+            if (!urlToResolve) {
+              setShowOptions(false);
+              window.open(`https://www.waze.com/ul?q=${encodeURIComponent(address)}`, '_blank');
+              return;
+            }
+
             const res = await fetch('/api/resolve-location', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
