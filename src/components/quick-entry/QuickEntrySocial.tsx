@@ -161,13 +161,32 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         ? `مجمع ${bismayahComplex} عمارة ${bismayahBuilding} شقة ${bismayahApt}`
         : address;
 
+      let finalLocationUrl = locationUrl;
+      const extractCoords = (text: string) => {
+        if (!text) return null;
+        const match = text.match(/[(]?\s*([+-]?\d{1,2}\.\d+)[,\s]+([+-]?\d{1,3}\.\d+)\s*[)]?/);
+        if (match) {
+          return `https://www.google.com/maps/search/?api=1&query=${match[1]},${match[2]}`;
+        }
+        return null;
+      };
+
+      const extractedFromLoc = extractCoords(locationUrl);
+      const extractedFromAddr = extractCoords(computedAddress);
+      
+      if (extractedFromLoc) {
+        finalLocationUrl = extractedFromLoc;
+      } else if (extractedFromAddr) {
+        finalLocationUrl = extractedFromAddr;
+      }
+
       const existingCustomer = customers.find(c => c.name === customerName);
       let customerId = existingCustomer?.id;
       
       if (!existingCustomer) {
         const custRef = await addDoc(collection(db, "customers"), {
           name: customerName, phone: customerPhone,
-          address: computedAddress, platform, locationUrl,
+          address: computedAddress, platform, locationUrl: finalLocationUrl,
           points: Math.floor(numPrice / 1000), totalSpent: numPrice,
           ordersCount: 1, createdAt: serverTimestamp(),
         });
@@ -178,7 +197,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
           phone: customerPhone || existingCustomer.phone || "",
           address: computedAddress || existingCustomer.address || "",
           platform: platform || existingCustomer.platform || "واتساب",
-          ...(locationUrl ? { locationUrl } : {}),
+          ...(finalLocationUrl ? { locationUrl: finalLocationUrl } : {}),
           points: (existingCustomer.points || 0) + Math.floor(numPrice / 1000),
           totalSpent: (existingCustomer.totalSpent || 0) + numPrice,
           ordersCount: (existingCustomer.ordersCount || 0) + 1,
@@ -204,7 +223,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         customerId, customerName, customerPhone, address: computedAddress, platform, cakeName,
         price: numPrice, cost: numCost, profit,
         isBismayah, bismayahComplex, bismayahBuilding, bismayahApt, 
-        deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl,
+        deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,      // حقل موحد مع باقي التطبيق
         deliveryTime: deliveryDate, // توافق مع السجلات القديمة
         imageUrl: "", tempImageUrl: tempImageUrl, createdAt: serverTimestamp(),
@@ -384,8 +403,8 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         <div>
           <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي (Google Maps / Waze)</label>
           <input 
-            type="url" value={locationUrl} onChange={e => setLocationUrl(e.target.value)}
-            className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left placeholder:text-right"
+            type="text" value={locationUrl} onChange={e => setLocationUrl(e.target.value)}
+            className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left"
             placeholder="لصق الرابط هنا..." dir="ltr"
           />
         </div>
