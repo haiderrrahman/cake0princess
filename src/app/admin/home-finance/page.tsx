@@ -47,6 +47,7 @@ interface Bill {
   dueDay?: number; // day of month
   paid: boolean;
   paidDates: { date: string; amount: number; expenseId: string }[];
+  paymentType?: "مسبق" | "لاحق";
   createdAt: string;
 }
 
@@ -568,7 +569,9 @@ export default function HomeFinanceDashboard() {
                 </div>
               ), { 
                 id: `duty-${duty.id}`,
-                duration: 10000 // Stays for 10 seconds unless dismissed
+                duration: 10000, // Stays for 10 seconds unless dismissed
+                unstyled: true,
+                style: { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0 }
               });
             }, idx * 5000); // 5 seconds delay between each notification
           });
@@ -1005,6 +1008,7 @@ setEditFuturePlan(null);
       amount: Number(fd.get("amount")),
       paid: isEdit ? editBill!.paid : false,
       paidDates: isEdit ? editBill!.paidDates : [],
+      paymentType: (fd.get("paymentType") as "مسبق" | "لاحق") || "مسبق",
       createdAt: isEdit ? editBill!.createdAt : new Date().toISOString(),
     };
     if (Number(fd.get("dueDay"))) item.dueDay = Number(fd.get("dueDay"));
@@ -1684,6 +1688,9 @@ setNeedNameInput("");
       }
     }
 
+    const isEdit = !!editDebt;
+    const recordId = isEdit && editDebt!.associatedRecordId ? editDebt!.associatedRecordId : Date.now().toString();
+
     const item: Debt = {
       id: isEdit ? editDebt!.id : Date.now().toString(),
       person: fd.get("person") as string,
@@ -1692,6 +1699,7 @@ setNeedNameInput("");
       date: (fd.get("date") || fd.get("startDate")) as string,
       payments: initialPayments,
       createdAt: isEdit ? editDebt!.createdAt : new Date().toISOString(),
+      associatedRecordId: recordId,
     };
     if (monthlyInstallment) item.monthlyInstallment = monthlyInstallment;
     if (totalMonths) item.totalMonths = totalMonths;
@@ -1702,6 +1710,46 @@ setNeedNameInput("");
       setDebts(updated);
       syncToFirebase("debts", updated);
       toast.success("تم التعديل");
+
+      if (editDebt?.associatedRecordId) {
+        if (item.type === "دين علي") {
+          const existingInc = incomes.find(i => i.id === editDebt.associatedRecordId);
+          if (existingInc) {
+            const updatedIncomes = incomes.map(inc => inc.id === editDebt.associatedRecordId ? { ...inc, amount: item.amount, name: `استلام سلفة/دين من: ${item.person}` } : inc);
+            setIncomes(updatedIncomes);
+            syncToFirebase("incomes", updatedIncomes);
+          } else {
+            const existingExp = expenses.find(e => e.id === editDebt.associatedRecordId);
+            if (existingExp) {
+               const updatedExps = expenses.filter(e => e.id !== editDebt.associatedRecordId);
+               setExpenses(updatedExps);
+               syncToFirebase("expenses", updatedExps);
+               const newIncome: Income = { id: editDebt.associatedRecordId, name: `استلام سلفة/دين من: ${item.person}`, amount: item.amount, type: "إضافي", date: item.date, createdAt: new Date().toISOString() };
+               const updatedIncomes = [newIncome, ...incomes];
+               setIncomes(updatedIncomes);
+               syncToFirebase("incomes", updatedIncomes);
+            }
+          }
+        } else {
+          const existingExp = expenses.find(e => e.id === editDebt.associatedRecordId);
+          if (existingExp) {
+            const updatedExps = expenses.map(exp => exp.id === editDebt.associatedRecordId ? { ...exp, amount: item.amount, name: `إعطاء سلفة/دين لـ: ${item.person}` } : exp);
+            setExpenses(updatedExps);
+            syncToFirebase("expenses", updatedExps);
+          } else {
+            const existingInc = incomes.find(i => i.id === editDebt.associatedRecordId);
+            if (existingInc) {
+               const updatedIncomes = incomes.filter(i => i.id !== editDebt.associatedRecordId);
+               setIncomes(updatedIncomes);
+               syncToFirebase("incomes", updatedIncomes);
+               const newExp: Expense = { id: editDebt.associatedRecordId, name: `إعطاء سلفة/دين لـ: ${item.person}`, category: "أخرى", amount: item.amount, date: item.date, createdAt: new Date().toISOString() };
+               const updatedExps = [newExp, ...expenses];
+               setExpenses(updatedExps);
+               syncToFirebase("expenses", updatedExps);
+            }
+          }
+        }
+      }
     } else {
       const updated = [item, ...debts];
       setDebts(updated);
@@ -1709,7 +1757,6 @@ setNeedNameInput("");
       toast.success("تم إضافة الدين");
 
       // التأثير على الرصيد الصافي للديون الجديدة (سلفة نقداً)
-      const recordId = Date.now().toString();
       if (item.type === "دين علي") {
         // استلمت سلفة -> دخل
         const income: Income = {
@@ -1748,9 +1795,22 @@ setNeedNameInput("");
 
   const handleDeleteDebt = async (id: string) => {
     if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
+    const debtToDelete = debts.find(x => x.id === id);
     const updated = debts.filter(x => x.id !== id);
     setDebts(updated);
     syncToFirebase("debts", updated);
+
+    if (debtToDelete?.associatedRecordId) {
+      if (debtToDelete.type === "دين علي") {
+        const updatedIncomes = incomes.filter(i => i.id !== debtToDelete.associatedRecordId);
+        setIncomes(updatedIncomes);
+        syncToFirebase("incomes", updatedIncomes);
+      } else {
+        const updatedExps = expenses.filter(e => e.id !== debtToDelete.associatedRecordId);
+        setExpenses(updatedExps);
+        syncToFirebase("expenses", updatedExps);
+      }
+    }
   };
 
   const handlePayDebt = (debt: Debt) => {
@@ -2059,13 +2119,13 @@ setEditTrip(null);
     { key: "income",        label: "الدخل",               emoji: "💵", icon: PiggyBank, badge: 0, amount: balance, isBalance: true },
     { key: "expenses",      label: "المصاريف",            emoji: "💸", icon: Wallet, badge: 0, amount: totalExpensesAmt },
     { key: "needs",         label: "النواقص",             emoji: "🛒", icon: ShoppingCart, badge: totalShortages },
-    { key: "inventory",     label: "موجودات البيت",       emoji: "📦", icon: Package, badge: inventory.filter(i => (i.neededQuantity||0) > 0).length },
+    { key: "inventory",     label: "موجودات البيت",       emoji: "📦", icon: Package, badge: inventory.length },
     { key: "bills",         label: "الفواتير",            emoji: "🧾", icon: Receipt, badge: unpaidBillsCount },
     { key: "installments",  label: "الأقساط والسلف",      emoji: "💳", icon: CreditCard, badge: delayedInstallmentsCount },
     { key: "debts",         label: "الديون",              emoji: "🏦", icon: Banknote, badge: unsettledDebtsCount },
     { key: "familyNeeds",   label: "العائلة",             emoji: "👨‍👩‍👧‍👦", icon: Users, badge: familyNeeds.filter(n => n.status === "pending" && n.type !== "duty").length },
-    { key: "car",           label: "السيارة",             emoji: "🚗", icon: Car, badge: carInventory.filter(i => (i.neededQuantity||0) > 0).length },
-    { key: "travel",        label: "السفر",               emoji: "✈️", icon: Plane, badge: travelInventory.filter(i => (i.neededQuantity||0) > 0).length },
+    { key: "car",           label: "السيارة",             emoji: "🚗", icon: Car, badge: carInventory.length },
+    { key: "travel",        label: "السفر",               emoji: "✈️", icon: Plane, badge: travelInventory.length },
     { key: "futurePlans",   label: "الخطط المستقبلية",   emoji: "🎯", icon: Target, badge: futurePlans.length },
   ] as any;
 
@@ -3423,6 +3483,12 @@ setEditTrip(null);
               <div className="grid grid-cols-2 gap-3">
                 {bills
                   .filter(b => billFilter === 'all' ? true : billFilter === 'paid' ? isBillPaidThisCycle(b) : !isBillPaidThisCycle(b))
+                  .sort((a, b) => {
+                    // ترتيب الفواتير بحيث تكون "الدفع اللاحق" بعد "الدفع المسبق"
+                    const typeA = a.paymentType === "لاحق" ? 1 : 0;
+                    const typeB = b.paymentType === "لاحق" ? 1 : 0;
+                    return typeA - typeB;
+                  })
                   .map((bill, idx) => {
                   const daysUntilDue = bill.dueDay ? (() => {
                     const now = new Date();
@@ -3474,6 +3540,11 @@ setEditTrip(null);
                         <div className="font-black text-sm text-gray-800 dark:text-gray-200">{fmt(bill.amount)} <span className="text-[10px] font-bold text-gray-400">د.ع</span></div>
                         {/* Status / Due */}
                         <div className="flex flex-wrap items-center gap-1">
+                          {bill.paymentType === "لاحق" && (
+                            <span className="text-[9px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-1.5 py-0.5 rounded-full font-bold">
+                              دفع لاحق
+                            </span>
+                          )}
                           {paidThisCycle ? (
                             <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
                               <Check className="w-2 h-2" /> مدفوعة
@@ -4799,6 +4870,13 @@ setEditTrip(null);
                   <label className="label-sm">يوم الاستحقاق</label>
                   <input autoComplete="off" name="dueDay" type="number" defaultValue={editBill?.dueDay} placeholder="1-31" min={1} max={31} className="input-field" />
                 </div>
+              </div>
+              <div>
+                <label className="label-sm">نوع الدفع</label>
+                <select name="paymentType" defaultValue={editBill?.paymentType || "مسبق"} className="input-field">
+                  <option value="مسبق">دفع مسبق (يستحق في نفس الشهر)</option>
+                  <option value="لاحق">دفع لاحق (يستحق في الشهر التالي)</option>
+                </select>
               </div>
               <button type="submit" className="w-full bg-gradient-to-l from-amber-500 to-yellow-500 text-white font-black py-3.5 rounded-xl shadow-lg mt-2 active:scale-[0.98] transition">
                 حفظ
