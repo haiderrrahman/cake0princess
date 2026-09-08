@@ -1688,7 +1688,6 @@ setNeedNameInput("");
       }
     }
 
-    const isEdit = !!editDebt;
     const recordId = isEdit && editDebt!.associatedRecordId ? editDebt!.associatedRecordId : Date.now().toString();
 
     const item: Debt = {
