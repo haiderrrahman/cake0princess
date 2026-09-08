@@ -107,6 +107,7 @@ interface Debt {
   initialPaidMonths?: number;
   downPayment?: number;
   payments: { date: string; amount: number; expenseOrIncomeId?: string }[];
+  associatedRecordId?: string;
   createdAt: string;
 }
 
