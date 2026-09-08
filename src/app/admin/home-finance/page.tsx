@@ -1749,6 +1749,33 @@ setNeedNameInput("");
             }
           }
         }
+      } else {
+        // Old debt without associated record, upgrade it by creating the record now
+        if (item.type === "دين علي") {
+          const newIncome: Income = {
+            id: recordId,
+            name: `استلام سلفة/دين من: ${item.person}`,
+            amount: item.amount,
+            type: "إضافي",
+            date: item.date,
+            createdAt: new Date().toISOString(),
+          };
+          const updatedIncomes = [newIncome, ...incomes];
+          setIncomes(updatedIncomes);
+          syncToFirebase("incomes", updatedIncomes);
+        } else {
+          const newExp: Expense = {
+            id: recordId,
+            name: `إعطاء سلفة/دين لـ: ${item.person}`,
+            category: "أخرى",
+            amount: item.amount,
+            date: item.date,
+            createdAt: new Date().toISOString(),
+          };
+          const updatedExps = [newExp, ...expenses];
+          setExpenses(updatedExps);
+          syncToFirebase("expenses", updatedExps);
+        }
       }
     } else {
       const updated = [item, ...debts];
