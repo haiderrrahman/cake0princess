@@ -284,6 +284,7 @@ export default function HomeFinanceDashboard() {
 
   // Data state
   const [cakeSalaryDebt, setCakeSalaryDebt] = useState<number>(0);
+  const [cakeDebtExpenses, setCakeDebtExpenses] = useState<Expense[]>([]);
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -522,9 +523,20 @@ export default function HomeFinanceDashboard() {
     setMounted(true);
 
     const unsubExpenses = onSnapshot(collection(db, "expenses"), (snap) => {
-      const exps = snap.docs.map(d => d.data() as any);
+      const exps = snap.docs.map(d => ({ ...d.data(), _id: d.id } as any));
       const debt = exps.filter(e => e.isDebt).reduce((s, e) => s + (Number(e.amount) || 0), 0);
       setCakeSalaryDebt(debt);
+      
+      const convertedCakeExps: Expense[] = exps.filter(e => e.isDebt).map(e => ({
+        id: e._id || Date.now().toString(),
+        name: e.description || "دين اموال الكيك",
+        category: "ديون",
+        amount: Number(e.amount) || 0,
+        date: e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : new Date().toISOString(),
+        createdAt: e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : new Date().toISOString(),
+        isFromCake: true
+      } as any));
+      setCakeDebtExpenses(convertedCakeExps);
     });
 
     return () => {
@@ -682,7 +694,9 @@ export default function HomeFinanceDashboard() {
     .filter(i => isInCycle(i.date))
     .reduce((s, i) => s + i.amount, 0);
 
-  const totalExpensesAmt = expenses
+  const allExpenses = useMemo(() => [...expenses, ...cakeDebtExpenses], [expenses, cakeDebtExpenses]);
+
+  const totalExpensesAmt = allExpenses
     .filter(e => isInCycle(e.date))
     .reduce((s, e) => s + e.amount, 0);
 
@@ -2394,7 +2408,7 @@ setEditTrip(null);
             availCard = { title: "ديون لي (عند الناس)", count: myDebtsCount, countLabel: "دين", value: totalDebtsForMe, color: "emerald", icon: "📈" };
             shortCard = { title: "ديون علي (مطلوبة مني)", count: onMeDebtsCount, countLabel: "دين", value: totalDebtsOnMe, color: "orange", icon: "📉" };
           } else if (activeTab === "expenses") {
-            const currentExps = expenses.filter(e => isInCycle(e.date));
+            const currentExps = allExpenses.filter(e => isInCycle(e.date));
             const totalExpVal = currentExps.reduce((s, e) => s + e.amount, 0);
             availCard = { title: "المتبقي من الميزانية", count: balance >= 0 ? 1 : 0, countLabel: balance >= 0 ? "فائض" : "عجز", value: balance, color: balance >= 0 ? "emerald" : "orange", icon: "💰" };
             shortCard = { title: "مصاريف الدورة الحالية", count: currentExps.length, countLabel: "مصروف", value: totalExpVal, color: "orange", icon: "💸" };
@@ -2835,7 +2849,7 @@ setEditTrip(null);
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {Object.entries(settings.budgetLimits).map(([catName, limit]) => {
-                    const spent = expenses.filter(e => isInCycle(e.date) && e.category === catName).reduce((s, e) => s + e.amount, 0);
+                    const spent = allExpenses.filter(e => isInCycle(e.date) && e.category === catName).reduce((s, e) => s + e.amount, 0);
                     const percent = limit > 0 ? (spent / limit) * 100 : 0;
                     const clampedPercent = Math.min(percent, 100);
                     let colorClass = "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]";
@@ -2932,7 +2946,7 @@ setEditTrip(null);
               {(() => {
                 const availableCats = EXPENSE_CATEGORIES.map(cat => ({
                   ...cat,
-                  catTotal: expenses.filter(e => isExpenseInDateRange(e.date) && e.category === cat.label).reduce((s,e)=>s+e.amount,0)
+                  catTotal: allExpenses.filter(e => isExpenseInDateRange(e.date) && e.category === cat.label).reduce((s,e)=>s+e.amount,0)
                 })).filter(cat => cat.catTotal > 0 || expenseCategoryFilter === cat.label)
                 .sort((a, b) => b.catTotal - a.catTotal);
 
@@ -2982,7 +2996,7 @@ setEditTrip(null);
             </div>
 
             {(() => {
-              const filtered = expenses.filter(exp =>
+              const filtered = allExpenses.filter(exp =>
                 isExpenseInDateRange(exp.date) &&
                 (!expenseCategoryFilter || exp.category === expenseCategoryFilter) &&
                 (!expenseSearch || (exp.name && exp.name.includes(expenseSearch)) || (exp.category && exp.category.includes(expenseSearch)))
@@ -3035,14 +3049,16 @@ setEditTrip(null);
                           <div className={`w-10 h-10 bg-gradient-to-br ${cat?.color || 'from-gray-400 to-gray-500'} rounded-xl flex items-center justify-center text-lg flex-shrink-0 shadow-sm`}>
                             {cat?.icon || '📦'}
                           </div>
-                          <div className="flex gap-1">
-                            <button onClick={() => { setEditExpense(exp); setShowExpenseModal(true); }} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition">
-                              <Edit2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                            </button>
-                            <button onClick={() => handleDeleteExpense(exp.id)} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition">
-                              <Trash2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                            </button>
-                          </div>
+                          {!(exp as any).isFromCake && (
+                            <div className="flex gap-1">
+                              <button onClick={() => { setEditExpense(exp); setShowExpenseModal(true); }} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition">
+                                <Edit2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                              </button>
+                              <button onClick={() => handleDeleteExpense(exp.id)} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition">
+                                <Trash2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         {/* Name */}
                         <div className="font-black text-gray-800 dark:text-gray-100 text-xs leading-tight line-clamp-2">{exp.name}</div>
