@@ -628,7 +628,8 @@ export default function HomeFinanceDashboard() {
       boundaries.push(new Date(year, month, 11));
     }
 
-    const manualDates = (settings.manualCycleStarts || []).map(ds => new Date(ds));
+    const uniqueManualDatesStr = Array.from(new Set(settings.manualCycleStarts || []));
+    const manualDates = uniqueManualDatesStr.map(ds => new Date(ds));
     
     const validBoundaries = boundaries.filter(b => {
       return !manualDates.some(md => md.getFullYear() === b.getFullYear() && md.getMonth() === b.getMonth());
@@ -2547,7 +2548,12 @@ setEditTrip(null);
               if (!confirm("هل أنت متأكد من إنهاء الدورة المالية الحالية يدوياً وبدء دورة جديدة؟ هذا سيؤدي إلى نقل الميزانية المتبقية إلى الدورة الجديدة.")) return;
               
               const todayStr = today();
-              const newCycleStarts = [...(settings?.manualCycleStarts || []), todayStr];
+              const currentManualStarts = settings?.manualCycleStarts || [];
+              if (currentManualStarts.includes(todayStr)) {
+                toast.error("لقد قمت بإنهاء الدورة مسبقاً اليوم!");
+                return;
+              }
+              const newCycleStarts = [...currentManualStarts, todayStr];
               setSettings({ ...settings, manualCycleStarts: newCycleStarts });
               syncToFirebase("settings", { ...settings, manualCycleStarts: newCycleStarts });
               
