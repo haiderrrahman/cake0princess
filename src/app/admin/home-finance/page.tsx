@@ -603,7 +603,7 @@ export default function HomeFinanceDashboard() {
     let currentCycleStartMonth = now.getMonth();
     let currentCycleStartYear = now.getFullYear();
     
-    if (now.getDate() < 12) {
+    if (now.getDate() < 11) {
       currentCycleStartMonth -= 1;
       if (currentCycleStartMonth < 0) {
         currentCycleStartMonth = 11;
@@ -625,7 +625,7 @@ export default function HomeFinanceDashboard() {
         month -= 12;
         year += 1;
       }
-      boundaries.push(new Date(year, month, 12));
+      boundaries.push(new Date(year, month, 11));
     }
 
     const manualDates = (settings.manualCycleStarts || []).map(ds => new Date(ds));
@@ -661,8 +661,14 @@ export default function HomeFinanceDashboard() {
     end: Date;
   }
 
-  const [selectedCycleId, setSelectedCycleId] = useState<string>(cycles[0].id);
+  const [selectedCycleId, setSelectedCycleId] = useState<string>(cycles[0]?.id || "");
   const selectedCycle = cycles.find(c => c.id === selectedCycleId) || cycles[0];
+
+  useEffect(() => {
+    if (cycles.length > 0 && (!selectedCycleId || !cycles.find(c => c.id === selectedCycleId))) {
+      setSelectedCycleId(cycles[0].id);
+    }
+  }, [cycles, selectedCycleId]);
 
   const isInCycle = (dateString: string) => {
     if (!dateString) return false;
@@ -2274,8 +2280,8 @@ setEditTrip(null);
           </div>
         </div>
 
-        {/* Reminder Banner for 12th & 22nd */}
-        {(new Date().getDate() === 12 || new Date().getDate() === 22) && (
+        {/* Reminder Banner for 11th & 21st */}
+        {(new Date().getDate() === 11 || new Date().getDate() === 21) && (
           <div className="relative z-10 bg-red-600/90 backdrop-blur-md border border-red-400 rounded-2xl p-4 text-center mb-5 shadow-lg shadow-red-500/20">
             <div className="flex justify-center items-center gap-2 mb-1">
               <AlertCircle className="w-6 h-6 text-white animate-pulse" />
@@ -2540,9 +2546,14 @@ setEditTrip(null);
             onClick={() => {
               if (!confirm("هل أنت متأكد من إنهاء الدورة المالية الحالية يدوياً وبدء دورة جديدة؟ هذا سيؤدي إلى نقل الميزانية المتبقية إلى الدورة الجديدة.")) return;
               
-              const newCycleStarts = [...(settings?.manualCycleStarts || []), today()];
+              const todayStr = today();
+              const newCycleStarts = [...(settings?.manualCycleStarts || []), todayStr];
               setSettings({ ...settings, manualCycleStarts: newCycleStarts });
               syncToFirebase("settings", { ...settings, manualCycleStarts: newCycleStarts });
+              
+              const d = new Date(todayStr);
+              const newId = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getDate()}`;
+              setTimeout(() => setSelectedCycleId(newId), 50);
             }}
             className="w-full md:w-auto bg-blue-600/50 hover:bg-blue-600 border border-blue-400/50 text-white rounded-xl px-4 py-2 text-xs font-bold transition flex items-center justify-center gap-2"
           >
