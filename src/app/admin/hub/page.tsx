@@ -723,8 +723,8 @@ function AdminHubContent() {
       if (isBlacklistedA && !isBlacklistedB) return 1;
       if (!isBlacklistedA && isBlacklistedB) return -1;
 
-      const isDeliveredA = a.status === 'delivered' || a.status === 'completed';
-      const isDeliveredB = b.status === 'delivered' || b.status === 'completed';
+      const isDeliveredA = a.status === 'delivered' || a.status === 'completed' || a.status === 'cancelled';
+      const isDeliveredB = b.status === 'delivered' || b.status === 'completed' || b.status === 'cancelled';
       
       if (isDeliveredA && !isDeliveredB) return 1;
       if (!isDeliveredA && isDeliveredB) return -1;
@@ -772,15 +772,21 @@ function AdminHubContent() {
     const isDeliveredA = a.status === 'delivered' || a.status === 'completed';
     const isDeliveredB = b.status === 'delivered' || b.status === 'completed';
     
+    const isCancelledA = a.status === 'cancelled';
+    const isCancelledB = b.status === 'cancelled';
+
+    const isFinishedA = isDeliveredA || isCancelledA;
+    const isFinishedB = isDeliveredB || isCancelledB;
+    
     const isDebtA = isDeliveredA && a.paidAmount !== undefined && Number(a.paidAmount) !== Number(a.price) && !a.isDebtSettled;
     const isDebtB = isDeliveredB && b.paidAmount !== undefined && Number(b.paidAmount) !== Number(b.price) && !b.isDebtSettled;
 
     if (isDebtA && !isDebtB) return -1; // Debt goes up
     if (!isDebtA && isDebtB) return 1;
 
-    // normal delivered (without debt) goes down
-    if (isDeliveredA && !isDebtA && (!isDeliveredB || isDebtB)) return 1;
-    if (isDeliveredB && !isDebtB && (!isDeliveredA || isDebtA)) return -1;
+    // normal finished (delivered without debt, or cancelled) goes down
+    if (isFinishedA && !isDebtA && (!isFinishedB || isDebtB)) return 1;
+    if (isFinishedB && !isDebtB && (!isFinishedA || isDebtA)) return -1;
 
     const parseDate = (d: any) => {
       if (!d) return new Date(8640000000000000);
