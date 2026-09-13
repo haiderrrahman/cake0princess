@@ -38,6 +38,7 @@ export default function FinancesAdmin() {
       netProfit: 0,
       totalSalaryDebt: 0,
       cakeMaterialsExpense: 0,
+      monthRevenue: 0,
       breakdown: { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 }
     };
   });
@@ -52,6 +53,7 @@ export default function FinancesAdmin() {
     return {
       totalRevenue: 0,
       totalProfit: 0,
+      monthRevenue: 0,
       breakdown: { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 }
     };
   });
@@ -93,6 +95,9 @@ export default function FinancesAdmin() {
 
         let totalRevenue = 0;
         let totalProfit = 0;
+        let monthRevenue = 0;
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
         let breakdown = { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 };
 
         ordersSnap.docs.forEach(d => {
@@ -110,6 +115,12 @@ export default function FinancesAdmin() {
             
             totalRevenue += amt;
             totalProfit += (amt * 0.3);
+            
+            const dDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+            if (dDate >= thirtyDaysAgo) {
+              monthRevenue += amt;
+            }
+
             if (o.items && Array.isArray(o.items)) {
               let hasAcademy = o.items.some((i: any) => i.type === "course" || i.id?.includes("course"));
               let hasSupplies = o.items.some((i: any) => i.type === "supply" || i.id?.includes("supply"));
@@ -138,6 +149,11 @@ export default function FinancesAdmin() {
           totalRevenue += amt;
           totalProfit += Number(o.profit) || 0;
           breakdown.social += amt;
+
+          const dDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+          if (dDate >= thirtyDaysAgo) {
+            monthRevenue += amt;
+          }
         });
 
         storeSnap.docs.forEach(d => {
@@ -147,9 +163,14 @@ export default function FinancesAdmin() {
           totalRevenue += amt;
           totalProfit += Number(o.profit) || 0;
           breakdown.storeSupplies += amt;
+
+          const dDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0);
+          if (dDate >= thirtyDaysAgo) {
+            monthRevenue += amt;
+          }
         });
 
-        setRevenueData({ totalRevenue, totalProfit, breakdown });
+        setRevenueData({ totalRevenue, totalProfit, monthRevenue, breakdown });
       } catch (e) {
         console.error(e);
       }
@@ -185,6 +206,7 @@ export default function FinancesAdmin() {
       netProfit,
       totalSalaryDebt,
       cakeMaterialsExpense,
+      monthRevenue: revenueData.monthRevenue,
       breakdown: revenueData.breakdown,
     });
   }, [expenses, revenueData]);
@@ -372,13 +394,17 @@ export default function FinancesAdmin() {
         </div>
 
         {/* Financial Stats */}
-        <div className="grid grid-cols-2 gap-3 mb-3 relative z-10">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3 relative z-10">
           <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
             <p className="text-xs font-bold text-purple-200 mb-1 flex items-center gap-1"><Wallet className="w-3.5 h-3.5" /> إجمالي الإيرادات</p>
             <p className="text-xl font-black text-white">{stats.totalRevenue.toLocaleString()} <span className="text-[10px]">د.ع</span></p>
           </div>
           <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
-            <p className="text-xs font-bold text-purple-200 mb-1 flex items-center gap-1"><Receipt className="w-3.5 h-3.5" /> إجمالي المصروفات (من أموال الكيك)</p>
+            <p className="text-xs font-bold text-purple-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> المبيعات الشهرية</p>
+            <p className="text-xl font-black text-white">{(stats.monthRevenue || 0).toLocaleString()} <span className="text-[10px]">د.ع</span></p>
+          </div>
+          <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 col-span-2 md:col-span-1">
+            <p className="text-xs font-bold text-purple-200 mb-1 flex items-center gap-1"><Receipt className="w-3.5 h-3.5" /> المصروفات (من الكيك)</p>
             <p className="text-xl font-black text-red-300">{stats.totalExpenses.toLocaleString()} <span className="text-[10px]">د.ع</span></p>
           </div>
         </div>

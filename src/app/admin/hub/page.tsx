@@ -34,7 +34,7 @@ const EXTERNAL_STATUS_CONFIG: any = {
   prepared:   { label: "تم التحضير",   color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
   delivering: { label: "قيد التسليم",  color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20" },
   delivered:  { label: "تم التسليم",   color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-900/20" },
-  cancelled:  { label: "الغاء الطلب", color: "text-red-600", bg: "bg-red-50 dark:bg-red-900/20" },
+  cancelled:  { label: "الغاء الطلب", color: "text-amber-900 dark:text-amber-700", bg: "bg-amber-100 dark:bg-amber-900/20" },
 };
 
 const CUSTOM_STATUS_CONFIG: any = {
@@ -1294,12 +1294,14 @@ function AdminHubContent() {
                       const weOweCustomer = isDebt && Number(order.price) < Number(order.paidAmount || 0);
                       const fullyPaidDelivered = order.status === "delivered" && !isDebt;
                       const diffAmt = isDebt ? Math.abs(Number(order.price) - Number(order.paidAmount || 0)) : 0;
+                      const isCancelled = order.status === "cancelled";
 
                       const isBlacklisted = blacklistedCustomers.includes(order.customerName || "") || blacklistedCustomers.includes(order.customerPhone || "");
 
                       return (
                         <div key={order.id} className={`rounded-3xl p-3 flex flex-col gap-3 shadow-sm relative group border-2 transition-all ${
                           isBlacklisted ? 'bg-zinc-900 border-zinc-800' :
+                          isCancelled ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-900' :
                           customerOwesUs ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-400 dark:border-rose-800' : 
                           weOweCustomer ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-400 dark:border-blue-800' : 
                           fullyPaidDelivered ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-400 dark:border-purple-800' :
@@ -1444,9 +1446,11 @@ function AdminHubContent() {
                       const weOweCustomer = isDebt && Number(amount) < Number(order.paidAmount || 0);
                       const fullyPaidDelivered = (order.status === "delivered" || order.status === "completed") && !isDebt;
                       const diffAmt = isDebt ? Math.abs(Number(amount) - Number(order.paidAmount || 0)) : 0;
+                      const isCancelled = order.status === "cancelled";
 
                       return (
                         <div key={order.id} className={`rounded-3xl p-3 sm:p-4 flex gap-4 shadow-sm border-2 transition-all ${
+                          isCancelled ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-900' :
                           customerOwesUs ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-400 dark:border-rose-800' : 
                           weOweCustomer ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-400 dark:border-blue-800' : 
                           fullyPaidDelivered ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-400 dark:border-purple-800' :
