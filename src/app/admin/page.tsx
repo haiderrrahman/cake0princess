@@ -40,7 +40,8 @@ export default function AdminDashboard() {
   useEffect(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     let currentOrders: any[] = [];
     let currentExtOrders: any[] = [];
@@ -72,11 +73,13 @@ export default function AdminDashboard() {
         social += received; // Use received for breakdown
         totalProfit += Number(o.profit || 0);
 
-        const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        const rawDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        
+        const d = new Date(rawDate);
         d.setHours(0, 0, 0, 0);
         if (d.getTime() === today.getTime()) todaySales += received;
         if (d >= weekAgo) weekSales += received;
-        if (d >= monthAgo) monthSales += received;
+        if (rawDate >= thirtyDaysAgo) monthSales += received;
       });
 
       // ── App Orders (orders) ──
@@ -112,11 +115,13 @@ export default function AdminDashboard() {
 
         totalProfit += (total * 0.3); // App profit estimate
 
-        const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        const rawDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        
+        const d = new Date(rawDate);
         d.setHours(0, 0, 0, 0);
         if (d.getTime() === today.getTime()) todaySales += received;
         if (d >= weekAgo) weekSales += received;
-        if (d >= monthAgo) monthSales += received;
+        if (rawDate >= thirtyDaysAgo) monthSales += received;
       });
 
       // ── Store Sales (store_sales) ──
@@ -129,11 +134,13 @@ export default function AdminDashboard() {
         storeSupplies += amt;
         totalProfit += profit;
 
-        const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || o.date || 0);
+        const rawDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || o.date || 0);
+        
+        const d = new Date(rawDate);
         d.setHours(0, 0, 0, 0);
         if (d.getTime() === today.getTime()) todaySales += amt;
         if (d >= weekAgo) weekSales += amt;
-        if (d >= monthAgo) monthSales += amt;
+        if (rawDate >= thirtyDaysAgo) monthSales += amt;
       });
 
       totalRevenue = socialReceived + appReceived + suppliesReceived;
@@ -284,18 +291,19 @@ export default function AdminDashboard() {
               <p className="text-xl font-black text-white">{statsLoading ? "…" : fmt(realStats.totalRevenue)} <span className="text-[10px]">د.ع</span></p>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
-              <p className="text-[10px] font-bold text-purple-200 mb-1 flex items-center gap-1"><Receipt className="w-3.5 h-3.5" /> إجمالي المصروفات (أموال الكيك)</p>
-              <p className="text-xl font-black text-red-300">{statsLoading ? "…" : fmt(realStats.totalExpenses)} <span className="text-[10px]">د.ع</span></p>
+              <p className="text-[10px] font-bold text-purple-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> المبيعات الشهرية</p>
+              <p className="text-xl font-black text-white">{statsLoading ? "…" : fmt(realStats.monthSales)} <span className="text-[10px]">د.ع</span></p>
             </div>
           </div>
           
-          <div className="bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-4 relative z-10 flex justify-between items-center">
-            <div>
+          <div className="grid grid-cols-2 gap-3 mb-3 relative z-10">
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+              <p className="text-[10px] font-bold text-purple-200 mb-1 flex items-center gap-1"><Receipt className="w-3.5 h-3.5" /> إجمالي المصروفات (أموال الكيك)</p>
+              <p className="text-xl font-black text-red-300">{statsLoading ? "…" : fmt(realStats.totalExpenses)} <span className="text-[10px]">د.ع</span></p>
+            </div>
+            <div className="bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-4">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> صافي الربح التقديري (بعد المصاريف)</p>
               <p className="text-xl font-black text-white">{statsLoading ? "…" : fmt(realStats.netProfit)} <span className="text-[10px]">د.ع</span></p>
-            </div>
-            <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-emerald-400" />
             </div>
           </div>
 

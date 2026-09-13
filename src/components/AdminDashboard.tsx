@@ -47,11 +47,10 @@ export default function AdminDashboard() {
       const expenses = expSnap.docs.map(d => d.data());
       const storeSales = storeSnap.docs.map(d => d.data());
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
+      const today = new Date(); today.setHours(0, 0, 0, 0);
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       let todaySales = 0, weekSales = 0, monthSales = 0, totalRevenue = 0, totalProfit = 0;
       let social = 0, appCakes = 0, appAcademy = 0, storeSupplies = 0;
@@ -78,11 +77,12 @@ export default function AdminDashboard() {
         social += received; // Use received for breakdown
         totalProfit += Number(o.profit || 0);
 
-        const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        const rawDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        const d = new Date(rawDate);
         d.setHours(0, 0, 0, 0);
         if (d.getTime() === today.getTime()) todaySales += received;
         if (d >= weekAgo) weekSales += received;
-        if (d >= monthAgo) monthSales += received;
+        if (rawDate >= thirtyDaysAgo) monthSales += received;
       });
 
       // ── App Orders (orders) ──
@@ -113,11 +113,12 @@ export default function AdminDashboard() {
 
         totalProfit += (total * 0.3); // App profit estimate
 
-        const d = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        const rawDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+        const d = new Date(rawDate);
         d.setHours(0, 0, 0, 0);
         if (d.getTime() === today.getTime()) todaySales += received;
         if (d >= weekAgo) weekSales += received;
-        if (d >= monthAgo) monthSales += received;
+        if (rawDate >= thirtyDaysAgo) monthSales += received;
       });
 
       // ── Store Sales (store_sales) ──
@@ -130,11 +131,12 @@ export default function AdminDashboard() {
         storeSupplies += amt;
         totalProfit += profit;
 
-        const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || o.date || 0);
+        const rawDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || o.date || 0);
+        const d = new Date(rawDate);
         d.setHours(0, 0, 0, 0);
         if (d.getTime() === today.getTime()) todaySales += amt;
         if (d >= weekAgo) weekSales += amt;
-        if (d >= monthAgo) monthSales += amt;
+        if (rawDate >= thirtyDaysAgo) monthSales += amt;
       });
 
       totalRevenue = socialReceived + appReceived + suppliesReceived;
