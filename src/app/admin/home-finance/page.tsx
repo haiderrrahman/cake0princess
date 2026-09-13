@@ -46,7 +46,7 @@ interface Bill {
   amount: number;
   dueDay?: number; // day of month
   paid: boolean;
-  paidDates: { date: string; amount: number; expenseId: string }[];
+  paidDates: { date: string; amount: number; expenseId: string; monthsCovered?: number }[];
   paymentType?: "مسبق" | "لاحق";
   createdAt: string;
 }
@@ -373,7 +373,7 @@ export default function HomeFinanceDashboard() {
   const [editBill, setEditBill] = useState<Bill | null>(null);
   const [showBillModal, setShowBillModal] = useState(false);
   const [showBillHistory, setShowBillHistory] = useState<string | null>(null);
-  const [payBillData, setPayBillData] = useState<{bill: Bill, amount: string} | null>(null);
+  const [payBillData, setPayBillData] = useState<{bill: Bill, amount: string, months: string} | null>(null);
   const [showFamilyNeedModal, setShowFamilyNeedModal] = useState(false);
   const [editFamilyNeed, setEditFamilyNeed] = useState<FamilyMemberNeed | null>(null);
   const [familyNeedType, setFamilyNeedType] = useState<"need" | "duty">("need");
@@ -711,7 +711,18 @@ export default function HomeFinanceDashboard() {
 
   const totalInstallmentMonthly = installments.reduce((s, i) => s + i.monthlyInstallment, 0);
 
-  const isBillPaidThisCycle = (bill: Bill) => bill.paidDates && bill.paidDates.some(p => isInCycle(p.date));
+  const isBillPaidThisCycle = (bill: Bill) => bill.paidDates && bill.paidDates.some(p => {
+    if (isInCycle(p.date)) return true;
+    if (p.monthsCovered && p.monthsCovered > 1) {
+      const pDate = new Date(p.date);
+      for (let i = 1; i < p.monthsCovered; i++) {
+        const futureDate = new Date(pDate);
+        futureDate.setMonth(futureDate.getMonth() + i);
+        if (isInCycle(futureDate.toISOString())) return true;
+      }
+    }
+    return false;
+  });
   
   const getInstallmentDelayMonths = (i: Installment) => {
     if (i.remainingAmount <= 0) return 0;
@@ -1052,20 +1063,23 @@ setEditFuturePlan(null);
 };
 
   const handlePayBill = (bill: Bill) => {
-    setPayBillData({ bill, amount: bill.amount.toString() });
+    setPayBillData({ bill, amount: bill.amount.toString(), months: "1" });
   };
 
   const confirmPayBill = () => {
     if (!payBillData) return;
-    const { bill, amount } = payBillData;
+    const { bill, amount, months } = payBillData;
     
     const actualAmount = Number(amount);
     if (isNaN(actualAmount) || actualAmount <= 0) { toast.error("مبلغ غير صحيح"); return; }
 
+    const numMonths = Number(months);
+    if (isNaN(numMonths) || numMonths < 1) { toast.error("عدد أشهر غير صحيح"); return; }
+
     const expenseId = Date.now().toString();
     const expense: Expense = {
       id: expenseId, 
-      name: `فاتورة: ${bill.name}`,
+      name: `فاتورة: ${bill.name}${numMonths > 1 ? ` (عن ${numMonths} أشهر)` : ''}`,
       category: bill.category, 
       amount: actualAmount,
       date: today(), 
@@ -1079,7 +1093,7 @@ setEditFuturePlan(null);
     const updatedBills = bills.map(x => x.id === bill.id ? { 
       ...x, 
       paid: true, 
-      paidDates: [...x.paidDates, { date: new Date().toISOString(), amount: actualAmount, expenseId }] 
+      paidDates: [...x.paidDates, { date: new Date().toISOString(), amount: actualAmount, expenseId, monthsCovered: numMonths }] 
     } : x);
     setBills(updatedBills);
     syncToFirebase("bills", updatedBills);
@@ -3637,7 +3651,10 @@ setEditTrip(null);
                           <p className="text-[10px] text-gray-500 font-bold mb-2">سجل الدفعات ({paidDates.length})</p>
                           {[...paidDates].reverse().map((pay, pi) => (
                             <div key={pi} className="flex justify-between text-[11px] bg-gray-50 dark:bg-zinc-800 rounded-xl px-3 py-1.5 mb-1 last:mb-0">
-                              <span className="text-gray-800 dark:text-gray-200 font-bold">{fmt(pay.amount)} د.ع</span>
+                              <span className="text-gray-800 dark:text-gray-200 font-bold">
+                                {fmt(pay.amount)} د.ع
+                                {pay.monthsCovered && pay.monthsCovered > 1 && <span className="text-gray-400 font-normal mr-1 text-[9px]">(عن {pay.monthsCovered} أشهر)</span>}
+                              </span>
                               <span className="text-gray-500">{new Date(pay.date).toLocaleDateString("ar-IQ")}</span>
                             </div>
                           ))}
@@ -4889,6 +4906,20 @@ setEditTrip(null);
                   dir="ltr"
                 />
                 <DollarSign className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              </div>
+
+              <div className="relative mt-2">
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={payBillData.months}
+                  onChange={e => setPayBillData({ ...payBillData, months: e.target.value })}
+                  className="w-full bg-gray-50 dark:bg-zinc-900/50 border border-gray-200 dark:border-zinc-800 rounded-2xl px-4 py-3.5 pr-10 text-gray-800 dark:text-white font-bold outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition"
+                  placeholder="عدد الأشهر (افتراضياً 1)"
+                  dir="ltr"
+                />
+                <Calendar className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               </div>
 
               <button type="submit" className="w-full bg-gradient-to-l from-emerald-500 to-emerald-600 text-white font-black py-3.5 rounded-xl shadow-lg mt-2 active:scale-[0.98] transition">
