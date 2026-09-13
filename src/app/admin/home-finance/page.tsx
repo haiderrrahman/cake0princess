@@ -3674,10 +3674,16 @@ setEditTrip(null);
                             دفع الآن
                           </button>
                         ) : (
-                          <button onClick={() => handleUndoBillPayment(bill)}
-                            className="w-full bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[10px] font-bold py-1.5 rounded-xl active:scale-95 transition mt-auto">
-                            تراجع
-                          </button>
+                          <div className="flex gap-2 mt-auto w-full">
+                            <button onClick={() => handleUndoBillPayment(bill)}
+                              className="flex-1 bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[10px] font-bold py-1.5 rounded-xl active:scale-95 transition">
+                              تراجع
+                            </button>
+                            <button onClick={() => handlePayBill(bill)}
+                              className={`flex-1 bg-gradient-to-r ${c.grad} text-white text-[10px] font-black py-1.5 rounded-xl active:scale-95 transition shadow-sm`}>
+                              دفع مسبق
+                            </button>
+                          </div>
                         )}
                       </div>
                       
