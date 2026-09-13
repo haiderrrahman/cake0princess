@@ -954,7 +954,7 @@ function AdminHubContent() {
 
         {/* Dynamic KPI Glassmorphism Stats Cards */}
         {activeTab === "orders" && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 relative z-10">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 relative z-10">
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-rose-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> مبيعات اليوم</p>
               <div className="flex justify-between items-end">
@@ -979,12 +979,13 @@ function AdminHubContent() {
               <p className="text-lg font-black text-white">{(stats.weekSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
+              <p className="text-[10px] font-bold text-rose-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> المبيعات الشهرية</p>
+              <p className="text-lg font-black text-white">{(stats.monthSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-rose-200 mb-1 flex items-center gap-1"><BarChart3 className="w-3.5 h-3.5" /> المبيعات الكلية</p>
               <div className="flex justify-between items-end">
                 <p className="text-lg font-black text-purple-200">{(stats.allTimeSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
-                <div className="flex flex-col items-end">
-                  <p className="text-xs text-white font-bold">الشهرية: {(stats.monthSales || 0).toLocaleString()}</p>
-                </div>
               </div>
             </div>
           </div>
@@ -1016,12 +1017,13 @@ function AdminHubContent() {
               <p className="text-lg font-black text-white">{(stats.weekExtSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
+              <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> المبيعات الشهرية</p>
+              <p className="text-lg font-black text-white">{(stats.monthExtSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><BarChart3 className="w-3.5 h-3.5" /> المبيعات الكلية</p>
               <div className="flex justify-between items-end">
                 <p className="text-lg font-black text-teal-200">{(stats.allTimeExtSales || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
-                <div className="flex flex-col items-end">
-                  <p className="text-xs text-white font-bold">الشهرية: {(stats.monthExtSales || 0).toLocaleString()}</p>
-                </div>
               </div>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">

@@ -223,7 +223,7 @@ export default function AdminDashboard() {
           {/* Top Stats Row */}
           <div className="grid grid-cols-3 gap-2 mb-4">
             <div className="bg-gray-50 dark:bg-zinc-800 rounded-2xl p-3 text-center border border-gray-100 dark:border-zinc-700 flex flex-col justify-center">
-              <p className="text-gray-500 dark:text-gray-400 text-[10px] font-bold mb-1">مبيعات الشهر</p>
+              <p className="text-gray-500 dark:text-gray-400 text-[10px] font-bold mb-1">المبيعات الشهرية</p>
               <p className="text-blue-600 dark:text-blue-400 font-black text-sm">{loading ? "..." : data.monthSales.toLocaleString()}</p>
             </div>
             <div className="bg-gray-50 dark:bg-zinc-800 rounded-2xl p-3 text-center flex flex-col justify-center border border-emerald-100 dark:border-emerald-800/30">
