@@ -34,6 +34,7 @@ const EXTERNAL_STATUS_CONFIG: any = {
   prepared:   { label: "تم التحضير",   color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
   delivering: { label: "قيد التسليم",  color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20" },
   delivered:  { label: "تم التسليم",   color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-900/20" },
+  cancelled:  { label: "الغاء الطلب", color: "text-red-600", bg: "bg-red-50 dark:bg-red-900/20" },
 };
 
 const CUSTOM_STATUS_CONFIG: any = {
@@ -104,6 +105,8 @@ function AdminHubContent() {
   const [settleOrderType, setSettleOrderType] = useState<"external" | "app" | null>(null);
   const [settleDebtType, setSettleDebtType] = useState<"none" | "customer_owes" | "we_owe">("none");
   const [settleRemainingAmount, setSettleRemainingAmount] = useState<string>("");
+  const [cancelOrder, setCancelOrder] = useState<any>(null);
+  const [cancelReason, setCancelReason] = useState<string>("");
   const searchParams = useSearchParams();
   const router = useRouter();
   const rawTab = searchParams.get('tab') as string;
@@ -502,6 +505,15 @@ function AdminHubContent() {
       return;
     }
 
+    if (newStatus === "cancelled") {
+      const order = externalOrders.find(o => o.id === orderId);
+      if (order) {
+        setCancelOrder(order);
+        setCancelReason("");
+      }
+      return;
+    }
+
     try {
       setUpdatingOrder(orderId);
       const orderRef = doc(db, "external_orders", orderId);
@@ -569,6 +581,28 @@ function AdminHubContent() {
     } catch (error) {
       console.error(error);
       toast.error("حدث خطأ أثناء الحفظ");
+    } finally {
+      setUpdatingOrder(null);
+    }
+  };
+
+  const submitCancellation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancelOrder) return;
+    
+    try {
+      setUpdatingOrder(cancelOrder.id);
+      await updateDoc(doc(db, "external_orders", cancelOrder.id), { 
+        status: "cancelled", 
+        cancelReason: cancelReason
+      });
+      // Optimistic update
+      setExternalOrders(prev => prev.map(o => o.id === cancelOrder.id ? { ...o, status: "cancelled", cancelReason: cancelReason } : o));
+      toast.success("تم إلغاء الطلب بنجاح");
+      setCancelOrder(null);
+    } catch (error) {
+      console.error(error);
+      toast.error("حدث خطأ أثناء الإلغاء");
     } finally {
       setUpdatingOrder(null);
     }
@@ -1364,11 +1398,17 @@ function AdminHubContent() {
                                   <option value="prepared" className="bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-200">تم التحضير</option>
                                   <option value="delivering" className="bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-200">قيد التسليم</option>
                                   <option value="delivered" className="bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-200">تم التسليم</option>
+                                  <option value="cancelled" className="bg-white dark:bg-zinc-800 text-red-600 dark:text-red-400">الغاء الطلب</option>
                                 </select>
                                 <ChevronDown className={`w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-70 ${extCfg.color}`} />
                                 {isUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin absolute left-2 top-1/2 -translate-y-1/2 text-emerald-600" />}
                               </div>
                             </div>
+                            {order.status === "cancelled" && order.cancelReason && (
+                              <div className="mt-3 bg-red-50 dark:bg-red-900/10 p-2.5 rounded-xl text-center text-red-600 text-[11px] font-bold border border-red-100 dark:border-red-900/30">
+                                ❌ سبب الرفض: {order.cancelReason}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -1916,6 +1956,32 @@ function AdminHubContent() {
 
               <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl flex justify-center items-center gap-2 transition mt-6 shadow-md shadow-emerald-500/20">
                 تأكيد التسليم
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {cancelOrder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center">
+              <h3 className="font-bold text-lg text-red-600">إلغاء الطلب</h3>
+              <button type="button" onClick={() => setCancelOrder(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <form onSubmit={submitCancellation} className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-2">سبب الرفض / الإلغاء</label>
+                <textarea 
+                  required 
+                  value={cancelReason} 
+                  onChange={e => setCancelReason(e.target.value)}
+                  className="w-full bg-gray-50 dark:bg-zinc-800 border-2 border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-red-500 focus:outline-none font-bold min-h-[100px] resize-none"
+                  placeholder="اكتب سبب الرفض هنا..." 
+                />
+              </div>
+              <button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-3 rounded-xl flex justify-center items-center gap-2 transition mt-6 shadow-md shadow-red-500/20">
+                تأكيد الإلغاء
               </button>
             </form>
           </div>
