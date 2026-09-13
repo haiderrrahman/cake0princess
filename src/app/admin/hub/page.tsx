@@ -1814,6 +1814,25 @@ function AdminHubContent() {
                   </div>
                 ))}
 
+                {/* ── Monthly Sales Overview ── */}
+                <div className="bg-gradient-to-br from-purple-900 to-fuchsia-900 rounded-3xl p-6 shadow-xl border border-purple-500/20">
+                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-4"><TrendingUp className="w-5 h-5 text-purple-400" /> المبيعات الشهرية (خلال 30 يوم)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-black/20 p-4 rounded-2xl border border-white/5 flex flex-col justify-center">
+                      <span className="text-purple-200 text-xs font-bold mb-1">مبيعات التطبيق والمخزن</span>
+                      <span className="text-white text-xl font-black">{(stats.monthSales || 0).toLocaleString()} د.ع</span>
+                    </div>
+                    <div className="bg-black/20 p-4 rounded-2xl border border-white/5 flex flex-col justify-center">
+                      <span className="text-purple-200 text-xs font-bold mb-1">مبيعات السوشيال ميديا</span>
+                      <span className="text-white text-xl font-black">{(stats.monthExtSales || 0).toLocaleString()} د.ع</span>
+                    </div>
+                    <div className="bg-white/10 p-4 rounded-2xl border border-purple-400/30 flex flex-col justify-center shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+                      <span className="text-purple-200 text-xs font-bold mb-1">إجمالي المبيعات الشهرية</span>
+                      <span className="text-white text-2xl font-black">{((stats.monthSales || 0) + (stats.monthExtSales || 0)).toLocaleString()} د.ع</span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* ── Net Balance Overview ── */}
                 <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-3xl p-6 shadow-xl border border-indigo-500/20">
                   <h3 className="text-lg font-black text-white flex items-center gap-2 mb-4"><Banknote className="w-5 h-5 text-indigo-400" /> صافي الأموال المتوفرة (بعد المصاريف)</h3>
