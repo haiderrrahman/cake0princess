@@ -335,6 +335,7 @@ function AdminHubContent() {
     let todayDeliveriesCount = 0, todayDeliveriesAmount = 0;
     let todayExtDeliveriesCount = 0, todayExtDeliveriesAmount = 0;
     let extOweUs = 0, extWeOwe = 0;
+    let totalExtDeliveryFees = 0;
     
     let breakdown = { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 };
     let totalProfit = 0;
@@ -422,6 +423,7 @@ function AdminHubContent() {
       calcSales(o, received, true);
       if (isDelivered) {
         totalProfit += Number(o.profit) || 0;
+        totalExtDeliveryFees += Number(o.deliveryFee || 0);
       }
       breakdown.social += received;
     });
@@ -462,7 +464,7 @@ function AdminHubContent() {
       todayExtDeliveriesCount, todayExtDeliveriesAmount,
       extOweUs, extWeOwe,
       totalOrders: orders.length, pendingOrders: pendingOrders.length, pendingOrdersAmount,
-      pendingExtOrders, pendingExtOrdersAmount, externalSales, externalProfit, 
+      pendingExtOrders, pendingExtOrdersAmount, externalSales, externalProfit, totalExtDeliveryFees,
       totalProfit, netProfit: totalProfit - prev.expenses, breakdown 
     }));
   }, [orders, externalOrders, storeSales]);
@@ -992,7 +994,7 @@ function AdminHubContent() {
         )}
 
         {activeTab === "external" && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 relative z-10">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-2.5 relative z-10">
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> مبيعات اليوم</p>
               <div className="flex justify-between items-end">
@@ -1033,6 +1035,10 @@ function AdminHubContent() {
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-blue-200 mb-1 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> أمانة يطلبنا</p>
               <p className="text-lg font-black text-blue-300">{(stats.extWeOwe || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
+              <p className="text-[10px] font-bold text-cyan-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> إجمالي التوصيل</p>
+              <p className="text-lg font-black text-cyan-300">{(stats.totalExtDeliveryFees || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
             </div>
           </div>
         )}
