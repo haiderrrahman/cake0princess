@@ -8,7 +8,7 @@ import {
   BarChart3, RefreshCw, ChevronRight, User, Phone, MapPin,
   Calendar, ArrowRight, Search, Filter, Edit, ChevronDown, GraduationCap, PlayCircle, Image as ImageIcon, Check, MessageCircle, Sparkles, PackageCheck, Banknote
 } from "lucide-react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit, onSnapshot, increment, where } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, query, orderBy, limit, onSnapshot, increment, where } from "firebase/firestore";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import InventoryDeductModal from "@/components/InventoryDeductModal";
@@ -105,6 +105,8 @@ function AdminHubContent() {
   const [settleOrderType, setSettleOrderType] = useState<"external" | "app" | null>(null);
   const [settleDebtType, setSettleDebtType] = useState<"none" | "customer_owes" | "we_owe">("none");
   const [settleRemainingAmount, setSettleRemainingAmount] = useState<string>("");
+  const [settleDestination, setSettleDestination] = useState<"cake_funds" | "salary_debt">("cake_funds");
+  const [settleSalaryAmount, setSettleSalaryAmount] = useState<string>("");
   const [cancelOrder, setCancelOrder] = useState<any>(null);
   const [cancelReason, setCancelReason] = useState<string>("");
   const searchParams = useSearchParams();
@@ -561,6 +563,18 @@ function AdminHubContent() {
       finalPaidAmount = basePrice + remAmt;
     }
     
+    if (settleDestination === "salary_debt") {
+      const salaryAmt = Number(settleSalaryAmount);
+      if (isNaN(salaryAmt) || salaryAmt <= 0) {
+        toast.error("يرجى إدخال مبلغ صحيح لتسديد ديون الراتب");
+        return;
+      }
+      if (salaryAmt > finalPaidAmount) {
+        toast.error("مبلغ التسديد لا يمكن أن يكون أكبر من المبلغ المستلم");
+        return;
+      }
+    }
+
     try {
       setUpdatingOrder(settleOrder.id);
       const collectionName = settleOrderType === "external" ? "external_orders" : "orders";
@@ -572,6 +586,54 @@ function AdminHubContent() {
         paidAmount: finalPaidAmount,
         isDebtSettled: isSettled
       });
+
+      if (settleDestination === "salary_debt") {
+        const salaryAmt = Number(settleSalaryAmount);
+        const refName = settleOrder.customerName || orderId;
+
+        // 1. Add expense: -salaryAmt (reduces debt)
+        await addDoc(collection(db, "expenses"), {
+          amount: -salaryAmt,
+          category: "تسديد دين",
+          description: `تسديد جزء من الدين المستحق (طلب سوشيال ${refName})`,
+          month: new Date().getMonth() + 1,
+          createdAt: serverTimestamp(),
+          isDebt: true
+        });
+
+        // 2. Add expense: salaryAmt (logs the expense)
+        await addDoc(collection(db, "expenses"), {
+          amount: salaryAmt,
+          category: "تسديد دين",
+          description: `تسديد جزء من الدين المستحق (طلب سوشيال ${refName})`,
+          month: new Date().getMonth() + 1,
+          createdAt: serverTimestamp(),
+          isDebt: false
+        });
+
+        // 3. Add income to home_finance
+        const recordId = Date.now().toString();
+        const income = {
+          id: recordId,
+          name: `تسديد من طلب ${refName}`,
+          amount: salaryAmt,
+          type: "إضافي",
+          date: new Date().toISOString().split("T")[0],
+          createdAt: new Date().toISOString(),
+        };
+        // Normalize existing homeIncomes to match type
+        const updatedIncomes = [
+          income, 
+          ...homeIncomes.map(i => ({ 
+            ...i, 
+            type: i.type || "income", 
+            amount: Number(i.amount), 
+            date: i.date || (i.createdAt ? i.createdAt.split("T")[0] : new Date().toISOString().split("T")[0])
+          }))
+        ];
+        await setDoc(doc(db, "home_finance", "incomes"), { data: updatedIncomes });
+      }
+
       // Optimistic update
       if (settleOrderType === "external") {
         setExternalOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "delivered", paidAmount: finalPaidAmount, isDebtSettled: isSettled } : o));
@@ -1029,16 +1091,16 @@ function AdminHubContent() {
               </div>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
+              <p className="text-[10px] font-bold text-cyan-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> إجمالي التوصيل</p>
+              <p className="text-lg font-black text-cyan-300">{(stats.totalExtDeliveryFees || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-rose-200 mb-1 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> باقي نطلبه</p>
               <p className="text-lg font-black text-rose-300">{(stats.extOweUs || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
             </div>
             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
               <p className="text-[10px] font-bold text-blue-200 mb-1 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> أمانة يطلبنا</p>
               <p className="text-lg font-black text-blue-300">{(stats.extWeOwe || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3.5">
-              <p className="text-[10px] font-bold text-cyan-200 mb-1 flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" /> إجمالي التوصيل</p>
-              <p className="text-lg font-black text-cyan-300">{(stats.totalExtDeliveryFees || 0).toLocaleString()} <span className="text-[10px] font-normal">د.ع</span></p>
             </div>
           </div>
         )}
@@ -1987,6 +2049,37 @@ function AdminHubContent() {
                     {settleDebtType === 'customer_owes' 
                       ? "سيتم تسجيل هذا المبلغ كدين مطلوب من الزبون، وسيظهر الطلب في أعلى القائمة بإشارة حمراء."
                       : "سيتم تسجيل هذا المبلغ كأمانة أو دين للزبون بذمتكم، وسيظهر بإشارة زرقاء."}
+                  </p>
+                </div>
+              )}
+
+              {settleOrderType === "external" && (
+                <div className="pt-2 border-t border-gray-100 dark:border-zinc-800">
+                  <label className="block text-sm font-bold mb-2 text-indigo-600">أين سيذهب المبلغ؟</label>
+                  <select 
+                    value={settleDestination}
+                    onChange={(e) => setSettleDestination(e.target.value as any)}
+                    className="w-full bg-white dark:bg-zinc-800 border-2 border-indigo-200 dark:border-indigo-800 rounded-xl px-4 py-3 focus:border-indigo-500 focus:outline-none font-bold"
+                  >
+                    <option value="cake_funds">🎂 أموال الكيك (الطبيعي)</option>
+                    <option value="salary_debt">💼 تسديد ديون الراتب</option>
+                  </select>
+                </div>
+              )}
+
+              {settleDestination === "salary_debt" && settleOrderType === "external" && (
+                <div className="animate-fade-in-up">
+                  <label className="block text-sm font-bold mb-2 text-indigo-600">المبلغ المسدد لديون الراتب (د.ع)</label>
+                  <input 
+                    type="number" 
+                    required 
+                    value={settleSalaryAmount}
+                    onChange={(e) => setSettleSalaryAmount(e.target.value)}
+                    placeholder="أدخل المبلغ المستقطع لديون الراتب..."
+                    className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border-2 border-indigo-100 dark:border-indigo-900/50 rounded-xl px-4 py-3 focus:border-indigo-500 focus:outline-none font-black text-lg text-indigo-900 dark:text-indigo-100"
+                  />
+                  <p className="text-[10px] font-bold text-gray-500 mt-2">
+                    المبلغ المكتوب سيُخصم من دين الكيك ويسجل كوارد لإدارة المنزل تلقائياً.
                   </p>
                 </div>
               )}
