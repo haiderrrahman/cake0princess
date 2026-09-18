@@ -159,6 +159,7 @@ export default function FinancesAdmin() {
         storeSnap.docs.forEach(d => {
           const o = d.data();
           if (["rejected", "cancelled"].includes(o.status)) return;
+          if (o.category === "تسديد ديون" || (o.itemName && o.itemName.includes("تسديد دين"))) return; // Skip debt settlements to avoid double counting revenue
           const amt = Number(o.price) || 0;
           totalRevenue += amt;
           totalProfit += Number(o.profit) || 0;
@@ -489,11 +490,17 @@ export default function FinancesAdmin() {
                   {exp.description}
                 </h3>
                 
-                <div className="mt-auto pt-4 border-t border-gray-50 dark:border-zinc-800">
-                  <p className="text-xs text-gray-400 font-bold mb-1">المبلغ</p>
-                  <span className={`font-black text-2xl ${exp.isDebt ? 'text-orange-500' : 'text-red-500'}`}>
-                    {Number(exp.amount).toLocaleString()} <span className="text-sm">د.ع</span>
-                  </span>
+                <div className="mt-auto pt-4 border-t border-gray-50 dark:border-zinc-800 flex justify-between items-end">
+                  <div>
+                    <p className="text-xs text-gray-400 font-bold mb-1">المبلغ</p>
+                    <span className={`font-black text-2xl ${exp.isDebt ? 'text-orange-500' : 'text-red-500'}`}>
+                      {Number(exp.amount).toLocaleString()} <span className="text-sm">د.ع</span>
+                    </span>
+                  </div>
+                  <div className="text-left text-[10px] text-gray-400 bg-gray-50 dark:bg-zinc-800/50 px-2 py-1.5 rounded-lg">
+                    <p className="font-bold mb-0.5 flex items-center gap-1 justify-end"><Calendar className="w-3 h-3" /> {exp.createdAt?.toDate ? exp.createdAt.toDate().toLocaleDateString('en-GB') : (exp.date || '')}</p>
+                    <p dir="ltr">{exp.createdAt?.toDate ? exp.createdAt.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                  </div>
                 </div>
               </div>
             ))}

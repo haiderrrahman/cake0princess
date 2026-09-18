@@ -484,10 +484,28 @@ function AdminHubContent() {
     }
     try {
       setUpdatingOrder(orderId);
+      
+      const order = orders.find(o => o.id === orderId);
+      if (order && (order.status === "delivered" || order.status === "completed") && newStatus !== "delivered" && newStatus !== "completed") {
+        const refName = order.userName || orderId;
+        
+        // Revert expenses
+        const q = query(collection(db, "expenses"), where("description", "==", `تسديد جزء من الدين المستحق (طلب سوشيال ${refName})`));
+        const querySnapshot = await getDocs(q);
+        const deletePromises = querySnapshot.docs.map(docSnap => deleteDoc(doc(db, "expenses", docSnap.id)));
+        await Promise.all(deletePromises);
+        
+        // Revert legacy explicit home finance incomes
+        const updatedIncomes = homeIncomes.filter((inc: any) => inc.name !== `تسديد من طلب ${refName}`);
+        if (updatedIncomes.length !== homeIncomes.length) {
+          await updateDoc(doc(db, "home_finance", "incomes"), { data: updatedIncomes });
+        }
+      }
+
       const orderRef = doc(db, "orders", orderId);
-      await updateDoc(orderRef, { status: newStatus });
+      await updateDoc(orderRef, { status: newStatus, isDebtSettled: false, paidAmount: 0 });
       // Optimistic update
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus, isDebtSettled: false, paidAmount: 0 } : o));
       toast.success("تم تحديث حالة الطلب");
     } catch (error) {
       console.error(error);
@@ -520,10 +538,28 @@ function AdminHubContent() {
 
     try {
       setUpdatingOrder(orderId);
+
+      const order = externalOrders.find(o => o.id === orderId);
+      if (order && (order.status === "delivered" || order.status === "completed") && newStatus !== "delivered" && newStatus !== "completed") {
+        const refName = order.customerName || orderId;
+        
+        // Revert expenses
+        const q = query(collection(db, "expenses"), where("description", "==", `تسديد جزء من الدين المستحق (طلب سوشيال ${refName})`));
+        const querySnapshot = await getDocs(q);
+        const deletePromises = querySnapshot.docs.map(docSnap => deleteDoc(doc(db, "expenses", docSnap.id)));
+        await Promise.all(deletePromises);
+        
+        // Revert legacy explicit home finance incomes
+        const updatedIncomes = homeIncomes.filter((inc: any) => inc.name !== `تسديد من طلب ${refName}`);
+        if (updatedIncomes.length !== homeIncomes.length) {
+          await updateDoc(doc(db, "home_finance", "incomes"), { data: updatedIncomes });
+        }
+      }
+
       const orderRef = doc(db, "external_orders", orderId);
-      await updateDoc(orderRef, { status: newStatus });
+      await updateDoc(orderRef, { status: newStatus, isDebtSettled: false, paidAmount: 0 });
       // Optimistic update
-      setExternalOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      setExternalOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus, isDebtSettled: false, paidAmount: 0 } : o));
       toast.success("تم تحديث حالة طلب السوشيال ميديا");
     } catch (error) {
       console.error(error);
@@ -610,28 +646,6 @@ function AdminHubContent() {
           createdAt: serverTimestamp(),
           isDebt: false
         });
-
-        // 3. Add income to home_finance
-        const recordId = Date.now().toString();
-        const income = {
-          id: recordId,
-          name: `تسديد من طلب ${refName}`,
-          amount: salaryAmt,
-          type: "إضافي",
-          date: new Date().toISOString().split("T")[0],
-          createdAt: new Date().toISOString(),
-        };
-        // Normalize existing homeIncomes to match type
-        const updatedIncomes = [
-          income, 
-          ...homeIncomes.map(i => ({ 
-            ...i, 
-            type: i.type || "income", 
-            amount: Number(i.amount), 
-            date: i.date || (i.createdAt ? i.createdAt.split("T")[0] : new Date().toISOString().split("T")[0])
-          }))
-        ];
-        await setDoc(doc(db, "home_finance", "incomes"), { data: updatedIncomes });
       }
 
       // Optimistic update

@@ -285,6 +285,7 @@ export default function HomeFinanceDashboard() {
   // Data state
   const [cakeSalaryDebt, setCakeSalaryDebt] = useState<number>(0);
   const [cakeDebtExpenses, setCakeDebtExpenses] = useState<Expense[]>([]);
+  const [cakeDebtIncomes, setCakeDebtIncomes] = useState<Income[]>([]);
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -555,7 +556,7 @@ export default function HomeFinanceDashboard() {
       const debt = exps.filter(e => e.isDebt).reduce((s, e) => s + (Number(e.amount) || 0), 0);
       setCakeSalaryDebt(debt);
       
-      const convertedCakeExps: Expense[] = exps.filter(e => e.isDebt).map(e => ({
+      const convertedCakeExps: Expense[] = exps.filter(e => e.isDebt && Number(e.amount) > 0).map(e => ({
         id: e._id || Date.now().toString(),
         name: e.description || "دين اموال الكيك",
         category: "ديون",
@@ -565,6 +566,17 @@ export default function HomeFinanceDashboard() {
         isFromCake: true
       } as any));
       setCakeDebtExpenses(convertedCakeExps);
+
+      const convertedCakeIncs: Income[] = exps.filter(e => e.isDebt && Number(e.amount) < 0).map(e => ({
+        id: e._id || Date.now().toString(),
+        name: e.description || "تسديد دين اموال الكيك",
+        type: "إضافي",
+        amount: Math.abs(Number(e.amount)) || 0,
+        date: e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : new Date().toISOString(),
+        createdAt: e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : new Date().toISOString(),
+        isFromCake: true
+      } as any));
+      setCakeDebtIncomes(convertedCakeIncs);
     });
 
     return () => {
@@ -725,7 +737,9 @@ export default function HomeFinanceDashboard() {
   // DERIVED
   // ──────────────────────────────────────────
 
-  const totalIncome = incomes
+  const allIncomes = useMemo(() => [...incomes, ...cakeDebtIncomes], [incomes, cakeDebtIncomes]);
+
+  const totalIncome = allIncomes
     .filter(i => isInCycle(i.date))
     .reduce((s, i) => s + i.amount, 0);
 
