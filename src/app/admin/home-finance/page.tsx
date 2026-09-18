@@ -1956,20 +1956,6 @@ setNeedNameInput("");
             isDebt: false
           });
 
-          // إضافة الدخل لإدارة المنزل حتى يزداد الرصيد الصافي
-          const recordId = Date.now().toString();
-          const income: Income = {
-            id: recordId,
-            name: `تسديد جزء من دين الكيك (اموال الراتب)`,
-            amount: actualAmount,
-            type: "إضافي",
-            date: today(),
-            createdAt: new Date().toISOString(),
-          };
-          const updatedIncomes = [income, ...incomes];
-          setIncomes(updatedIncomes);
-          syncToFirebase("incomes", updatedIncomes);
-          
           toast.success("تم تسديد جزء من دين الكيك بنجاح");
         } catch (e) {
           toast.error("حدث خطأ أثناء التسديد");
