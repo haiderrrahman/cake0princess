@@ -2456,7 +2456,8 @@ setEditTrip(null);
           } else if (activeTab === "needs") {
             const totalAvailQty = inventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + carInventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + travelInventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + familyNeeds.filter(n => n.status === "available").length;
             const totalShortQty = shoppingList.reduce((s, i) => s + (Number(i.neededQuantity) || 1), 0) + familyNeeds.filter(n => n.status === "pending").length;
-            availCard = { title: "إجمالي المتوفر (منزل وعائلة)", count: totalAvailQty, countLabel: "عنصر متوفر", value: 0, color: "emerald", icon: "📦" };
+            const totalAvailVal = inventory.reduce((s, i) => s + ((Number(i.quantity) || 0) * (Number(i.estimatedPrice) || 0)), 0) + carInventory.reduce((s, i) => s + ((Number(i.quantity) || 0) * (Number(i.estimatedPrice) || 0)), 0) + travelInventory.reduce((s, i) => s + ((Number(i.quantity) || 0) * (Number(i.estimatedPrice) || 0)), 0);
+            availCard = { title: "إجمالي المتوفر (منزل وعائلة)", count: totalAvailQty, countLabel: "عنصر متوفر", value: totalAvailVal, color: "emerald", icon: "📦" };
             shortCard = { title: "إجمالي النواقص والاحتياجات", count: totalShortQty, countLabel: "طلب/عنصر ناقص", value: totalNeedsAmt, color: "orange", icon: "🚨" };
           } else if (activeTab === "debts") {
             const myDebtsCount = effectiveDebts.filter(d => d.type === "دين لي").length;
