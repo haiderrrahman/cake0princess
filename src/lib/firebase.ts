@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+import { getFirestore, initializeFirestore, memoryLocalCache } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
@@ -16,11 +16,12 @@ const firebaseConfig = {
 // تهيئة Firebase بطريقة آمنة لبيئة Next.js
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// إعادة تفعيل الكاش المحلي لتسريع جلب البيانات والصور المؤقتة (Base64) بدون انتظار الخادم
+// استخدام memory cache بدلاً من persistent cache لضمان استلام أحدث البيانات
+// من Firebase مباشرة عند كل تحميل (بدون كاش قديم يسبب تعارض بين الأجهزة)
 const initDB = () => {
   try {
     return initializeFirestore(app, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+      localCache: memoryLocalCache()
     });
   } catch (e) {
     return getFirestore(app);
