@@ -258,7 +258,7 @@ export default function FamilyCompetition() {
     if (!activeRound?.id) return;
     
     const participantName = PARTICIPANTS.find(p => p.id === participantId)?.name || "";
-    const confirmed = await customConfirm(`هل صحيح تم القراءة (الدراسة) لـ ${participantName} ام كلاوات؟`);
+    const confirmed = await customConfirm(`هل أنت متأكد من تسجيل 5 نقاط كدراسة وواجبات يومية لـ ${participantName}؟`);
     
     if (!confirmed) return;
 

@@ -37,6 +37,10 @@ export const customConfirm = (message: string): Promise<boolean> => {
           </button>
         </div>
       </div>
-    ), { duration: Infinity });
+    ), { 
+      duration: Infinity, 
+      unstyled: true,
+      style: { background: 'transparent', border: 'none', padding: 0, boxShadow: 'none' } 
+    });
   });
 };
