@@ -17,7 +17,7 @@ import {
   Timestamp,
   writeBatch
 } from "firebase/firestore";
-import { Trophy, Plus, Minus, History, Clock, Target, Medal, AlertCircle, ChevronDown, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
+import { Trophy, Plus, Minus, History, Clock, Target, Medal, AlertCircle, ChevronDown, CheckCircle2, AlertTriangle, ArrowRight, BookOpen, Calendar, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { customConfirm } from "@/lib/customConfirm";
 import { getAuth } from "firebase/auth";
@@ -50,7 +50,7 @@ export interface FamilyCompetitionEntry {
   participantId: ParticipantId;
   participantName: string;
   points: number;
-  type: "add" | "deduct";
+  type: "add" | "deduct" | "read";
   reason: string;
   balanceAfter: number;
   createdAt: Timestamp;
@@ -80,9 +80,15 @@ export default function FamilyCompetition() {
   const [transactionPoints, setTransactionPoints] = useState<number>(0);
   const [transactionReason, setTransactionReason] = useState("");
   
-  const [viewMode, setViewMode] = useState<"competition" | "history">("competition");
+  const [viewMode, setViewMode] = useState<"competition" | "history" | "reading_report">("competition");
   const [selectedRoundHistory, setSelectedRoundHistory] = useState<string | null>(null);
   const [historyEntries, setHistoryEntries] = useState<FamilyCompetitionEntry[]>([]);
+  
+  // Reading Report State
+  const [reportStartDate, setReportStartDate] = useState<string>("");
+  const [reportEndDate, setReportEndDate] = useState<string>("");
+  const [reportEntries, setReportEntries] = useState<FamilyCompetitionEntry[]>([]);
+  const [loadingReport, setLoadingReport] = useState(false);
   
 
 
@@ -179,6 +185,45 @@ export default function FamilyCompetition() {
     });
   }, [selectedRoundHistory]);
 
+  const fetchReadingReport = async (start?: string, end?: string) => {
+    setLoadingReport(true);
+    const startDateToUse = start !== undefined ? start : reportStartDate;
+    const endDateToUse = end !== undefined ? end : reportEndDate;
+    
+    try {
+      const q = query(
+        collection(db, "familyCompetitionEntries"),
+        where("type", "==", "read")
+      );
+      
+      const snapshot = await getDocs(q);
+      let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FamilyCompetitionEntry));
+      
+      if (startDateToUse) {
+        const startMillis = new Date(startDateToUse).getTime();
+        data = data.filter(e => (e.createdAt?.toMillis() || 0) >= startMillis);
+      }
+      if (endDateToUse) {
+        const endDateObj = new Date(endDateToUse);
+        endDateObj.setHours(23, 59, 59, 999);
+        data = data.filter(e => (e.createdAt?.toMillis() || 0) <= endDateObj.getTime());
+      }
+      
+      setReportEntries(data.sort((a, b) => (b.createdAt?.toMillis?.() || Date.now()) - (a.createdAt?.toMillis?.() || Date.now())));
+    } catch (err) {
+      console.error(err);
+      toast.error("حدث خطأ أثناء جلب التقرير");
+    } finally {
+      setLoadingReport(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === "reading_report") {
+      fetchReadingReport();
+    }
+  }, [viewMode]);
+
   const handleStartNewRound = async () => {
     const confirmed = await customConfirm(`هل أنت متأكد من بدء جولة جديدة بـ 80 نقطة كحد أدنى للفوز (من 100)؟ جميع النقاط ستبدأ من 0.`);
     
@@ -224,7 +269,7 @@ export default function FamilyCompetition() {
 
         const data = roundDoc.data() as FamilyCompetitionRound;
         const currentPoints = data.participants[transactionParticipant] || 0;
-        const newPoints = transactionType === "add" ? currentPoints + transactionPoints : currentPoints - transactionPoints;
+        const newPoints = (transactionType === "add" || transactionType === "read") ? currentPoints + transactionPoints : currentPoints - transactionPoints;
 
         // Update Round
         transaction.update(roundRef, {
@@ -338,7 +383,7 @@ export default function FamilyCompetition() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 mt-4 sm:mt-0">
           <button 
             onClick={() => setViewMode("competition")} 
             className={`px-4 py-2 rounded-xl text-sm font-bold transition ${viewMode === "competition" ? "bg-yellow-500 text-white shadow-lg" : "bg-white/50 text-gray-600 hover:bg-white"}`}
@@ -350,6 +395,12 @@ export default function FamilyCompetition() {
             className={`px-4 py-2 rounded-xl text-sm font-bold transition ${viewMode === "history" ? "bg-yellow-500 text-white shadow-lg" : "bg-white/50 text-gray-600 hover:bg-white"}`}
           >
             سجل الجولات
+          </button>
+          <button 
+            onClick={() => setViewMode("reading_report")} 
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-1 ${viewMode === "reading_report" ? "bg-blue-500 text-white shadow-lg" : "bg-white/50 text-gray-600 hover:bg-white"}`}
+          >
+            <BookOpen className="w-4 h-4" /> تقرير الدراسة
           </button>
         </div>
       </div>
@@ -405,16 +456,22 @@ export default function FamilyCompetition() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <button 
-                          onClick={() => { setTransactionParticipant(rp.id); setTransactionType("add"); setShowTransactionModal(true); }}
-                          className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition active:scale-95"
+                          onClick={() => { setTransactionParticipant(rp.id); setTransactionType("add"); setTransactionPoints(0); setShowTransactionModal(true); }}
+                          className="flex items-center justify-center gap-1 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition active:scale-95 text-sm"
                         >
                           <Plus className="w-4 h-4" /> إضافة
                         </button>
                         <button 
-                          onClick={() => { setTransactionParticipant(rp.id); setTransactionType("deduct"); setShowTransactionModal(true); }}
-                          className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 font-black hover:bg-red-100 dark:hover:bg-red-500/20 transition active:scale-95"
+                          onClick={() => { setTransactionParticipant(rp.id); setTransactionType("read"); setTransactionPoints(5); setTransactionReason("الدراسة والواجبات اليومية"); setShowTransactionModal(true); }}
+                          className="flex items-center justify-center gap-1 py-3 rounded-2xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-black hover:bg-blue-100 dark:hover:bg-blue-500/20 transition active:scale-95 text-sm"
+                        >
+                          <BookOpen className="w-4 h-4" /> دراسة
+                        </button>
+                        <button 
+                          onClick={() => { setTransactionParticipant(rp.id); setTransactionType("deduct"); setTransactionPoints(0); setShowTransactionModal(true); }}
+                          className="flex items-center justify-center gap-1 py-3 rounded-2xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 font-black hover:bg-red-100 dark:hover:bg-red-500/20 transition active:scale-95 text-sm"
                         >
                           <Minus className="w-4 h-4" /> خصم
                         </button>
@@ -452,8 +509,8 @@ export default function FamilyCompetition() {
                     entries.map(entry => (
                       <div key={entry.id} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-800">
                         <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${entry.type === 'add' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                            {entry.type === 'add' ? '+' : '-'}{entry.points}
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${entry.type === 'add' ? 'bg-emerald-100 text-emerald-600' : entry.type === 'read' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
+                            {entry.type === 'deduct' ? '-' : '+'}{entry.points}
                           </div>
                           <div>
                             <p className="font-bold text-gray-800 dark:text-white text-sm">
@@ -530,8 +587,8 @@ export default function FamilyCompetition() {
                       historyEntries.map(entry => (
                         <div key={entry.id} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-800">
                           <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm ${entry.type === 'add' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                              {entry.type === 'add' ? '+' : '-'}{entry.points}
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm ${entry.type === 'add' ? 'bg-emerald-100 text-emerald-600' : entry.type === 'read' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
+                              {entry.type === 'deduct' ? '-' : '+'}{entry.points}
                             </div>
                             <div>
                               <p className="font-bold text-gray-800 dark:text-white text-sm">
@@ -559,13 +616,147 @@ export default function FamilyCompetition() {
         </div>
       )}
 
+      {/* Reading Report Mode */}
+      {viewMode === "reading_report" && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 border border-gray-100 dark:border-zinc-800 shadow-sm">
+            <h3 className="text-lg font-black text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+              <Filter className="w-5 h-5 text-blue-500" />
+              تصفية التقرير
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">من تاريخ</label>
+                <input 
+                  type="date" 
+                  value={reportStartDate}
+                  onChange={(e) => setReportStartDate(e.target.value)}
+                  className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">إلى تاريخ</label>
+                <input 
+                  type="date" 
+                  value={reportEndDate}
+                  onChange={(e) => setReportEndDate(e.target.value)}
+                  className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-transparent"
+                />
+              </div>
+              <button 
+                onClick={() => fetchReadingReport()}
+                className="px-6 py-2 rounded-xl bg-blue-500 text-white font-bold hover:bg-blue-600 transition h-[42px]"
+              >
+                تطبيق
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-4">
+              <button onClick={() => {
+                const today = new Date().toISOString().split('T')[0];
+                setReportStartDate(today);
+                setReportEndDate(today);
+                fetchReadingReport(today, today);
+              }} className="px-3 py-1 rounded-lg bg-gray-100 dark:bg-zinc-800 text-xs font-bold hover:bg-gray-200 transition">اليوم</button>
+              
+              <button onClick={() => {
+                const today = new Date();
+                const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const start = weekAgo.toISOString().split('T')[0];
+                const end = today.toISOString().split('T')[0];
+                setReportStartDate(start);
+                setReportEndDate(end);
+                fetchReadingReport(start, end);
+              }} className="px-3 py-1 rounded-lg bg-gray-100 dark:bg-zinc-800 text-xs font-bold hover:bg-gray-200 transition">آخر أسبوع</button>
+
+              <button onClick={() => {
+                const today = new Date();
+                const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+                const start = monthAgo.toISOString().split('T')[0];
+                const end = today.toISOString().split('T')[0];
+                setReportStartDate(start);
+                setReportEndDate(end);
+                fetchReadingReport(start, end);
+              }} className="px-3 py-1 rounded-lg bg-gray-100 dark:bg-zinc-800 text-xs font-bold hover:bg-gray-200 transition">آخر شهر</button>
+              
+              <button onClick={() => {
+                setReportStartDate("");
+                setReportEndDate("");
+                fetchReadingReport("", "");
+              }} className="px-3 py-1 rounded-lg bg-gray-100 dark:bg-zinc-800 text-xs font-bold hover:bg-gray-200 transition">الكل</button>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 border border-gray-100 dark:border-zinc-800 shadow-sm">
+            <h3 className="text-lg font-black text-gray-800 dark:text-white mb-6">نتائج التقرير</h3>
+            {loadingReport ? (
+              <div className="text-center py-10">جاري التحميل...</div>
+            ) : reportEntries.length === 0 ? (
+              <div className="text-center py-10 text-gray-500">لا توجد سجلات دراسة مسجلة في هذه الفترة.</div>
+            ) : (
+              <>
+                {/* Summary */}
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                  {PARTICIPANTS.map(p => {
+                    const participantEntries = reportEntries.filter(e => e.participantId === p.id);
+                    const totalPoints = participantEntries.reduce((sum, e) => sum + e.points, 0);
+                    const totalBooks = participantEntries.length;
+                    return (
+                      <div key={p.id} className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl text-center border border-blue-100 dark:border-blue-800/30">
+                        <div className="w-10 h-10 mx-auto rounded-full overflow-hidden border-2 border-blue-200 mb-2">
+                          <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
+                        </div>
+                        <p className="font-bold text-gray-800 dark:text-white text-sm">{p.name}</p>
+                        <div className="flex justify-center gap-3 mt-2">
+                          <div>
+                            <p className="text-[10px] text-blue-600 dark:text-blue-400">مرات الدراسة</p>
+                            <p className="font-black text-lg text-blue-700 dark:text-blue-300">{totalBooks}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-blue-600 dark:text-blue-400">نقاط</p>
+                            <p className="font-black text-lg text-blue-700 dark:text-blue-300">{totalPoints}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+                  {reportEntries.map(entry => (
+                    <div key={entry.id} className="flex items-center justify-between p-4 rounded-2xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                          <BookOpen className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-800 dark:text-white text-md">
+                            {entry.participantName} <span className="text-blue-500 font-black mx-1">+{entry.points}</span>
+                          </p>
+                          <p className="text-sm text-gray-600 dark:text-gray-300 font-normal mt-0.5">
+                            السبب: {entry.reason}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-left shrink-0">
+                          <p className="text-xs text-gray-500 flex items-center gap-1 justify-end"><Calendar className="w-3 h-3" /> {entry.createdAt?.toDate?.().toLocaleDateString('ar-IQ')}</p>
+                          <p className="text-xs text-gray-400 mt-1">{entry.createdAt?.toDate?.().toLocaleTimeString('ar-IQ')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Transaction Modal */}
       {showTransactionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 w-full max-w-md shadow-2xl">
             <h3 className="text-xl font-black mb-4 flex items-center gap-2">
-              {transactionType === 'add' ? <Plus className="text-emerald-500"/> : <Minus className="text-red-500"/>}
-              {transactionType === 'add' ? 'إضافة نقاط' : 'خصم نقاط'} لـ {PARTICIPANTS.find(p => p.id === transactionParticipant)?.name}
+              {transactionType === 'add' ? <Plus className="text-emerald-500"/> : transactionType === 'read' ? <BookOpen className="text-blue-500"/> : <Minus className="text-red-500"/>}
+              {transactionType === 'add' ? 'إضافة نقاط' : transactionType === 'read' ? 'تسجيل دراسة' : 'خصم نقاط'} لـ {PARTICIPANTS.find(p => p.id === transactionParticipant)?.name}
             </h3>
             
             <form onSubmit={handleTransaction}>
@@ -578,7 +769,7 @@ export default function FamilyCompetition() {
                         key={pts}
                         type="button"
                         onClick={() => setTransactionPoints(pts)}
-                        className={`py-2 rounded-xl font-black transition ${transactionPoints === pts ? (transactionType === 'add' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white') : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}
+                        className={`py-2 rounded-xl font-black transition ${transactionPoints === pts ? (transactionType === 'add' ? 'bg-emerald-500 text-white' : transactionType === 'read' ? 'bg-blue-500 text-white' : 'bg-red-500 text-white') : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}
                       >
                         {pts}
                       </button>
@@ -602,7 +793,7 @@ export default function FamilyCompetition() {
                     onChange={(e) => setTransactionReason(e.target.value)}
                     className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-zinc-700 bg-transparent font-bold focus:ring-2 focus:ring-yellow-500 outline-none resize-none"
                     rows={3}
-                    placeholder={transactionType === 'add' ? 'مثال: رتبت غرفتها وساعدت في المنزل' : 'مثال: لم ترتب ألعابها'}
+                    placeholder={transactionType === 'add' ? 'مثال: رتبت غرفتها وساعدت في المنزل' : transactionType === 'read' ? 'مثال: حل الواجبات، التحضير اليومي' : 'مثال: لم ترتب ألعابها'}
                     required
                   />
                 </div>
@@ -612,7 +803,7 @@ export default function FamilyCompetition() {
                 <button 
                   type="submit"
                   disabled={!transactionPoints || !transactionReason.trim()}
-                  className={`flex-1 py-3 rounded-2xl text-white font-black transition shadow-lg ${!transactionPoints || !transactionReason.trim() ? 'opacity-50 cursor-not-allowed' : (transactionType === 'add' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/30' : 'bg-red-500 hover:bg-red-600 shadow-red-500/30')}`}
+                  className={`flex-1 py-3 rounded-2xl text-white font-black transition shadow-lg ${!transactionPoints || !transactionReason.trim() ? 'opacity-50 cursor-not-allowed' : (transactionType === 'add' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/30' : transactionType === 'read' ? 'bg-blue-500 hover:bg-blue-600 shadow-blue-500/30' : 'bg-red-500 hover:bg-red-600 shadow-red-500/30')}`}
                 >
                   حفظ العملية
                 </button>
