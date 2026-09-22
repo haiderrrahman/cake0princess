@@ -41,7 +41,11 @@ export const customConfirm = (message: string): Promise<boolean> => {
         </div>
       );
 
-      return typeof document !== 'undefined' ? createPortal(modal, document.body) : null;
+      return (
+        <>
+          {typeof document !== 'undefined' ? createPortal(modal, document.body) : null}
+        </>
+      );
     }, { 
       duration: Infinity, 
       unstyled: true,
