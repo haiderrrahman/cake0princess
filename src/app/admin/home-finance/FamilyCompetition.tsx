@@ -79,6 +79,7 @@ export default function FamilyCompetition() {
   const [transactionParticipant, setTransactionParticipant] = useState<ParticipantId | null>(null);
   const [transactionPoints, setTransactionPoints] = useState<number>(0);
   const [transactionReason, setTransactionReason] = useState("");
+  const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
   
   const [viewMode, setViewMode] = useState<"competition" | "history" | "reading_report">("competition");
   const [selectedRoundHistory, setSelectedRoundHistory] = useState<string | null>(null);
@@ -261,6 +262,9 @@ export default function FamilyCompetition() {
     const confirmed = await customConfirm(`هل أنت متأكد من تسجيل 5 نقاط كدراسة وواجبات يومية لـ ${participantName}؟`);
     
     if (!confirmed) return;
+    
+    if (isSubmittingTransaction) return;
+    setIsSubmittingTransaction(true);
 
     const transactionPoints = 5;
     const transactionReason = "الدراسة والواجبات اليومية";
@@ -305,12 +309,16 @@ export default function FamilyCompetition() {
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "حدث خطأ أثناء تسجيل العملية");
+    } finally {
+      setIsSubmittingTransaction(false);
     }
   };
 
   const handleTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeRound?.id || !transactionParticipant || !transactionReason.trim() || transactionPoints === 0) return;
+    if (!activeRound?.id || !transactionParticipant || !transactionReason.trim() || transactionPoints === 0 || isSubmittingTransaction) return;
+
+    setIsSubmittingTransaction(true);
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -323,7 +331,8 @@ export default function FamilyCompetition() {
 
         const data = roundDoc.data() as FamilyCompetitionRound;
         const currentPoints = data.participants[transactionParticipant] || 0;
-        const newPoints = (transactionType === "add" || transactionType === "read") ? currentPoints + transactionPoints : currentPoints - transactionPoints;
+        const parsedPts = Number(transactionPoints);
+        const newPoints = (transactionType === "add" || transactionType === "read") ? currentPoints + parsedPts : currentPoints - parsedPts;
 
         // Update Round
         transaction.update(roundRef, {
@@ -355,6 +364,8 @@ export default function FamilyCompetition() {
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "حدث خطأ أثناء تسجيل العملية");
+    } finally {
+      setIsSubmittingTransaction(false);
     }
   };
 
@@ -856,10 +867,10 @@ export default function FamilyCompetition() {
               <div className="flex gap-3 mt-6">
                 <button 
                   type="submit"
-                  disabled={!transactionPoints || !transactionReason.trim()}
-                  className={`flex-1 py-3 rounded-2xl text-white font-black transition shadow-lg ${!transactionPoints || !transactionReason.trim() ? 'opacity-50 cursor-not-allowed' : (transactionType === 'add' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/30' : transactionType === 'read' ? 'bg-blue-500 hover:bg-blue-600 shadow-blue-500/30' : 'bg-red-500 hover:bg-red-600 shadow-red-500/30')}`}
+                  disabled={!transactionPoints || !transactionReason.trim() || isSubmittingTransaction}
+                  className={`flex-1 py-3 rounded-2xl text-white font-black transition shadow-lg ${(!transactionPoints || !transactionReason.trim() || isSubmittingTransaction) ? 'opacity-50 cursor-not-allowed' : (transactionType === 'add' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/30' : transactionType === 'read' ? 'bg-blue-500 hover:bg-blue-600 shadow-blue-500/30' : 'bg-red-500 hover:bg-red-600 shadow-red-500/30')}`}
                 >
-                  حفظ العملية
+                  {isSubmittingTransaction ? 'جاري الحفظ...' : 'حفظ العملية'}
                 </button>
                 <button 
                   type="button"
