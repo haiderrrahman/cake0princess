@@ -254,6 +254,60 @@ export default function FamilyCompetition() {
     }
   };
 
+  const handleDirectStudy = async (participantId: ParticipantId) => {
+    if (!activeRound?.id) return;
+    
+    const participantName = PARTICIPANTS.find(p => p.id === participantId)?.name || "";
+    const confirmed = await customConfirm(`هل صحيح تم القراءة (الدراسة) لـ ${participantName} ام كلاوات؟`);
+    
+    if (!confirmed) return;
+
+    const transactionPoints = 5;
+    const transactionReason = "الدراسة والواجبات اليومية";
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const roundRef = doc(db, "familyCompetitionRounds", activeRound.id!);
+        const roundDoc = await transaction.get(roundRef);
+        
+        if (!roundDoc.exists() || roundDoc.data().status !== "active") {
+          throw new Error("الجولة غير نشطة.");
+        }
+
+        const data = roundDoc.data() as FamilyCompetitionRound;
+        const currentPoints = data.participants[participantId] || 0;
+        const newPoints = currentPoints + transactionPoints;
+
+        // Update Round
+        transaction.update(roundRef, {
+          [`participants.${participantId}`]: newPoints
+        });
+
+        // Add Entry
+        const auth = getAuth();
+        const user = auth.currentUser;
+        
+        const entryRef = doc(collection(db, "familyCompetitionEntries"));
+        transaction.set(entryRef, {
+          roundId: activeRound.id,
+          participantId: participantId,
+          participantName: participantName,
+          points: transactionPoints,
+          type: "read",
+          reason: transactionReason,
+          balanceAfter: newPoints,
+          createdAt: serverTimestamp(),
+          createdBy: user?.displayName || user?.email || "Admin"
+        });
+      });
+
+      toast.success(`تم تسجيل دراسة لـ ${participantName} بنجاح!`);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || "حدث خطأ أثناء تسجيل العملية");
+    }
+  };
+
   const handleTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeRound?.id || !transactionParticipant || !transactionReason.trim() || transactionPoints === 0) return;
@@ -464,7 +518,7 @@ export default function FamilyCompetition() {
                           <Plus className="w-4 h-4" /> إضافة
                         </button>
                         <button 
-                          onClick={() => { setTransactionParticipant(rp.id); setTransactionType("read"); setTransactionPoints(5); setTransactionReason("الدراسة والواجبات اليومية"); setShowTransactionModal(true); }}
+                          onClick={() => handleDirectStudy(rp.id)}
                           className="flex items-center justify-center gap-1 py-3 rounded-2xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-black hover:bg-blue-100 dark:hover:bg-blue-500/20 transition active:scale-95 text-sm"
                         >
                           <BookOpen className="w-4 h-4" /> دراسة
