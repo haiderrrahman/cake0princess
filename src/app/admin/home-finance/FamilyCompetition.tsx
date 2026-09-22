@@ -75,7 +75,7 @@ export default function FamilyCompetition() {
 
   // Modals
   const [showTransactionModal, setShowTransactionModal] = useState(false);
-  const [transactionType, setTransactionType] = useState<"add" | "deduct">("add");
+  const [transactionType, setTransactionType] = useState<"add" | "deduct" | "read">("add");
   const [transactionParticipant, setTransactionParticipant] = useState<ParticipantId | null>(null);
   const [transactionPoints, setTransactionPoints] = useState<number>(0);
   const [transactionReason, setTransactionReason] = useState("");
