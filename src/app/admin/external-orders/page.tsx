@@ -18,30 +18,8 @@ import CustomerProfileModal from "@/components/CustomerProfileModal";
 import MapLink from "@/components/MapLink";
 
 export default function ExternalOrdersAdmin() {
-  const [orders, setOrders] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem("cache_external_orders");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch (e) {}
-    }
-    return [];
-  });
-  const [loading, setLoading] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem("cache_external_orders");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return false;
-        }
-      } catch (e) {}
-    }
-    return true;
-  });
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<"orders" | "debts">("orders");
@@ -73,7 +51,18 @@ export default function ExternalOrdersAdmin() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Cache is now loaded synchronously in useState
+    // 0. Load cache synchronously before network
+    try {
+      const cached = localStorage.getItem("cache_external_orders");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setOrders(parsed);
+          setLoading(false);
+        }
+      }
+    } catch (e) {}
+
     // 1. Fast network query with onSnapshot for real-time and local cache
     const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -641,7 +630,7 @@ export default function ExternalOrdersAdmin() {
                         <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
                           <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                             {(order.imageUrl || order.tempImageUrl) ? (
-                              <img loading="lazy" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
+                              <img fetchPriority="high" loading="eager" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-gray-300">
                                 <Smartphone className="w-8 h-8" />
@@ -714,7 +703,7 @@ export default function ExternalOrdersAdmin() {
               {/* Image / Icon */}
               <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                 {(order.imageUrl || order.tempImageUrl) ? (
-                  <img loading="lazy" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
+                  <img fetchPriority="high" loading="eager" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-300">
                     <Smartphone className="w-8 h-8" />
