@@ -18,8 +18,30 @@ import CustomerProfileModal from "@/components/CustomerProfileModal";
 import MapLink from "@/components/MapLink";
 
 export default function ExternalOrdersAdmin() {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [orders, setOrders] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem("cache_external_orders");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem("cache_external_orders");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return false;
+        }
+      } catch (e) {}
+    }
+    return true;
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<"orders" | "debts">("orders");
@@ -51,18 +73,7 @@ export default function ExternalOrdersAdmin() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // 0. Load cache synchronously before network
-    try {
-      const cached = localStorage.getItem("cache_external_orders");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setOrders(parsed);
-          setLoading(false);
-        }
-      }
-    } catch (e) {}
-
+    // Cache is now loaded synchronously in useState
     // 1. Fast network query with onSnapshot for real-time and local cache
     const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -70,7 +81,7 @@ export default function ExternalOrdersAdmin() {
       setOrders(fetchedOrders);
       setLoading(false);
       try {
-        const cleanExt = fetchedOrders.slice(0, 150).map(o => {
+        const cleanExt = fetchedOrders.slice(0, 50).map(o => {
           const clean = { ...o };
           if (clean.imageUrl) {
             delete clean.tempImageUrl;

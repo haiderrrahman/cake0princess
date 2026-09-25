@@ -5119,7 +5119,7 @@ setEditTrip(null);
                             <div className="text-xs text-gray-500 font-medium mt-1">
                               <Calendar className="w-3 h-3 inline-block ml-1" /> {r.expDate}
                               <span className="mx-2">|</span>
-                              <ShoppingCart className="w-3 h-3 inline-block ml-1" /> {r.expName}
+                              <ShoppingCart className="w-3 h-3 inline-block ml-1" /> القائمة: {r.expName}
                             </div>
                           </div>
                           <div className="text-left">
