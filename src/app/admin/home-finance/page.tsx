@@ -51,6 +51,13 @@ interface Bill {
   createdAt: string;
 }
 
+interface ExpenseItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
 interface Expense {
   id: string;
   name: string;
@@ -58,6 +65,7 @@ interface Expense {
   amount: number;
   date: string;
   createdAt: string;
+  items?: ExpenseItem[];
 }
 
 interface Income {
@@ -408,7 +416,12 @@ export default function HomeFinanceDashboard() {
   const [familyNeedType, setFamilyNeedType] = useState<"need" | "duty">("need");
 
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
+  const [expenseItems, setExpenseItems] = useState<ExpenseItem[]>([]);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [showProductSearchModal, setShowProductSearchModal] = useState(false);
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [productSearchStart, setProductSearchStart] = useState("");
+  const [productSearchEnd, setProductSearchEnd] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string | null>(null);
 
@@ -484,7 +497,13 @@ export default function HomeFinanceDashboard() {
   }, []);
 
   useEffect(() => {
-    if (showExpenseModal && !editExpense) setExpNameInput("");
+    if (showExpenseModal && !editExpense) {
+      setExpNameInput("");
+      setExpenseItems([]);
+    } else if (showExpenseModal && editExpense) {
+      setExpNameInput(editExpense.name || "");
+      setExpenseItems(editExpense.items || []);
+    }
   }, [showExpenseModal, editExpense]);
 
   useEffect(() => {
@@ -1189,9 +1208,9 @@ setEditFuturePlan(null);
     
     const name = fd.get("name") as string;
     const category = fd.get("category") as string;
-    const amount = Number(fd.get("amount"));
+    const finalAmount = expenseItems.length > 0 ? expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0) : Number(fd.get("amount"));
     const date = fd.get("date") as string;
-    
+
     // 1. Blacklist Check
     if (name.includes("لوتو") || name.includes("عراق لوتو")) {
       if (!(await customConfirm("تحذير: هذا البند يعتبر هدراً مالياً مباشراً. هل أنت متأكد من رغبتك في تسجيله؟"))) {
@@ -1203,9 +1222,10 @@ setEditFuturePlan(null);
       id: isEdit ? editExpense!.id : Date.now().toString(),
       name,
       category,
-      amount,
+      amount: finalAmount,
       date,
       createdAt: isEdit ? editExpense!.createdAt : new Date().toISOString(),
+      items: expenseItems.length > 0 ? expenseItems : undefined
     };
 
     let updatedList = expenses;
@@ -1221,7 +1241,7 @@ setEditFuturePlan(null);
       toast.success("تم تسجيل المصروف");
       
       // 2. Micro-Shopping Alert (New Expenses Only)
-      if (category === "سوبر ماركت" && amount < 25000) {
+      if (category === "سوبر ماركت" && finalAmount < 25000) {
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         const recentSmallPurchases = updatedList.filter(e => 
@@ -2888,15 +2908,21 @@ setEditTrip(null);
         {/* ═══════════════ EXPENSES TAB ═══════════════ */}
         {activeTab === "expenses" && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-black text-gray-800 dark:text-white flex items-center gap-2">
                 <TrendingDown className="w-5 h-5 text-rose-500" />
                 سجل المصاريف
               </h2>
-              <button onClick={() => setShowExpenseModal(true)}
-                className="bg-rose-500 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-lg shadow-rose-500/25 active:scale-95 transition">
-                <Plus className="w-3.5 h-3.5" /> إضافة
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowProductSearchModal(true)}
+                  className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 active:scale-95 transition">
+                  <Activity className="w-3.5 h-3.5" /> البحث عن منتج
+                </button>
+                <button onClick={() => setShowExpenseModal(true)}
+                  className="bg-rose-500 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-lg shadow-rose-500/25 active:scale-95 transition">
+                  <Plus className="w-3.5 h-3.5" /> إضافة
+                </button>
+              </div>
             </div>
 
             {/* Budget Limits Progress Cards */}
@@ -4827,6 +4853,7 @@ setEditTrip(null);
       {[showInstallmentModal || !!editInstallment,
         showBillModal || !!editBill || !!payBillData,
         showExpenseModal || !!editExpense,
+        showProductSearchModal,
         showIncomeModal || !!editIncome,
         showInventoryModal || !!editInventory,
         !!purchaseItem,
@@ -5025,6 +5052,91 @@ setEditTrip(null);
         </div>
       )}
 
+      {/* ─── Product Search Modal ─── */}
+      {showProductSearchModal && (
+        <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center">
+          <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-md rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                <Activity className="w-5 h-5 text-indigo-500" /> بحث تفصيلي للمنتجات
+              </h3>
+              <button onClick={() => setShowProductSearchModal(false)} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
+                <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="label-sm">اسم المنتج</label>
+                <input type="text" value={productSearchQuery} onChange={e => setProductSearchQuery(e.target.value)} placeholder="مثال: حليب، بيض، دجاج..." className="input-field mb-2" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-sm">من تاريخ (اختياري)</label>
+                  <input type="date" value={productSearchStart} onChange={e => setProductSearchStart(e.target.value)} className="input-field" />
+                </div>
+                <div>
+                  <label className="label-sm">إلى تاريخ (اختياري)</label>
+                  <input type="date" value={productSearchEnd} onChange={e => setProductSearchEnd(e.target.value)} className="input-field" />
+                </div>
+              </div>
+
+              {(() => {
+                const results = allExpenses.flatMap(e => 
+                  (e.items || [])
+                    .filter(i => productSearchQuery && i.name.toLowerCase().includes(productSearchQuery.toLowerCase()))
+                    .filter(() => {
+                       const d = e.date.split('T')[0];
+                       if (productSearchStart && d < productSearchStart) return false;
+                       if (productSearchEnd && d > productSearchEnd) return false;
+                       return true;
+                    })
+                    .map(i => ({ ...i, expName: e.name, expDate: e.date.split('T')[0] }))
+                ).sort((a, b) => new Date(b.expDate).getTime() - new Date(a.expDate).getTime());
+
+                const totalQty = results.reduce((acc, curr) => acc + curr.quantity, 0);
+                const totalPrice = results.reduce((acc, curr) => acc + curr.price, 0);
+
+                if (!productSearchQuery) return <div className="text-center text-xs text-gray-500 py-4 font-bold">يرجى كتابة اسم المنتج للبحث</div>;
+                if (results.length === 0) return <div className="text-center text-xs text-gray-500 py-4 font-bold">لا توجد نتائج مطابقة</div>;
+
+                return (
+                  <div className="mt-4">
+                    <div className="bg-indigo-50 dark:bg-indigo-500/10 rounded-xl p-3 mb-3 border border-indigo-100 dark:border-indigo-500/20">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="font-bold text-indigo-700 dark:text-indigo-400">إجمالي الكمية المشتراة:</span>
+                        <span className="font-black text-indigo-900 dark:text-indigo-200">{totalQty}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm mt-1">
+                        <span className="font-bold text-indigo-700 dark:text-indigo-400">إجمالي المبلغ:</span>
+                        <span className="font-black text-indigo-900 dark:text-indigo-200">{fmt(totalPrice)} د.ع</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {results.map((r, i) => (
+                        <div key={i} className="bg-gray-50 dark:bg-zinc-800/50 p-3 rounded-xl border border-gray-100 dark:border-zinc-800 flex justify-between items-center">
+                          <div>
+                            <div className="font-bold text-sm text-gray-800 dark:text-gray-200">{r.name}</div>
+                            <div className="text-xs text-gray-500 font-medium mt-1">
+                              <Calendar className="w-3 h-3 inline-block ml-1" /> {r.expDate}
+                              <span className="mx-2">|</span>
+                              <ShoppingCart className="w-3 h-3 inline-block ml-1" /> {r.expName}
+                            </div>
+                          </div>
+                          <div className="text-left">
+                            <div className="font-black text-sm text-rose-500">{fmt(r.price)} د.ع</div>
+                            <div className="text-xs text-gray-700 dark:text-gray-300 font-bold bg-gray-200 dark:bg-zinc-700 px-2 py-1 rounded-lg inline-block mt-2">العدد: {r.quantity}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Expense Modal ─── */}
       {(showExpenseModal || !!editExpense) && (
         <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center">
@@ -5069,13 +5181,58 @@ setEditTrip(null);
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label-sm">المبلغ (د.ع)</label>
-                  <input autoComplete="off" name="amount" type="number" defaultValue={editExpense?.amount} required placeholder="0" className="input-field" />
+                  <input autoComplete="off" name="amount" type="number" 
+                    defaultValue={expenseItems.length === 0 ? editExpense?.amount : undefined} 
+                    value={expenseItems.length > 0 ? expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0) : undefined} 
+                    readOnly={expenseItems.length > 0} 
+                    required placeholder="0" 
+                    className={`input-field ${expenseItems.length > 0 ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-zinc-800' : ''}`} 
+                  />
                 </div>
                 <div>
                   <label className="label-sm">التاريخ</label>
                   <input autoComplete="off" name="date" type="date" defaultValue={editExpense?.date || today()} required className="input-field" />
                 </div>
               </div>
+
+              {/* Items List */}
+              <div className="space-y-2 mt-4 border-t border-gray-100 dark:border-zinc-800 pt-4">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="label-sm mb-0">تفاصيل القائمة (اختياري)</label>
+                  <button type="button" onClick={() => setExpenseItems([...expenseItems, {id: Date.now().toString() + Math.random(), name: "", quantity: 1, price: 0}])} className="text-xs flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1.5 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition">
+                    <Plus className="w-3 h-3" /> إضافة منتج
+                  </button>
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+                  {expenseItems.map((item, idx) => (
+                    <div key={item.id} className="flex gap-2 items-start relative bg-gray-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800">
+                      <div className="flex-1 space-y-2">
+                        <input type="text" placeholder="اسم المنتج" value={item.name} onChange={e => {
+                          const newItems = [...expenseItems];
+                          newItems[idx].name = e.target.value;
+                          setExpenseItems(newItems);
+                        }} className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
+                        <div className="flex gap-2">
+                          <input type="number" placeholder="العدد" min="0.1" step="any" value={item.quantity || ''} onChange={e => {
+                            const newItems = [...expenseItems];
+                            newItems[idx].quantity = Number(e.target.value);
+                            setExpenseItems(newItems);
+                          }} className="w-1/3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
+                          <input type="number" placeholder="السعر الإجمالي" value={item.price || ''} onChange={e => {
+                            const newItems = [...expenseItems];
+                            newItems[idx].price = Number(e.target.value);
+                            setExpenseItems(newItems);
+                          }} className="w-2/3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => setExpenseItems(expenseItems.filter(x => x.id !== item.id))} className="text-red-500 hover:text-red-600 p-2 bg-red-50 dark:bg-red-500/10 rounded-lg transition">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <button type="submit" className="w-full bg-gradient-to-l from-rose-500 to-pink-600 text-white font-black py-3.5 rounded-xl shadow-lg mt-2 active:scale-[0.98] transition">
                 حفظ
               </button>
