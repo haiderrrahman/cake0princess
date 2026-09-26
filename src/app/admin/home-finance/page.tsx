@@ -430,6 +430,7 @@ export default function HomeFinanceDashboard() {
   const [productSearchEnd, setProductSearchEnd] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string | null>(null);
+  const [focusedProductIdx, setFocusedProductIdx] = useState<number | null>(null);
 
   const [editIncome, setEditIncome] = useState<Income | null>(null);
   const [showIncomeModal, setShowIncomeModal] = useState(false);
@@ -5218,17 +5219,34 @@ setEditTrip(null);
                   </button>
                 </div>
                 <div className="space-y-2 pr-1">
-                  <datalist id="product-names">
-                    {uniqueProductNames.map((name, i) => <option key={i} value={name} />)}
-                  </datalist>
                   {expenseItems.map((item, idx) => (
                     <div key={item.id} className="flex gap-2 items-start relative bg-gray-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800">
                       <div className="flex-1 space-y-2">
-                        <input type="text" list="product-names" placeholder="اسم المنتج" value={item.name} onChange={e => {
-                          const newItems = [...expenseItems];
-                          newItems[idx].name = e.target.value;
-                          setExpenseItems(newItems);
-                        }} className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
+                        <div className="relative">
+                          <input type="text" placeholder="اسم المنتج" value={item.name} 
+                            autoComplete="off"
+                            onFocus={() => setFocusedProductIdx(idx)}
+                            onBlur={() => setTimeout(() => setFocusedProductIdx(null), 200)}
+                            onChange={e => {
+                            const newItems = [...expenseItems];
+                            newItems[idx].name = e.target.value;
+                            setExpenseItems(newItems);
+                          }} className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
+                          {focusedProductIdx === idx && uniqueProductNames.filter(n => n.includes(item.name || "")).length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-lg max-h-40 overflow-y-auto">
+                              {uniqueProductNames.filter(n => n.includes(item.name || "")).map((suggestedName, sIdx) => (
+                                <div key={sIdx} onClick={() => { 
+                                    const newItems = [...expenseItems];
+                                    newItems[idx].name = suggestedName;
+                                    setExpenseItems(newItems);
+                                    setFocusedProductIdx(null);
+                                  }} className="px-4 py-2 hover:bg-indigo-50 dark:hover:bg-zinc-700 cursor-pointer text-sm font-bold text-gray-800 dark:text-gray-200">
+                                  {suggestedName}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         <div className="flex gap-2">
                           <input type="number" placeholder="العدد" min="0.1" step="any" value={item.quantity || ''} onChange={e => {
                             const newItems = [...expenseItems];
