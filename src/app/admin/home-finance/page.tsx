@@ -1237,10 +1237,11 @@ setEditFuturePlan(null);
       category,
       amount: finalAmount,
       date,
-      createdAt: isEdit ? editExpense!.createdAt : new Date().toISOString(),
-      items: expenseItems.length > 0 ? expenseItems : undefined
+      createdAt: isEdit ? editExpense!.createdAt : new Date().toISOString()
     };
-
+    if (expenseItems.length > 0) {
+      item.items = expenseItems;
+    }
     let updatedList = expenses;
     if (isEdit) {
       updatedList = expenses.map(x => x.id === item.id ? item : x);
