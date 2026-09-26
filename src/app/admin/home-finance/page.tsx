@@ -5216,13 +5216,13 @@ setEditTrip(null);
                     <Plus className="w-3 h-3" /> إضافة منتج
                   </button>
                 </div>
-                <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+                <div className="space-y-2 pr-1">
+                  <datalist id="product-names">
+                    {uniqueProductNames.map((name, i) => <option key={i} value={name} />)}
+                  </datalist>
                   {expenseItems.map((item, idx) => (
                     <div key={item.id} className="flex gap-2 items-start relative bg-gray-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800">
                       <div className="flex-1 space-y-2">
-                        <datalist id="product-names">
-                          {uniqueProductNames.map((name, i) => <option key={i} value={name} />)}
-                        </datalist>
                         <input type="text" list="product-names" placeholder="اسم المنتج" value={item.name} onChange={e => {
                           const newItems = [...expenseItems];
                           newItems[idx].name = e.target.value;
