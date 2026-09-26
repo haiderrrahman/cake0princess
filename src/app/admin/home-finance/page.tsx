@@ -898,9 +898,7 @@ export default function HomeFinanceDashboard() {
     
     setFuturePlans(updatedList);
     syncToFirebase("futurePlans", updatedList);
-    setTimeout(() => {
-      setShowFuturePlanModal(false);
-        }, 2000);
+    setShowFuturePlanModal(false);
 setEditFuturePlan(null);
     setFuturePlanSteps([]);
   };
@@ -1019,10 +1017,8 @@ setEditFuturePlan(null);
       syncToFirebase("installments", updated);
       toast.success("تم إضافة القسط");
     }
-    setTimeout(() => {
-      setShowInstallmentModal(false);
+    setShowInstallmentModal(false);
     setEditInstallment(null);
-      }, 2000);
 };
 
   const handlePayInstallment = (inst: Installment) => {
@@ -1126,10 +1122,8 @@ setEditFuturePlan(null);
       syncToFirebase("bills", updated);
       toast.success("تم إضافة الفاتورة");
     }
-    setTimeout(() => {
-      setShowBillModal(false);
+    setShowBillModal(false);
     setEditBill(null);
-      }, 2000);
 };
 
   const handlePayBill = (bill: Bill) => {
@@ -1292,10 +1286,8 @@ setEditFuturePlan(null);
     
     e.currentTarget.reset();
     setExpNameInput("");
-    setTimeout(() => {
-      setShowExpenseModal(false);
+    setShowExpenseModal(false);
       setEditExpense(null);
-    }, 2000);
   };
 
   const handleDeleteExpense = async (id: string) => {
@@ -1332,10 +1324,8 @@ setEditFuturePlan(null);
       toast.success("تم تسجيل الدخل");
     }
     e.currentTarget.reset();
-    setTimeout(() => {
-      setShowIncomeModal(false);
+    setShowIncomeModal(false);
     setEditIncome(null);
-      }, 2000);
 };
 
   const handleDeleteIncome = async (id: string) => {
@@ -1419,9 +1409,7 @@ setEditFuturePlan(null);
     }
     e.currentTarget.reset();
     setInvNameInput("");
-    setTimeout(() => {
-      setShowInventoryModal(false);
-        }, 2000);
+    setShowInventoryModal(false);
 setEditInventory(null);
     setImageFile(null);
   };
@@ -1555,10 +1543,8 @@ setEditInventory(null);
     }
     
     e.currentTarget.reset();
-    setTimeout(() => {
-      setShowNeedModal(false);
+    setShowNeedModal(false);
     setEditNeed(null);
-        }, 2000);
 setNeedNameInput("");
   };
 
@@ -1933,10 +1919,8 @@ setNeedNameInput("");
     }
     e.currentTarget.reset();
     setDebtNameInput("");
-    setTimeout(() => {
-      setShowDebtModal(false);
+    setShowDebtModal(false);
     setEditDebt(null);
-      }, 2000);
 };
 
   const handleDeleteDebt = async (id: string) => {
@@ -2126,9 +2110,7 @@ setNeedNameInput("");
       syncToFirebase("travelTrips", updated);
       toast.success("تم إنشاء الرحلة بنجاح");
     }
-    setTimeout(() => {
-      setShowTripModal(false);
-        }, 2000);
+    setShowTripModal(false);
 setEditTrip(null);
   };
 
@@ -4881,8 +4863,7 @@ setEditTrip(null);
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">{editInstallment ? "تعديل" : "إضافة قسط / سلفة"}</h3>
-              <button onClick={() => { setTimeout(() => {
-      setShowInstallmentModal(false); setEditInstallment(null);     }, 2000);
+              <button onClick={() => { setShowInstallmentModal(false); setEditInstallment(null);
 }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
@@ -5025,8 +5006,7 @@ setEditTrip(null);
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">{editBill ? "تعديل الفاتورة" : "إضافة فاتورة"}</h3>
-              <button onClick={() => { setTimeout(() => {
-      setShowBillModal(false); setEditBill(null);     }, 2000);
+              <button onClick={() => { setShowBillModal(false); setEditBill(null);
 }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
@@ -5158,8 +5138,7 @@ setEditTrip(null);
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">{editExpense ? "تعديل المصروف" : "تسجيل مصروف"}</h3>
-              <button onClick={() => { setTimeout(() => {
-      setShowExpenseModal(false); setEditExpense(null);     }, 2000);
+              <button onClick={() => { setShowExpenseModal(false); setEditExpense(null);
 }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
@@ -5282,8 +5261,7 @@ setEditTrip(null);
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">{editIncome ? "تعديل الدخل" : "تسجيل دخل"}</h3>
-              <button onClick={() => { setTimeout(() => {
-      setShowIncomeModal(false); setEditIncome(null);     }, 2000);
+              <button onClick={() => { setShowIncomeModal(false); setEditIncome(null);
 }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
@@ -5379,8 +5357,7 @@ setEditTrip(null);
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">{editInventory ? "تعديل المادة" : "إضافة مادة"}</h3>
-              <button onClick={() => { setTimeout(() => {
-      setShowInventoryModal(false);     }, 2000);
+              <button onClick={() => { setShowInventoryModal(false);
 setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
@@ -5530,8 +5507,7 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
             <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gray-50/50 dark:bg-zinc-800/50">
                 <h3 className="font-black text-gray-800 dark:text-white text-lg">{editNeed ? "تعديل احتياج" : "إضافة احتياج"}</h3>
-                <button onClick={() => { setTimeout(() => {
-      setShowNeedModal(false); setEditNeed(null);     }, 2000);
+                <button onClick={() => { setShowNeedModal(false); setEditNeed(null);
 }} className="p-2 bg-white dark:bg-zinc-800 rounded-full text-gray-400 hover:text-gray-600 transition shadow-sm">
                   <X className="w-4 h-4" />
                 </button>
@@ -5604,8 +5580,7 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
             <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gray-50/50 dark:bg-zinc-800/50">
                 <h3 className="font-black text-gray-800 dark:text-white text-lg">{editDebt ? "تعديل سجل" : "إضافة سجل"}</h3>
-                <button onClick={() => { setTimeout(() => {
-      setShowDebtModal(false); setEditDebt(null);     }, 2000);
+                <button onClick={() => { setShowDebtModal(false); setEditDebt(null);
 }} className="p-2 bg-white dark:bg-zinc-800 rounded-full text-gray-400 hover:text-gray-600 transition shadow-sm">
                   <X className="w-4 h-4" />
                 </button>
@@ -6053,8 +6028,7 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
                 <Target className="w-5 h-5 text-violet-500" />
                 {editFuturePlan ? 'تعديل الخطة' : 'إضافة خطة جديدة'}
               </h3>
-              <button onClick={() => { setTimeout(() => {
-      setShowFuturePlanModal(false);     }, 2000);
+              <button onClick={() => { setShowFuturePlanModal(false);
 setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 bg-gray-100 dark:bg-zinc-800 rounded-full p-1.5 transition">
                 <X className="w-5 h-5" />
               </button>
