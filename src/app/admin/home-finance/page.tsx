@@ -178,6 +178,7 @@ const today = () => new Date().toISOString().split("T")[0];
 const EXPENSE_CATEGORIES = [
   { label: "مطاعم وكوفيهات", icon: "🍽️", color: "from-orange-500 to-amber-500" },
   { label: "مخضر وفواكه", icon: "🍎", color: "from-green-400 to-emerald-400" },
+  { label: "لحوم ودجاج", icon: "🥩", color: "from-red-600 to-rose-700" },
   { label: "حاسوب", icon: "💻", color: "from-blue-600 to-indigo-600" },
   { label: "سفر", icon: "✈️", color: "from-sky-400 to-blue-500" },
   { label: "سوبر ماركت", icon: "🛒", color: "from-green-500 to-emerald-500" },
