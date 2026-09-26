@@ -179,6 +179,11 @@ const EXPENSE_CATEGORIES = [
   { label: "مطاعم وكوفيهات", icon: "🍽️", color: "from-orange-500 to-amber-500" },
   { label: "مخضر وفواكه", icon: "🍎", color: "from-green-400 to-emerald-400" },
   { label: "لحوم ودجاج", icon: "🥩", color: "from-red-600 to-rose-700" },
+  { label: "خبز وصمون", icon: "🥖", color: "from-amber-600 to-yellow-600" },
+  { label: "حلويات ومعجنات", icon: "🍰", color: "from-pink-500 to-rose-500" },
+  { label: "كرزات", icon: "🥜", color: "from-orange-700 to-amber-700" },
+  { label: "طرشي ومخللات", icon: "🥒", color: "from-green-600 to-emerald-700" },
+  { label: "اجبان والبان", icon: "🧀", color: "from-yellow-400 to-yellow-500" },
   { label: "حاسوب", icon: "💻", color: "from-blue-600 to-indigo-600" },
   { label: "سفر", icon: "✈️", color: "from-sky-400 to-blue-500" },
   { label: "سوبر ماركت", icon: "🛒", color: "from-green-500 to-emerald-500" },
@@ -469,6 +474,13 @@ export default function HomeFinanceDashboard() {
       ...bills.map(b => b.name)
     ])).filter(Boolean);
   }, [inventory, expenses, debts, installments, bills, mounted]);
+
+  const uniqueProductNames = useMemo(() => {
+    if (!mounted) return [];
+    return Array.from(new Set(
+      expenses.flatMap(e => (e.items || []).map(i => i.name))
+    )).filter(Boolean);
+  }, [expenses, mounted]);
 
   const [needNameInput, setNeedNameInput] = useState("");
   const [showNeedSuggestions, setShowNeedSuggestions] = useState(false);
@@ -5208,22 +5220,25 @@ setEditTrip(null);
                   {expenseItems.map((item, idx) => (
                     <div key={item.id} className="flex gap-2 items-start relative bg-gray-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800">
                       <div className="flex-1 space-y-2">
-                        <input type="text" placeholder="اسم المنتج" value={item.name} onChange={e => {
+                        <datalist id="product-names">
+                          {uniqueProductNames.map((name, i) => <option key={i} value={name} />)}
+                        </datalist>
+                        <input type="text" list="product-names" placeholder="اسم المنتج" value={item.name} onChange={e => {
                           const newItems = [...expenseItems];
                           newItems[idx].name = e.target.value;
                           setExpenseItems(newItems);
-                        }} className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
+                        }} className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
                         <div className="flex gap-2">
                           <input type="number" placeholder="العدد" min="0.1" step="any" value={item.quantity || ''} onChange={e => {
                             const newItems = [...expenseItems];
                             newItems[idx].quantity = Number(e.target.value);
                             setExpenseItems(newItems);
-                          }} className="w-1/3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
+                          }} className="w-1/3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
                           <input type="number" placeholder="السعر الإجمالي" value={item.price || ''} onChange={e => {
                             const newItems = [...expenseItems];
                             newItems[idx].price = Number(e.target.value);
                             setExpenseItems(newItems);
-                          }} className="w-2/3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
+                          }} className="w-2/3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
                         </div>
                       </div>
                       <button type="button" onClick={() => setExpenseItems(expenseItems.filter(x => x.id !== item.id))} className="text-red-500 hover:text-red-600 p-2 bg-red-50 dark:bg-red-500/10 rounded-lg transition">

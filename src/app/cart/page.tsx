@@ -31,11 +31,11 @@ export default function Cart() {
   return (
     <div className="flex flex-col min-h-screen pb-32">
       {/* Header */}
-      <header className="px-6 pt-4 pb-4 bg-white dark:bg-zinc-950 sticky top-0 z-40 flex items-center gap-4">
-        <Link href="/" className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full transition">
-          <ArrowRight className="w-6 h-6" />
+      <header className="px-6 pt-20 pb-4 bg-white dark:bg-zinc-950 sticky top-0 z-40 flex items-center gap-4 relative">
+        <Link href="/" className="absolute right-6 p-2 hover:bg-gray-100 dark:bg-zinc-800/50 rounded-full transition z-10 bg-gray-50 border border-gray-100 dark:border-zinc-800">
+          <ArrowRight className="w-5 h-5" />
         </Link>
-        <h1 className="text-2xl font-bold">سلة المشتريات</h1>
+        <h1 className="text-2xl font-black w-full text-center">سلة المشتريات</h1>
       </header>
 
       {/* Cart Items */}
