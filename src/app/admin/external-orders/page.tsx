@@ -191,19 +191,6 @@ export default function ExternalOrdersAdmin() {
 
     setSubmitting(true);
     try {
-      let imageUrl = "";
-      if (imageFile) {
-        if (!navigator.onLine) {
-          toast.error("أنت غير متصل بالإنترنت. سيتم الحفظ بدون رفع الصورة.");
-        } else {
-          // Compress image before upload to make it fast
-          const compressedFile = await compressImage(imageFile);
-          const fileRef = ref(storage, `external_orders/${Date.now()}_${compressedFile.name}`);
-          await uploadBytes(fileRef, compressedFile);
-          imageUrl = await getDownloadURL(fileRef);
-        }
-      }
-
       const parseIqdInput = (val: string | number) => {
         let num = Number(val) || 0;
         if (num > 0 && num < 1000) num *= 1000;
@@ -225,17 +212,16 @@ export default function ExternalOrdersAdmin() {
           phone: customerPhone,
           address: address || "",
           platform: platform || "واتساب",
-          points: Math.floor(numPrice / 1000), // 1 point per 1000 IQD
+          points: Math.floor(numPrice / 1000),
           totalSpent: numPrice,
           ordersCount: 1,
           createdAt: serverTimestamp(),
         });
-        
         promisesToRace.push(custRefPromise.then(ref => { customerId = ref.id; }));
       } else {
         const docRef = doc(db, "customers", customerId!);
         const updateCustPromise = updateDoc(docRef, {
-          phone: customerPhone || existingCustomer.phone || "", // Update if provided
+          phone: customerPhone || existingCustomer.phone || "",
           address: address || existingCustomer.address || "",
           platform: platform || existingCustomer.platform || "واتساب",
           points: (existingCustomer.points || 0) + Math.floor(numPrice / 1000),
@@ -260,7 +246,14 @@ export default function ExternalOrdersAdmin() {
         }
       }
 
-      const orderData = {
+      // ── Build base order data WITHOUT image first ──────────────────────────
+      // If editing: only include imageUrl if the user picked a NEW file or we still
+      // have the existing URL (never send empty string – that would wipe the image).
+      const existingImageUrl = isEditMode
+        ? orders.find(o => o.id === editOrderId)?.imageUrl || ""
+        : "";
+
+      const orderData: Record<string, any> = {
         customerId: customerId || "offline-temp-id",
         customerName,
         customerPhone,
@@ -272,23 +265,52 @@ export default function ExternalOrdersAdmin() {
         profit,
         deliveryDate,
         ...(extractedLocationUrl && { locationUrl: extractedLocationUrl }),
-        ...(imageUrl && { imageUrl }),
         ...(!isEditMode && { createdAt: serverTimestamp() }),
       };
+
+      // Preserve existing image on edit when no new file chosen
+      if (isEditMode && !imageFile && existingImageUrl) {
+        orderData.imageUrl = existingImageUrl;
+      }
+
+      let savedDocId: string | null = isEditMode ? editOrderId : null;
 
       if (isEditMode && editOrderId) {
         await updateDoc(doc(db, "external_orders", editOrderId), orderData);
         toast.success("تم التحديث بنجاح");
       } else {
-        await addDoc(collection(db, "external_orders"), orderData);
+        const newDocRef = await addDoc(collection(db, "external_orders"), orderData);
+        savedDocId = newDocRef.id;
         if (!navigator.onLine) {
           toast.success("تم الحفظ محلياً (قيد المزامنة)");
         } else {
-          toast.success("تم إضافة الطلب بنجاح");
+          toast.success("تم إضافة الطلب بنجاح ✔");
         }
       }
 
-      // We removed the addOrderPromise Promise.race because we handle it in if-else
+      // ── Upload image in the background (non-blocking) ──────────────────────
+      // The order is already saved. Now upload the image separately so the
+      // user never waits for the upload before seeing the order.
+      if (imageFile && savedDocId && navigator.onLine) {
+        const docId = savedDocId; // capture for async closure
+        const fileToUpload = imageFile;
+        toast.info("📸 يتم رفع الصورة في الخلفية...", { duration: 2000 });
+        (async () => {
+          try {
+            const compressedFile = await compressImage(fileToUpload);
+            const fileRef = ref(storage, `external_orders/${Date.now()}_${compressedFile.name}`);
+            await uploadBytes(fileRef, compressedFile);
+            const uploadedUrl = await getDownloadURL(fileRef);
+            await updateDoc(doc(db, "external_orders", docId), { imageUrl: uploadedUrl, tempImageUrl: null });
+            // onSnapshot will pick up the change automatically – no manual state update needed
+          } catch (err) {
+            console.error("Background image upload failed:", err);
+            toast.error("تعذّر رفع الصورة، يمكنك تعديل الطلب لاحقاً لإعادة المحاولة.");
+          }
+        })();
+      } else if (imageFile && !navigator.onLine) {
+        toast.warning("لا يوجد اتصال – ستُرفع الصورة تلقائياً عند عودة الإنترنت.");
+      }
 
       // Reset form
       setCustomerName("");
@@ -393,9 +415,10 @@ export default function ExternalOrdersAdmin() {
     if (await customConfirm("هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.")) {
       try {
         await deleteDoc(doc(db, "external_orders", id));
-        setOrders(orders.filter(o => o.id !== id));
+        // onSnapshot will update the list automatically – no manual filter needed
       } catch (error) {
         console.error("Error deleting order:", error);
+        toast.error("حدث خطأ أثناء الحذف");
       }
     }
   };
