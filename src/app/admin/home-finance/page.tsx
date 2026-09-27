@@ -212,6 +212,7 @@ const EXPENSE_CATEGORIES = [
   { label: "ألعاب", icon: "🧸", color: "from-amber-400 to-yellow-500" },
   { label: "مفروشات", icon: "🛏️", color: "from-teal-400 to-emerald-500" },
   { label: "ألعاب ويانصيب", icon: "🎲", color: "from-indigo-500 to-purple-500" },
+  { label: "بنوك وصراف", icon: "🏦", color: "from-blue-600 to-sky-700" },
 ];
 
 const BILL_CATEGORIES = ["كهرباء", "ماء", "إنترنت", "إيجار", "هاتف", "تنظيف", "غاز"];
