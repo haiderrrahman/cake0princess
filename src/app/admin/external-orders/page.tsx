@@ -78,7 +78,25 @@ export default function ExternalOrdersAdmin() {
     const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
     const unsubscribe = onSnapshot(q, (snap) => {
       const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-      setOrders(fetchedOrders);
+
+      // fromCache = true means this is Firestore's offline cache emit (fast, before server).
+      // Preserve imageUrl already loaded from localStorage so images never flicker away.
+      if (snap.metadata.fromCache) {
+        setOrders(prev => {
+          const prevMap = new Map(prev.map((o: any) => [o.id, o]));
+          return fetchedOrders.map(o => {
+            const existing = prevMap.get(o.id);
+            if (!o.imageUrl && existing?.imageUrl) {
+              return { ...o, imageUrl: existing.imageUrl };
+            }
+            return o;
+          });
+        });
+      } else {
+        // Server confirmed data – trust fully
+        setOrders(fetchedOrders);
+      }
+
       setLoading(false);
       try {
         const cleanExt = fetchedOrders.slice(0, 50).map(o => {

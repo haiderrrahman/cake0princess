@@ -312,7 +312,25 @@ function AdminHubContent() {
     const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
     const unsubExt = onSnapshot(qExt, (snap) => {
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-      setExternalOrders(allExt);
+      
+      // If this is a local Firestore cache emit (before server responds),
+      // preserve imageUrl from existing state so images don't flicker/disappear
+      if (snap.metadata.fromCache) {
+        setExternalOrders(prev => {
+          const prevMap = new Map(prev.map((o: any) => [o.id, o]));
+          return allExt.map(o => {
+            const existing = prevMap.get(o.id);
+            // Keep existing imageUrl if this emit doesn't have one yet
+            if (!o.imageUrl && existing?.imageUrl) {
+              return { ...o, imageUrl: existing.imageUrl };
+            }
+            return o;
+          });
+        });
+      } else {
+        // Server data – always trust it fully
+        setExternalOrders(allExt);
+      }
     });
 
     const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"));
@@ -329,6 +347,7 @@ function AdminHubContent() {
 
     return () => { unsubExt(); unsubOrders(); unsubStore(); };
   }, []);
+
 
   // Reactive Stats Calculation
   useEffect(() => {
