@@ -231,6 +231,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         isBismayah: deliveryType === "bismayah", bismayahComplex, bismayahBuilding, bismayahApt, deliveryType,
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,
+        // Preserve existing imageUrl when no new image is selected
+        ...(!imageFile && order.imageUrl ? { imageUrl: order.imageUrl } : {}),
         ...(tempImageUrl ? { tempImageUrl } : {})
       });
 
@@ -290,7 +292,9 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         isBismayah: deliveryType === "bismayah", bismayahComplex, bismayahBuilding, bismayahApt, deliveryType,
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl,
         deliveryDate,
-        ...(tempImageUrl ? { tempImageUrl } : {})
+        // Always keep existing imageUrl — never let it disappear from state
+        imageUrl: order.imageUrl || "",
+        ...(tempImageUrl ? { tempImageUrl } : {}),
       });
       onClose();
     } catch (err) {
