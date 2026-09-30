@@ -273,7 +273,7 @@ export default function AdminDashboard() {
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-lg border border-white/10 shrink-0 bg-white/5 p-1 flex items-center justify-center">
+              <div className="w-[52px] h-[52px] rounded-2xl overflow-hidden shadow-xl border-2 border-white/90 shrink-0 bg-white p-1 flex items-center justify-center ring-2 ring-pink-500/20">
                 <img src="/cp-logo.png" alt="كيك الأميرة" className="w-full h-full object-contain" />
               </div>
               <div>
