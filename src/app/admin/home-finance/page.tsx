@@ -19,6 +19,7 @@ import FamilyCompetitionOverview from "./FamilyCompetitionOverview";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
+import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
 
 // ══════════════════════════════════════════════
 // TYPES
@@ -1241,23 +1242,8 @@ setEditFuturePlan(null);
       reader.readAsDataURL(file);
       const dataUrl = await base64Promise;
 
-      setScanStatusText("جاري قراءة المنتجات والأسعار بالذكاء الاصطناعي ⚡...");
+      const data = await scanReceiptWithGemini(dataUrl, (status) => setScanStatusText(status));
 
-      const res = await fetch("/api/scan-receipt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image: dataUrl,
-          mimeType: file.type || "image/jpeg"
-        })
-      });
-
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "فشل مسح الفاتورة بالذكاء الاصطناعي");
-      }
-
-      const { data } = json;
       if (data.storeName) {
         setExpNameInput(data.storeName);
       }
@@ -1271,7 +1257,7 @@ setEditFuturePlan(null);
         setExpenseItems(data.items);
       }
 
-      toast.success(`تم استخراج ${data.items?.length || 0} مادة بقيمة ${fmt(data.totalAmount)} د.ع بنجاح! ✨`, {
+      toast.success(`تم استخراج ${data.items.length} مادة بقيمة ${fmt(data.totalAmount)} د.ع بنجاح! ✨`, {
         duration: 5000
       });
     } catch (err: any) {
