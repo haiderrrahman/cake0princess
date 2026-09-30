@@ -77,8 +77,8 @@ export default function InstallPrompt() {
   return (
     <div className="fixed top-4 left-4 right-4 z-[100] md:left-auto md:right-4 md:w-96 bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl p-4 border border-pink-100 dark:border-zinc-800 animate-in slide-in-from-top-4 fade-in duration-300">
       <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-xl bg-pink-50 dark:bg-pink-950 flex items-center justify-center text-pink-600 dark:text-purple-300 text-2xl flex-shrink-0 shadow-inner">
-          👑
+        <div className="w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0 shadow-md border border-pink-100 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 flex items-center justify-center">
+          <img src="/cp-logo.png" alt="كيك الأميرة" className="w-full h-full object-contain rounded-xl" />
         </div>
         <div className="flex-1">
           <h3 className="font-bold text-gray-900 dark:text-white">ثبت تطبيق كيك الأميرة!</h3>

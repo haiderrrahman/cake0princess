@@ -2464,9 +2464,12 @@ setEditTrip(null);
 
         {/* Back + Title */}
         <div className="relative z-10 flex items-center gap-3 mb-5">
-          <Link href="/admin" className="w-10 h-10 bg-white/15 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 hover:bg-white/25 transition">
+          <Link href="/admin" className="w-10 h-10 bg-white/15 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 hover:bg-white/25 transition shrink-0">
             <ArrowRight className="w-5 h-5 text-white" />
           </Link>
+          <div className="w-11 h-11 rounded-2xl overflow-hidden shadow-lg border border-white/20 shrink-0 bg-white/10 p-1 flex items-center justify-center">
+            <img src="/cp-logo.png" alt="كيك الأميرة" className="w-full h-full object-contain" />
+          </div>
           <div className="flex-1">
             <div className="flex flex-col gap-1.5">
               <span className="bg-white/20 text-white border border-white/30 px-3 py-1 rounded-full text-[11px] font-bold shadow-sm flex items-center justify-center gap-1.5 backdrop-blur-md w-max">

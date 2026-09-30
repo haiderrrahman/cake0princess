@@ -11,14 +11,43 @@ const cairo = Cairo({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://cake0princess.vercel.app"),
   title: "كيك الأميرة | Cake Princess",
   description: "اطلب أفضل أنواع الكيك وتعلم فنون التزيين بخطوة بخطوة",
   manifest: "/manifest.json",
-
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/cp-logo.png", sizes: "1024x1024", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "كيك الأميرة",
+  },
+  openGraph: {
+    title: "كيك الأميرة | Cake Princess",
+    description: "اطلب أفضل أنواع الكيك وتعلم فنون التزيين بخطوة بخطوة",
+    siteName: "كيك الأميرة",
+    images: [
+      {
+        url: "/cp-logo.png",
+        width: 1024,
+        height: 1024,
+        alt: "كيك الأميرة | Cake Princess",
+      },
+    ],
+    locale: "ar_IQ",
+    type: "website",
   },
 };
 

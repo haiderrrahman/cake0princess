@@ -272,9 +272,14 @@ export default function AdminDashboard() {
 
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-2xl font-black text-white tracking-tight mb-0.5">مقر القيادة المركزية 👑</h1>
-              <p className="text-xs text-pink-200 font-bold">أهلاً {user?.displayName?.split(" ")[0] || "مديرة كيك الأميرة"} ✨</p>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-lg border border-white/10 shrink-0 bg-white/5 p-1 flex items-center justify-center">
+                <img src="/cp-logo.png" alt="كيك الأميرة" className="w-full h-full object-contain" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-black text-white tracking-tight mb-0.5">مقر القيادة المركزية 👑</h1>
+                <p className="text-xs text-pink-200 font-bold">أهلاً {user?.displayName?.split(" ")[0] || "مديرة كيك الأميرة"} ✨</p>
+              </div>
             </div>
             <button
               onClick={() => setShowQuickEntry(true)}
