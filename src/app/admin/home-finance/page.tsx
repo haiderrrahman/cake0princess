@@ -1,13 +1,14 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ArrowRight, Plus, Minus, Check, Wallet, CreditCard, Receipt,
   TrendingDown, TrendingUp, AlertCircle, ShoppingCart, X, Trash2,
   Edit2, Car, Home, Shirt, Sofa, Wrench, Users, DollarSign,
   Calendar, ChevronDown, ChevronUp, Clock, BarChart3, PiggyBank,
-  Banknote, Activity, Package, Zap, Heart, BookOpen, ChevronRight, ClipboardCopy, Plane,
+  Banknote, Activity, Package, Zap, Heart, BookOpen, ChevronRight, ChevronLeft, ClipboardCopy, Plane,
   Map as MapIcon, MapPin, ArrowLeft, Calculator, Share2, Target, Flag, Circle, CheckCircle2,
-  MessageCircle, Send, Bot, Sparkles, BrainCircuit, CheckCircle, PackageCheck
+  MessageCircle, Send, Bot, Sparkles, BrainCircuit, CheckCircle, PackageCheck,
+  Camera, Upload, ScanLine, FileText, ListPlus, Copy, Search, RefreshCw, Loader2
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -425,6 +426,16 @@ export default function HomeFinanceDashboard() {
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [expenseItems, setExpenseItems] = useState<ExpenseItem[]>([]);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expCategoryInput, setExpCategoryInput] = useState<string>("سوبر ماركت");
+  const [expDateInput, setExpDateInput] = useState<string>(today());
+  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
+  const [scanStatusText, setScanStatusText] = useState("");
+  const [showQuickPasteModal, setShowQuickPasteModal] = useState(false);
+  const [quickPasteText, setQuickPasteText] = useState("");
+  const [viewingReceiptExpense, setViewingReceiptExpense] = useState<Expense | null>(null);
+  const [receiptItemFilter, setReceiptItemFilter] = useState("");
+  const receiptFileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [showProductSearchModal, setShowProductSearchModal] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [productSearchStart, setProductSearchStart] = useState("");
@@ -514,9 +525,13 @@ export default function HomeFinanceDashboard() {
   useEffect(() => {
     if (showExpenseModal && !editExpense) {
       setExpNameInput("");
+      setExpCategoryInput("سوبر ماركت");
+      setExpDateInput(today());
       setExpenseItems([]);
     } else if (showExpenseModal && editExpense) {
       setExpNameInput(editExpense.name || "");
+      setExpCategoryInput(editExpense.category || "سوبر ماركت");
+      setExpDateInput(editExpense.date || today());
       setExpenseItems(editExpense.items || []);
     }
   }, [showExpenseModal, editExpense]);
@@ -1208,17 +1223,145 @@ setEditFuturePlan(null);
   };
 
   // ──────────────────────────────────────────
-  // EXPENSE HANDLERS
+  // EXPENSE HANDLERS & SMART AI SCANNER
   // ──────────────────────────────────────────
+  const handleScanReceipt = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsScanningReceipt(true);
+      setScanStatusText("جاري فحص وتجهيز صورة الفاتورة...");
+
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(file);
+      const dataUrl = await base64Promise;
+
+      setScanStatusText("جاري قراءة المنتجات والأسعار بالذكاء الاصطناعي ⚡...");
+
+      const res = await fetch("/api/scan-receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: dataUrl,
+          mimeType: file.type || "image/jpeg"
+        })
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "فشل مسح الفاتورة بالذكاء الاصطناعي");
+      }
+
+      const { data } = json;
+      if (data.storeName) {
+        setExpNameInput(data.storeName);
+      }
+      if (data.category) {
+        setExpCategoryInput(data.category);
+      }
+      if (data.date) {
+        setExpDateInput(data.date);
+      }
+      if (Array.isArray(data.items) && data.items.length > 0) {
+        setExpenseItems(data.items);
+      }
+
+      toast.success(`تم استخراج ${data.items?.length || 0} مادة بقيمة ${fmt(data.totalAmount)} د.ع بنجاح! ✨`, {
+        duration: 5000
+      });
+    } catch (err: any) {
+      console.error("Receipt scan failed:", err);
+      toast.error(err.message || "حدث خطأ أثناء مسح الفاتورة");
+    } finally {
+      setIsScanningReceipt(false);
+      setScanStatusText("");
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  const handleQuickPasteSubmit = () => {
+    if (!quickPasteText.trim()) return;
+
+    const lines = quickPasteText.split("\n").map(l => l.trim()).filter(Boolean);
+    const newItems: ExpenseItem[] = [];
+
+    for (const line of lines) {
+      const cleanedLine = line.replace(/^[\d]+\.\s*/, "").replace(/^[-•*]\s*/, "").trim();
+      const match = cleanedLine.match(/^(.*?)(?:[\s,:=-]+)(\d+(?:[.,]\d+)?)(?:[\s,:=-]+(\d+(?:[.,]\d+)?))?$/);
+      if (match) {
+        let name = match[1].trim();
+        let num1 = parseFloat(match[2].replace(/,/g, ""));
+        let num2 = match[3] ? parseFloat(match[3].replace(/,/g, "")) : null;
+
+        let quantity = 1;
+        let price = 0;
+
+        if (num2 !== null) {
+          if (num1 > 100 && num2 <= 100) {
+            price = num1;
+            quantity = num2;
+          } else {
+            quantity = num1 || 1;
+            price = num2;
+          }
+        } else {
+          price = num1;
+        }
+
+        if (name && price > 0) {
+          newItems.push({
+            id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+            name,
+            quantity,
+            price
+          });
+          continue;
+        }
+      }
+
+      const parts = cleanedLine.split(/\s+/);
+      if (parts.length >= 2) {
+        const lastPart = parts[parts.length - 1].replace(/[^\d.]/g, "");
+        const price = parseFloat(lastPart) || 0;
+        const name = parts.slice(0, parts.length - 1).join(" ");
+        if (name && price > 0) {
+          newItems.push({
+            id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+            name,
+            quantity: 1,
+            price
+          });
+        }
+      }
+    }
+
+    if (newItems.length > 0) {
+      setExpenseItems(prev => [...prev, ...newItems]);
+      toast.success(`تمت إضافة ${newItems.length} مواد بنجاح!`);
+      setShowQuickPasteModal(false);
+      setQuickPasteText("");
+    } else {
+      toast.error("لم يتم التعرف على أي مواد. تأكد من إدخال اسم المادة والسعر في كل سطر.");
+    }
+  };
+
   const handleSaveExpense = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const isEdit = !!editExpense;
     
-    const name = fd.get("name") as string;
-    const category = fd.get("category") as string;
-    const finalAmount = expenseItems.length > 0 ? expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0) : Number(fd.get("amount"));
-    const date = fd.get("date") as string;
+    const name = (expNameInput || (fd.get("name") as string) || "").trim();
+    const category = expCategoryInput || (fd.get("category") as string) || "سوبر ماركت";
+    const validItems = expenseItems.filter(i => (i.name || "").trim() !== "");
+    const finalAmount = validItems.length > 0 
+      ? validItems.reduce((acc, curr) => acc + (curr.price || 0), 0) 
+      : Number(fd.get("amount") || 0);
+    const date = expDateInput || (fd.get("date") as string) || today();
 
     // 1. Blacklist Check
     if (name.includes("لوتو") || name.includes("عراق لوتو")) {
@@ -1235,8 +1378,8 @@ setEditFuturePlan(null);
       date,
       createdAt: isEdit ? editExpense!.createdAt : new Date().toISOString()
     };
-    if (expenseItems.length > 0) {
-      item.items = expenseItems;
+    if (validItems.length > 0) {
+      item.items = validItems;
     }
     let updatedList = expenses;
     if (isEdit) {
@@ -1287,8 +1430,11 @@ setEditFuturePlan(null);
     
     e.currentTarget.reset();
     setExpNameInput("");
+    setExpCategoryInput("سوبر ماركت");
+    setExpDateInput(today());
+    setExpenseItems([]);
     setShowExpenseModal(false);
-      setEditExpense(null);
+    setEditExpense(null);
   };
 
   const handleDeleteExpense = async (id: string) => {
@@ -3160,6 +3306,21 @@ setEditTrip(null);
                           <span className="text-[9px] bg-gray-100 dark:bg-zinc-800 text-gray-500 px-1.5 py-0.5 rounded-full font-bold truncate max-w-[80px]">{exp.category}</span>
                           <span className="text-[9px] text-gray-400">{exp.createdAt ? new Date(exp.createdAt).toLocaleDateString("ar-IQ") : new Date(exp.date).toLocaleDateString("ar-IQ")}</span>
                         </div>
+
+                        {/* Items badge / view receipt button */}
+                        {exp.items && exp.items.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
+                            className="w-full mt-1.5 py-1 px-2.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-[10px] font-black flex items-center justify-between border border-indigo-100 dark:border-indigo-800/40 transition active:scale-[0.98]"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <Receipt className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                              <span>تفاصيل القائمة ({exp.items.length} مواد)</span>
+                            </span>
+                            <ChevronLeft className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -5133,125 +5294,581 @@ setEditTrip(null);
         </div>
       )}
 
-      {/* ─── Expense Modal ─── */}
+      {/* ─── Hidden File Input for Receipt Scanner ─── */}
+      <input
+        type="file"
+        ref={receiptFileInputRef}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleScanReceipt}
+      />
+
+      {/* ─── Expense Modal (Modernized & Super Fast) ─── */}
       {(showExpenseModal || !!editExpense) && (
-        <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center">
-          <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-sm rounded-t-[32px] sm:rounded-[32px] px-5 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[calc(100svh-80px)] overflow-y-auto mb-[80px] sm:mb-0">
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">{editExpense ? "تعديل المصروف" : "تسجيل مصروف"}</h3>
-              <button onClick={() => { setShowExpenseModal(false); setEditExpense(null);
-}} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
+        <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-2xl rounded-t-[32px] sm:rounded-[32px] px-5 sm:px-7 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[92svh] overflow-y-auto mb-[75px] sm:mb-0 relative custom-scrollbar">
+            
+            {/* AI Scanning Overlay */}
+            {isScanningReceipt && (
+              <div className="absolute inset-0 z-50 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md rounded-[32px] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+                <div className="relative mb-5">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-500 to-indigo-600 animate-spin flex items-center justify-center p-1">
+                    <div className="w-full h-full bg-white dark:bg-zinc-950 rounded-full flex items-center justify-center">
+                      <ScanLine className="w-8 h-8 text-rose-500 animate-pulse" />
+                    </div>
+                  </div>
+                  <Sparkles className="w-6 h-6 text-amber-400 absolute -top-1 -right-1 animate-bounce" />
+                </div>
+                <h4 className="text-lg font-black text-gray-900 dark:text-white mb-2">
+                  جاري معالجة الفاتورة بالذكاء الاصطناعي ✨
+                </h4>
+                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 max-w-sm animate-pulse">
+                  {scanStatusText || "جاري استخراج أسماء المواد، الكميات، والأسعار الإجمالية بدقة..."}
+                </p>
+                <div className="mt-5 flex items-center gap-2 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-500/20">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> يرجى الانتظار بضع ثوانٍ...
+                </div>
+              </div>
+            )}
+
+            {/* Header */}
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center text-white shadow-md shadow-rose-500/20">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white">
+                    {editExpense ? "تعديل المصروف" : "تسجيل مصروف جديد"}
+                  </h3>
+                  <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                    يمكنك كتابة المصروف يدوياً أو مسح فاتورته بالذكاء الاصطناعي
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowExpenseModal(false); setEditExpense(null); }} 
+                className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition"
+              >
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
-            <form onSubmit={handleSaveExpense} className="space-y-3">
-              <div className="relative">
-                <label className="label-sm">وصف المصروف</label>
-                <input name="name" type="text" required autoComplete="off" 
-                  value={expNameInput || editExpense?.name || ""}
-                  onChange={e => {
-                    setExpNameInput(e.target.value);
-                    setShowExpSuggestions(e.target.value.length >= 1);
-                  }}
-                  onFocus={() => setShowExpSuggestions(expNameInput.length >= 1)}
-                  onBlur={() => setTimeout(() => setShowExpSuggestions(false), 200)}
-                  className="input-field" placeholder="مثال: بنزين السيارة" />
-                
-                {showExpSuggestions && (
-                  <div className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-lg max-h-40 overflow-y-auto">
-                    {uniqueNames.filter(n => n.includes(expNameInput)).map((suggestedName, idx) => (
-                      <div key={idx} onClick={() => { setExpNameInput(suggestedName); setShowExpSuggestions(false); }} className="px-4 py-2 hover:bg-orange-50 dark:hover:bg-zinc-700 cursor-pointer text-sm font-bold text-gray-800 dark:text-gray-200">
-                        {suggestedName}
-                      </div>
-                    ))}
-                  </div>
-                )}
+
+            {/* Smart Action Buttons (AI Scan & Quick Paste) */}
+            <div className="grid grid-cols-2 gap-2.5 mb-4">
+              <button
+                type="button"
+                onClick={() => receiptFileInputRef.current?.click()}
+                className="flex items-center justify-center gap-2 p-2.5 rounded-2xl font-black text-xs bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white shadow-md shadow-indigo-500/20 hover:opacity-95 active:scale-[0.98] transition border border-white/20"
+              >
+                <Camera className="w-4 h-4" />
+                <span>مسح فاتورة ذكي (AI)</span>
+                <span className="text-[9px] bg-white/25 px-1.5 py-0.5 rounded-full font-black">جديد ✨</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowQuickPasteModal(true)}
+                className="flex items-center justify-center gap-2 p-2.5 rounded-2xl font-black text-xs bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30 transition active:scale-[0.98]"
+              >
+                <Zap className="w-4 h-4 text-amber-500" />
+                <span>لصق قائمة سريعة</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveExpense} className="space-y-3.5">
+              {/* Main Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="relative">
+                  <label className="label-sm">وصف المصروف / المتجر</label>
+                  <input 
+                    name="name" 
+                    type="text" 
+                    required 
+                    autoComplete="off" 
+                    value={expNameInput}
+                    onChange={e => {
+                      setExpNameInput(e.target.value);
+                      setShowExpSuggestions(e.target.value.length >= 1);
+                    }}
+                    onFocus={() => setShowExpSuggestions(expNameInput.length >= 1)}
+                    onBlur={() => setTimeout(() => setShowExpSuggestions(false), 200)}
+                    className="input-field" 
+                    placeholder="مثال: هايبرماركت البركات، بنزين السيارة..." 
+                  />
+                  
+                  {showExpSuggestions && (
+                    <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl max-h-40 overflow-y-auto">
+                      {uniqueNames.filter(n => n.includes(expNameInput)).map((suggestedName, idx) => (
+                        <div 
+                          key={idx} 
+                          onClick={() => { setExpNameInput(suggestedName); setShowExpSuggestions(false); }} 
+                          className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-sm font-bold text-gray-800 dark:text-gray-200"
+                        >
+                          {suggestedName}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="label-sm">الفئة</label>
+                  <select 
+                    name="category" 
+                    value={expCategoryInput} 
+                    onChange={e => setExpCategoryInput(e.target.value)} 
+                    className="input-field"
+                  >
+                    {EXPENSE_CATEGORIES.map(c => <option key={c.label} value={c.label}>{c.icon} {c.label}</option>)}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="label-sm">الفئة</label>
-                <select name="category" defaultValue={editExpense?.category || "سوبر ماركت"} className="input-field">
-                  {EXPENSE_CATEGORIES.map(c => <option key={c.label} value={c.label}>{c.icon} {c.label}</option>)}
-                </select>
-              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label-sm">المبلغ (د.ع)</label>
-                  <input autoComplete="off" name="amount" type="number" 
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="label-sm mb-0">المبلغ الإجمالي (د.ع)</label>
+                    {expenseItems.length > 0 && (
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-500/10 px-1.5 py-0.5 rounded">
+                        محسوب آلياً
+                      </span>
+                    )}
+                  </div>
+                  <input 
+                    autoComplete="off" 
+                    name="amount" 
+                    type="number" 
                     defaultValue={expenseItems.length === 0 ? editExpense?.amount : undefined} 
                     value={expenseItems.length > 0 ? expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0) : undefined} 
                     readOnly={expenseItems.length > 0} 
-                    required placeholder="0" 
-                    className={`input-field ${expenseItems.length > 0 ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-zinc-800' : ''}`} 
+                    required 
+                    placeholder="0" 
+                    className={`input-field font-black text-rose-600 dark:text-rose-400 ${expenseItems.length > 0 ? 'bg-indigo-50/50 dark:bg-zinc-800/80 cursor-not-allowed border-indigo-200 dark:border-indigo-800/40' : ''}`} 
                   />
                 </div>
                 <div>
                   <label className="label-sm">التاريخ</label>
-                  <input autoComplete="off" name="date" type="date" defaultValue={editExpense?.date || today()} required className="input-field" />
+                  <input 
+                    autoComplete="off" 
+                    name="date" 
+                    type="date" 
+                    value={expDateInput} 
+                    onChange={e => setExpDateInput(e.target.value)}
+                    required 
+                    className="input-field font-bold" 
+                  />
                 </div>
               </div>
 
-              {/* Items List */}
-              <div className="space-y-2 mt-4 border-t border-gray-100 dark:border-zinc-800 pt-4">
-                <div className="flex justify-between items-center mb-2">
-                  <label className="label-sm mb-0">تفاصيل القائمة (اختياري)</label>
-                  <button type="button" onClick={() => setExpenseItems([...expenseItems, {id: Date.now().toString() + Math.random(), name: "", quantity: 1, price: 0}])} className="text-xs flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1.5 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition">
-                    <Plus className="w-3 h-3" /> إضافة منتج
-                  </button>
+              {/* ─── Ultra-Fast Keyboard-Navigable Items Section ─── */}
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-zinc-800">
+                <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <label className="label-sm mb-0 flex items-center gap-1.5">
+                      <ListPlus className="w-4 h-4 text-indigo-500" />
+                      <span>تفاصيل قائمة المنتجات</span>
+                    </label>
+                    {expenseItems.length > 0 && (
+                      <span className="text-[11px] font-black bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-500/30">
+                        {expenseItems.length} مواد | {fmt(expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0))} د.ع
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {expenseItems.length > 0 && (
+                      <button 
+                        type="button" 
+                        onClick={async () => {
+                          if (await customConfirm("هل تريد مسح جميع المواد من القائمة؟")) {
+                            setExpenseItems([]);
+                          }
+                        }}
+                        className="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition"
+                      >
+                        مسح الكل
+                      </button>
+                    )}
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+                        const updated = [...expenseItems, { id: newId, name: "", quantity: 1, price: 0 }];
+                        setExpenseItems(updated);
+                        setTimeout(() => {
+                          const input = document.getElementById(`exp-item-name-${updated.length - 1}`);
+                          if (input) input.focus();
+                        }, 50);
+                      }} 
+                      className="text-xs flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-black bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition active:scale-95 border border-indigo-200/60 dark:border-indigo-500/30"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> إضافة مادة (Enter)
+                    </button>
+                  </div>
                 </div>
-                <div className="space-y-2 pr-1">
-                  {expenseItems.map((item, idx) => (
-                    <div key={item.id} className="flex gap-2 items-start relative bg-gray-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800">
-                      <div className="flex-1 space-y-2">
-                        <div className="relative">
-                          <input type="text" placeholder="اسم المنتج" value={item.name} 
-                            autoComplete="off"
-                            onFocus={() => setFocusedProductIdx(idx)}
-                            onBlur={() => setTimeout(() => setFocusedProductIdx(null), 200)}
-                            onChange={e => {
-                            const newItems = [...expenseItems];
-                            newItems[idx].name = e.target.value;
-                            setExpenseItems(newItems);
-                          }} className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
-                          {focusedProductIdx === idx && (item.name || "").length >= 1 && uniqueProductNames.filter(n => n.includes(item.name || "")).length > 0 && (
-                            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-lg max-h-40 overflow-y-auto">
-                              {uniqueProductNames.filter(n => n.includes(item.name || "")).map((suggestedName, sIdx) => (
-                                <div key={sIdx} onClick={() => { 
-                                    const newItems = [...expenseItems];
-                                    newItems[idx].name = suggestedName;
-                                    setExpenseItems(newItems);
-                                    setFocusedProductIdx(null);
-                                  }} className="px-4 py-2 hover:bg-indigo-50 dark:hover:bg-zinc-700 cursor-pointer text-sm font-bold text-gray-800 dark:text-gray-200">
-                                  {suggestedName}
-                                </div>
-                              ))}
+
+                {/* Table Header */}
+                {expenseItems.length > 0 ? (
+                  <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 border border-gray-100 dark:border-zinc-800">
+                    <div className="hidden sm:grid sm:grid-cols-12 gap-2 px-2 pb-2 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
+                      <div className="col-span-1 text-center">#</div>
+                      <div className="col-span-5">اسم المادة / المنتج</div>
+                      <div className="col-span-2 text-center">الكمية</div>
+                      <div className="col-span-3 text-left">السعر الإجمالي (د.ع)</div>
+                      <div className="col-span-1 text-center">حذف</div>
+                    </div>
+
+                    <div className="space-y-2 mt-2 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
+                      {expenseItems.map((item, idx) => (
+                        <div 
+                          key={item.id} 
+                          className="flex flex-col sm:grid sm:grid-cols-12 gap-2 items-center bg-white dark:bg-zinc-950 p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-600 transition"
+                        >
+                          {/* Row Index */}
+                          <div className="hidden sm:flex sm:col-span-1 items-center justify-center font-black text-xs text-gray-400">
+                            {idx + 1}
+                          </div>
+
+                          {/* Product Name with Suggestions */}
+                          <div className="w-full sm:col-span-5 relative">
+                            <input 
+                              id={`exp-item-name-${idx}`}
+                              type="text" 
+                              placeholder="اسم المنتج (مثال: حليب، خبز...)" 
+                              value={item.name} 
+                              autoComplete="off"
+                              onFocus={() => setFocusedProductIdx(idx)}
+                              onBlur={() => setTimeout(() => setFocusedProductIdx(null), 200)}
+                              onChange={e => {
+                                const newItems = [...expenseItems];
+                                newItems[idx].name = e.target.value;
+                                setExpenseItems(newItems);
+                              }} 
+                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
+                              required 
+                            />
+                            {focusedProductIdx === idx && (item.name || "").length >= 1 && uniqueProductNames.filter(n => n.includes(item.name || "")).length > 0 && (
+                              <div className="absolute z-30 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-36 overflow-y-auto">
+                                {uniqueProductNames.filter(n => n.includes(item.name || "")).slice(0, 5).map((suggestedName, sIdx) => (
+                                  <div 
+                                    key={sIdx} 
+                                    onClick={() => { 
+                                      const newItems = [...expenseItems];
+                                      newItems[idx].name = suggestedName;
+                                      setExpenseItems(newItems);
+                                      setFocusedProductIdx(null);
+                                    }} 
+                                    className="px-3 py-1.5 hover:bg-indigo-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200"
+                                  >
+                                    {suggestedName}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Quantity & Price Row */}
+                          <div className="w-full flex sm:contents gap-2">
+                            {/* Quantity */}
+                            <div className="w-24 sm:w-auto sm:col-span-2">
+                              <input 
+                                type="number" 
+                                placeholder="الكمية" 
+                                min="0.1" 
+                                step="any" 
+                                value={item.quantity || ''} 
+                                onChange={e => {
+                                  const newItems = [...expenseItems];
+                                  newItems[idx].quantity = Number(e.target.value);
+                                  setExpenseItems(newItems);
+                                }} 
+                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-xs sm:text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
+                                required 
+                              />
                             </div>
-                          )}
+
+                            {/* Price (Supports Enter to jump/add next row) */}
+                            <div className="flex-1 sm:col-span-3">
+                              <input 
+                                id={`exp-item-price-${idx}`}
+                                type="number" 
+                                placeholder="السعر الإجمالي" 
+                                value={item.price || ''} 
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    if (idx === expenseItems.length - 1) {
+                                      const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+                                      const updated = [...expenseItems, { id: newId, name: "", quantity: 1, price: 0 }];
+                                      setExpenseItems(updated);
+                                      setTimeout(() => {
+                                        const nextInput = document.getElementById(`exp-item-name-${updated.length - 1}`);
+                                        if (nextInput) nextInput.focus();
+                                      }, 50);
+                                    } else {
+                                      const nextInput = document.getElementById(`exp-item-name-${idx + 1}`);
+                                      if (nextInput) nextInput.focus();
+                                    }
+                                  }
+                                }}
+                                onChange={e => {
+                                  const newItems = [...expenseItems];
+                                  newItems[idx].price = Number(e.target.value);
+                                  setExpenseItems(newItems);
+                                }} 
+                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-black text-rose-600 dark:text-rose-400 text-left transition" 
+                                required 
+                              />
+                            </div>
+
+                            {/* Delete Button */}
+                            <div className="sm:col-span-1 flex justify-center">
+                              <button 
+                                type="button" 
+                                onClick={() => setExpenseItems(expenseItems.filter(x => x.id !== item.id))} 
+                                className="text-red-500 hover:text-red-600 p-1.5 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 rounded-lg transition"
+                                title="حذف هذه المادة"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex gap-2">
-                          <input type="number" placeholder="العدد" min="0.1" step="any" value={item.quantity || ''} onChange={e => {
-                            const newItems = [...expenseItems];
-                            newItems[idx].quantity = Number(e.target.value);
-                            setExpenseItems(newItems);
-                          }} className="w-1/3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
-                          <input type="number" placeholder="السعر الإجمالي" value={item.price || ''} onChange={e => {
-                            const newItems = [...expenseItems];
-                            newItems[idx].price = Number(e.target.value);
-                            setExpenseItems(newItems);
-                          }} className="w-2/3 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-bold" required />
-                        </div>
-                      </div>
-                      <button type="button" onClick={() => setExpenseItems(expenseItems.filter(x => x.id !== item.id))} className="text-red-500 hover:text-red-600 p-2 bg-red-50 dark:bg-red-500/10 rounded-lg transition">
-                        <Trash2 className="w-4 h-4" />
+                      ))}
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-gray-200 dark:border-zinc-800 flex justify-between items-center text-xs px-1">
+                      <span className="text-gray-500 font-bold">💡 اضغط على زر Enter في حقل السعر لإضافة السطر التالي بسرعة</span>
+                      <span className="font-black text-gray-800 dark:text-white">المجموع: {fmt(expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0))} د.ع</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50/70 dark:bg-zinc-900/40 border border-dashed border-gray-200 dark:border-zinc-800 rounded-2xl p-5 text-center">
+                    <p className="text-xs font-bold text-gray-400 mb-2">لم تقم بإضافة مواد تفصيلية للمصروف بعد (اختياري)</p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => receiptFileInputRef.current?.click()}
+                        className="text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-xl border border-indigo-200/50 hover:bg-indigo-100 transition flex items-center gap-1.5"
+                      >
+                        <Camera className="w-3.5 h-3.5" /> امسح الفاتورة
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickPasteModal(true)}
+                        className="text-xs font-black text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-200/50 hover:bg-amber-100 transition flex items-center gap-1.5"
+                      >
+                        <Zap className="w-3.5 h-3.5" /> الصق نص القائمة
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpenseItems([{ id: `item-${Date.now()}`, name: "", quantity: 1, price: 0 }])}
+                        className="text-xs font-black text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 px-3 py-1.5 rounded-xl hover:bg-gray-200 transition flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> أضف يدوياً
                       </button>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
 
-              <button type="submit" className="w-full bg-gradient-to-l from-rose-500 to-pink-600 text-white font-black py-3.5 rounded-xl shadow-lg mt-2 active:scale-[0.98] transition">
-                حفظ
+              {/* Submit Button */}
+              <button 
+                type="submit" 
+                className="w-full bg-gradient-to-l from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-black py-3.5 rounded-2xl shadow-lg shadow-rose-500/25 mt-3 active:scale-[0.98] transition flex items-center justify-center gap-2 text-base"
+              >
+                <Check className="w-5 h-5" />
+                <span>{editExpense ? "تحديث وحفظ المصروف" : "حفظ المصروف"}</span>
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Smart Bulk Paste Modal ─── */}
+      {showQuickPasteModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-950 rounded-[32px] p-6 w-full max-w-md shadow-2xl border border-gray-100 dark:border-zinc-800 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-500">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-black text-gray-900 dark:text-white text-base">لصق قائمة سريعة</h4>
+                  <p className="text-[11px] text-gray-500 font-bold">تحويل قائمة نصوص تلقائياً إلى بنود في الفاتورة</p>
+                </div>
+              </div>
+              <button onClick={() => setShowQuickPasteModal(false)} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full">
+                <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 leading-relaxed">
+              الصق النص من الواتساب أو الملاحظات، مثل:
+              <br />
+              <span className="font-mono text-[11px] text-amber-600 dark:text-amber-400 block mt-1 bg-amber-50/50 dark:bg-zinc-900 p-2 rounded-xl border border-amber-100 dark:border-zinc-800">
+                خبز تورتيلا 1 1250<br />
+                سفن اب موهيتو 500<br />
+                معجون طماطم 2 2500
+              </span>
+            </p>
+
+            <textarea
+              rows={6}
+              value={quickPasteText}
+              onChange={e => setQuickPasteText(e.target.value)}
+              placeholder="الصق أسطر المشتريات هنا..."
+              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-3 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500/30 transition resize-none custom-scrollbar"
+            />
+
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={handleQuickPasteSubmit}
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-black py-2.5 rounded-xl transition shadow-md shadow-amber-500/20 text-xs flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" /> إضافة إلى الفاتورة
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowQuickPasteModal(false)}
+                className="px-4 py-2.5 bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 font-bold rounded-xl text-xs hover:bg-gray-200 transition"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Viewing Full Receipt Details Modal ─── */}
+      {viewingReceiptExpense && (
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-2xl rounded-t-[32px] sm:rounded-[32px] px-5 sm:px-7 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[92svh] overflow-y-auto mb-[75px] sm:mb-0 custom-scrollbar">
+            
+            {/* Header */}
+            <div className="flex justify-between items-start mb-4 pb-4 border-b border-gray-100 dark:border-zinc-800">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xl">🧾</span>
+                  <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white">
+                    {viewingReceiptExpense.name}
+                  </h3>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400">
+                  <span className="bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">{viewingReceiptExpense.category}</span>
+                  <span>•</span>
+                  <span>{new Date(viewingReceiptExpense.date).toLocaleDateString("ar-IQ")}</span>
+                  <span>•</span>
+                  <span className="text-rose-600 dark:text-rose-400 font-black">{fmt(viewingReceiptExpense.amount)} د.ع</span>
+                  <span>•</span>
+                  <span>{(viewingReceiptExpense.items || []).length} مواد</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setViewingReceiptExpense(null)} 
+                className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition"
+              >
+                <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {/* Search inside receipt */}
+            <div className="relative mb-3">
+              <input
+                type="text"
+                placeholder="ابحث في مواد الفاتورة (مثال: جبن، قهوة...)"
+                value={receiptItemFilter}
+                onChange={e => setReceiptItemFilter(e.target.value)}
+                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 pr-10 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 transition"
+              />
+              <Search className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+              {receiptItemFilter && (
+                <button onClick={() => setReceiptItemFilter("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Items Table */}
+            <div className="bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
+              <div className="grid grid-cols-12 gap-2 px-3 py-2.5 bg-gray-100/70 dark:bg-zinc-800/60 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
+                <div className="col-span-1 text-center">#</div>
+                <div className="col-span-6">اسم المادة</div>
+                <div className="col-span-2 text-center">الكمية</div>
+                <div className="col-span-3 text-left">الإجمالي (د.ع)</div>
+              </div>
+
+              <div className="divide-y divide-gray-100 dark:divide-zinc-800/80 max-h-[350px] overflow-y-auto custom-scrollbar">
+                {(() => {
+                  const filtered = (viewingReceiptExpense.items || []).filter(item => 
+                    !receiptItemFilter || item.name.toLowerCase().includes(receiptItemFilter.toLowerCase())
+                  );
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-xs font-bold text-gray-400">
+                        {receiptItemFilter ? "لا توجد مواد مطابقة للبحث" : "لا توجد مواد في هذه القائمة"}
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((item, idx) => (
+                    <div key={item.id || idx} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs items-center hover:bg-white dark:hover:bg-zinc-800/50 transition">
+                      <div className="col-span-1 text-center font-bold text-gray-400 text-[11px]">{idx + 1}</div>
+                      <div className="col-span-6 font-bold text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
+                      <div className="col-span-2 text-center font-black text-gray-600 dark:text-gray-300 bg-gray-200/60 dark:bg-zinc-800 px-1 py-0.5 rounded-md text-[11px]">
+                        {item.quantity}
+                      </div>
+                      <div className="col-span-3 text-left font-black text-rose-600 dark:text-rose-400">
+                        {fmt(item.price)} <span className="text-[9px] font-bold text-gray-400">د.ع</span>
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Total Footer */}
+              <div className="bg-gray-100/90 dark:bg-zinc-800 px-4 py-3 border-t border-gray-200 dark:border-zinc-700 flex justify-between items-center text-xs">
+                <span className="font-bold text-gray-600 dark:text-gray-300">
+                  إجمالي الفاتورة: {(viewingReceiptExpense.items || []).length} مادة
+                </span>
+                <span className="font-black text-sm text-rose-600 dark:text-rose-400">
+                  {fmt(viewingReceiptExpense.amount)} د.ع
+                </span>
+              </div>
+            </div>
+
+            {/* Actions Bar */}
+            <div className="flex flex-wrap gap-2.5 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  const lines = (viewingReceiptExpense.items || []).map((it, i) => `${i + 1}. ${it.name} (عدد: ${it.quantity}) - ${fmt(it.price)} د.ع`);
+                  const text = `🧾 فاتورة: ${viewingReceiptExpense.name}\n📅 التاريخ: ${viewingReceiptExpense.date}\n💰 الإجمالي: ${fmt(viewingReceiptExpense.amount)} د.ع\n\nالمواد:\n${lines.join("\n")}`;
+                  navigator.clipboard.writeText(text);
+                  toast.success("تم نسخ قائمة الفاتورة إلى الحافظة 📋");
+                }}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                <Copy className="w-4 h-4" /> نسخ القائمة
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const expToEdit = viewingReceiptExpense;
+                  setViewingReceiptExpense(null);
+                  setEditExpense(expToEdit);
+                  setShowExpenseModal(true);
+                }}
+                className="flex-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                <Edit2 className="w-4 h-4" /> تعديل في تسجيل المصروف
+              </button>
+            </div>
           </div>
         </div>
       )}
