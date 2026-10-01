@@ -176,7 +176,15 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
       tickets: updatedTickets
     }, { merge: true });
 
-    toast.success("تم تسجيل البطاقة في سجل سحوباتك 🎟️");
+    if (onAddExpenseLinked && Number(newTicketCost) > 0) {
+      onAddExpenseLinked(
+        Number(newTicketCost) || 3000,
+        `شراء بطاقة ${GAME_DETAILS[selectedGame].shortTitle} (${newTicket.numbers.join("-")}${newTicket.luckyNumber !== undefined ? " + " + newTicket.luckyNumber : ""})`,
+        targetDate
+      );
+    }
+
+    toast.success("تم تسجيل البطاقة وحفظها في سجل السحوبات والمصاريف 🎟️");
     setShowAddTicketModal(false);
     setNewTicketNumbers([]);
     setNewTicketLucky(undefined);
