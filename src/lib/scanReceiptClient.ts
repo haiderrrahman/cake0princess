@@ -164,9 +164,21 @@ export async function scanReceiptWithGemini(
     category = "سوبر ماركت";
   }
 
+  const todayStr = new Date().toISOString().split("T")[0];
+  let receiptDate = (parsed.date || "").trim();
+  // Ensure date is in YYYY-MM-DD and not in the future
+  if (!receiptDate || !/^\d{4}-\d{2}-\d{2}$/.test(receiptDate) || receiptDate > todayStr) {
+    receiptDate = todayStr;
+  }
+
+  let cleanStoreName = (parsed.storeName || "").trim();
+  if (cleanStoreName === "غير محدد" || cleanStoreName === "فاتورة مشتريات" || cleanStoreName === "فاتورة" || cleanStoreName === "متجر" || !cleanStoreName) {
+    cleanStoreName = "";
+  }
+
   return {
-    storeName: parsed.storeName || "فاتورة مشتريات",
-    date: parsed.date || new Date().toISOString().split("T")[0],
+    storeName: cleanStoreName || "سوبر ماركت",
+    date: receiptDate,
     category,
     totalAmount: total,
     items: normalizedItems

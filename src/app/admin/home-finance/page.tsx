@@ -1246,15 +1246,23 @@ setEditFuturePlan(null);
 
       const data = await scanReceiptWithGemini(dataUrl, (status) => setScanStatusText(status));
 
-      if (data.storeName) {
+      if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
         setExpNameInput(data.storeName);
+      } else if (!expNameInput || expNameInput === "غير محدد") {
+        setExpNameInput("تعاون ماركت");
       }
+
       if (data.category) {
         setExpCategoryInput(data.category);
       }
-      if (data.date) {
+
+      const todayStr = today();
+      if (data.date && data.date <= todayStr) {
         setExpDateInput(data.date);
+      } else {
+        setExpDateInput(todayStr);
       }
+
       if (Array.isArray(data.items) && data.items.length > 0) {
         setExpenseItems(data.items);
       }
@@ -1275,34 +1283,14 @@ setEditFuturePlan(null);
   const handleQuickPasteSubmit = () => {
     if (!quickPasteText.trim()) return;
 
-    // Convert Eastern Arabic numerals (٠-٩) and Persian (۰-۹) to standard Western digits (0-9)
-    const normalizeDigits = (str: string) => {
-      const eastern = "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹";
-      return str.replace(/[٠-٩۰-۹]/g, ch => {
-        const idx = eastern.indexOf(ch);
-        return String(idx % 10);
-      });
-    };
-
     const lines = quickPasteText.split("\n").map(l => l.trim()).filter(Boolean);
     const newItems: ExpenseItem[] = [];
 
-    for (const rawLine of lines) {
-      let line = normalizeDigits(rawLine);
-      // Remove leading bullet points, numbers like 1. or 1- or - or *
-      line = line.replace(/^[\d]+[.)\-]\s*/, "").replace(/^[-•*+–—]\s*/, "").trim();
-      if (!line) continue;
-
-      // Handle common currency words and multipliers like "الف", "ألف", "k"
-      let processed = line
-        .replace(/(\d+(?:\.\d+)?)\s*(?:الف|ألف|k)\b/gi, (_, n) => String(parseFloat(n) * 1000))
-        .replace(/(?:دينار|د\.ع|دنانير|IQD|iqd)/gi, "")
-        .trim();
-
-      // Pattern 1: Name followed by price and optional quantity: e.g. "طماطة 2000" or "حليب 2 3000"
-      const match = processed.match(/^(.*?)(?:[\s,:=-]+)(\d+(?:[.,]\d+)?)(?:[\s,:=-]+(\d+(?:[.,]\d+)?))?$/);
+    for (const line of lines) {
+      const cleanedLine = line.replace(/^[\d]+\.\s*/, "").replace(/^[-•*]\s*/, "").trim();
+      const match = cleanedLine.match(/^(.*?)(?:[\s,:=-]+)(\d+(?:[.,]\d+)?)(?:[\s,:=-]+(\d+(?:[.,]\d+)?))?$/);
       if (match) {
-        let name = match[1].trim().replace(/^[-•*:,=]+|[-•*:,=]+$/g, "").trim();
+        let name = match[1].trim();
         let num1 = parseFloat(match[2].replace(/,/g, ""));
         let num2 = match[3] ? parseFloat(match[3].replace(/,/g, "")) : null;
 
@@ -1313,9 +1301,6 @@ setEditFuturePlan(null);
           if (num1 > 100 && num2 <= 100) {
             price = num1;
             quantity = num2;
-          } else if (num2 > 100 && num1 <= 100) {
-            price = num2;
-            quantity = num1 || 1;
           } else {
             quantity = num1 || 1;
             price = num2;
@@ -1324,62 +1309,30 @@ setEditFuturePlan(null);
           price = num1;
         }
 
-        if (name) {
+        if (name && price > 0) {
           newItems.push({
             id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
             name,
-            quantity: quantity || 1,
-            price: price || 0
-          });
-          continue;
-        }
-      }
-
-      // Pattern 2: Quantity first, then name, then price: e.g. "2 حليب 3000"
-      const matchLeadingQty = processed.match(/^(\d+(?:[.,]\d+)?)\s+(.*?)(?:[\s,:=-]+)(\d+(?:[.,]\d+)?)$/);
-      if (matchLeadingQty) {
-        const qty = parseFloat(matchLeadingQty[1]) || 1;
-        const name = matchLeadingQty[2].trim().replace(/^[-•*:,=]+|[-•*:,=]+$/g, "").trim();
-        const price = parseFloat(matchLeadingQty[3].replace(/,/g, "")) || 0;
-        if (name) {
-          newItems.push({
-            id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-            name,
-            quantity: qty,
+            quantity,
             price
           });
           continue;
         }
       }
 
-      // Pattern 3: Words with a price anywhere at the end
-      const words = processed.split(/\s+/);
-      if (words.length >= 2) {
-        const lastWord = words[words.length - 1].replace(/[^\d.]/g, "");
-        const price = parseFloat(lastWord);
-        if (!isNaN(price) && price > 0) {
-          const name = words.slice(0, words.length - 1).join(" ").trim().replace(/^[-•*:,=]+|[-•*:,=]+$/g, "").trim();
-          if (name) {
-            newItems.push({
-              id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-              name,
-              quantity: 1,
-              price
-            });
-            continue;
-          }
+      const parts = cleanedLine.split(/\s+/);
+      if (parts.length >= 2) {
+        const lastPart = parts[parts.length - 1].replace(/[^\d.]/g, "");
+        const price = parseFloat(lastPart) || 0;
+        const name = parts.slice(0, parts.length - 1).join(" ");
+        if (name && price > 0) {
+          newItems.push({
+            id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+            name,
+            quantity: 1,
+            price
+          });
         }
-      }
-
-      // Pattern 4: Plain item name without price yet
-      const plainName = processed.replace(/^[-•*:,=]+|[-•*:,=]+$/g, "").trim();
-      if (plainName) {
-        newItems.push({
-          id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-          name: plainName,
-          quantity: 1,
-          price: 0
-        });
       }
     }
 
@@ -1389,7 +1342,7 @@ setEditFuturePlan(null);
       setShowQuickPasteModal(false);
       setQuickPasteText("");
     } else {
-      toast.error("لم يتم العثور على أسطر صالحة في النص الملصق.");
+      toast.error("لم يتم التعرف على أي مواد. تأكد من إدخال اسم المادة والسعر في كل سطر.");
     }
   };
 
@@ -1399,30 +1352,15 @@ setEditFuturePlan(null);
     const fd = new FormData(form);
     const isEdit = !!editExpense;
     
-    let rawName = (expNameInput || (fd.get("name") as string) || "").trim();
     const category = expCategoryInput || (fd.get("category") as string) || "سوبر ماركت";
+    let name = (expNameInput || (fd.get("name") as string) || "").trim();
+    if (!name || name === "غير محدد") {
+      name = category === "سوبر ماركت" ? "تعاون ماركت" : (category || "مصروف عام");
+    }
     const validItems = expenseItems.filter(i => (i.name || "").trim() !== "");
-    
-    // Auto-derive name if empty and there are items in the list
-    let name = rawName;
-    if (!name && validItems.length > 0) {
-      name = validItems.length === 1 
-        ? validItems[0].name 
-        : `${validItems[0].name} و ${validItems.length - 1} مواد أخرى`;
-    }
-    if (!name) {
-      name = category === "سوبر ماركت" ? "مشتريات سوبر ماركت" : "مصروف عام";
-    }
-
-    const calculatedItemsTotal = validItems.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
-    const rawAmount = Number(fd.get("amount") || 0);
-    const finalAmount = validItems.length > 0 ? calculatedItemsTotal : rawAmount;
-
-    if (finalAmount <= 0) {
-      toast.error("يرجى إدخال مبلغ المصروف أو أسعار المواد في القائمة");
-      return;
-    }
-
+    const finalAmount = validItems.length > 0 
+      ? validItems.reduce((acc, curr) => acc + (curr.price || 0), 0) 
+      : Number(fd.get("amount") || 0);
     const date = expDateInput || (fd.get("date") as string) || today();
 
     // 1. Lottery Check
@@ -1444,12 +1382,22 @@ setEditFuturePlan(null);
       updatedList = expenses.map(x => x.id === item.id ? item : x);
       setExpenses(updatedList);
       syncToFirebase("expenses", updatedList);
-      toast.success("تم تعديل المصروف بنجاح");
+      toast.success("تم تعديل المصروف");
     } else {
       updatedList = [item, ...expenses];
       setExpenses(updatedList);
       syncToFirebase("expenses", updatedList);
-      toast.success(validItems.length > 0 ? `تم تسجيل المصروف مع قائمة (${validItems.length} مواد) بنجاح` : "تم تسجيل المصروف بنجاح");
+      toast.success("تم تسجيل المصروف");
+
+      // Auto-switch to cycle containing the expense date if currently in another cycle
+      const matchingCycle = cycles.find(c => {
+        const startStr = `${c.start.getFullYear()}-${String(c.start.getMonth() + 1).padStart(2, '0')}-${String(c.start.getDate()).padStart(2, '0')}`;
+        const endStr = `${c.end.getFullYear()}-${String(c.end.getMonth() + 1).padStart(2, '0')}-${String(c.end.getDate()).padStart(2, '0')}`;
+        return date >= startStr && date <= endStr;
+      });
+      if (matchingCycle && matchingCycle.id !== selectedCycleId) {
+        setSelectedCycleId(matchingCycle.id);
+      }
       
       // 2. Micro-Shopping Alert (New Expenses Only)
       if (category === "سوبر ماركت" && finalAmount < 25000) {
@@ -3318,16 +3266,11 @@ setEditTrip(null);
             </div>
 
             {(() => {
-              const filtered = allExpenses.filter(exp => {
-                const inRange = isExpenseInDateRange(exp.date);
-                const inCat = !expenseCategoryFilter || exp.category === expenseCategoryFilter;
-                const q = (expenseSearch || "").trim().toLowerCase();
-                const inSearch = !q || 
-                  (exp.name && exp.name.toLowerCase().includes(q)) || 
-                  (exp.category && exp.category.toLowerCase().includes(q)) ||
-                  (exp.items && exp.items.some(i => i.name && i.name.toLowerCase().includes(q)));
-                return inRange && inCat && inSearch;
-              }).sort((a, b) => b.date.localeCompare(a.date));
+              const filtered = allExpenses.filter(exp =>
+                isExpenseInDateRange(exp.date) &&
+                (!expenseCategoryFilter || exp.category === expenseCategoryFilter) &&
+                (!expenseSearch || (exp.name && exp.name.includes(expenseSearch)) || (exp.category && exp.category.includes(expenseSearch)))
+              ).sort((a, b) => b.date.localeCompare(a.date));
 
               const isAnyFilterActive = expenseCategoryFilter || expenseSearch || expenseStartDate || expenseEndDate;
 
@@ -3365,11 +3308,11 @@ setEditTrip(null);
                       <p className="text-gray-400 font-bold text-sm">{expenseSearch ? `لا نتائج عن "${expenseSearch}"` : (expenseStartDate || expenseEndDate) ? `لا توجد مصاريف في الفترة المحددة` : expenseCategoryFilter ? `لا توجد مصاريف في قسم ${expenseCategoryFilter}` : 'لا توجد مصاريف في هذه الدورة'}</p>
                     </div>
                   ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   {filtered.map(exp => {
                     const cat = EXPENSE_CATEGORIES.find(c => c.label === exp.category);
                     return (
-                      <div key={exp.id} className="bg-white dark:bg-zinc-900 rounded-2xl p-3.5 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col gap-2 relative overflow-hidden hover:shadow-md transition">
+                      <div key={exp.id} className="bg-white dark:bg-zinc-900 rounded-2xl p-3 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col gap-2 relative overflow-hidden">
                         <div className={`absolute top-0 right-0 left-0 h-1 bg-gradient-to-r ${cat?.color || 'from-gray-400 to-gray-500'} opacity-70 rounded-t-2xl`} />
                         {/* Top Row: icon + actions */}
                         <div className="flex items-start justify-between mt-0.5">
@@ -3388,49 +3331,29 @@ setEditTrip(null);
                           )}
                         </div>
                         {/* Name */}
-                        <div className="font-black text-gray-800 dark:text-gray-100 text-sm leading-tight line-clamp-2">{exp.name}</div>
+                        <div className="font-black text-gray-800 dark:text-gray-100 text-xs leading-tight line-clamp-2">{exp.name}</div>
                         {/* Amount */}
-                        <div className="font-black text-rose-600 dark:text-rose-400 text-base">-{fmt(exp.amount)} <span className="text-xs font-bold text-rose-400/70">د.ع</span></div>
-                        
-                        {/* Items preview & badge / view receipt button */}
-                        {exp.items && exp.items.length > 0 && (
-                          <div 
-                            onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
-                            className="w-full mt-1 p-2.5 bg-gradient-to-br from-indigo-50/90 to-purple-50/60 dark:from-indigo-950/40 dark:to-purple-950/20 rounded-xl border border-indigo-100 dark:border-indigo-800/40 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-600 transition shadow-sm group"
-                          >
-                            <div className="flex items-center justify-between text-[11px] font-black text-indigo-700 dark:text-indigo-300 mb-1.5 pb-1 border-b border-indigo-100/60 dark:border-indigo-800/40">
-                              <span className="flex items-center gap-1">
-                                <Receipt className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                                <span>قائمة المواد ({exp.items.length})</span>
-                              </span>
-                              <span className="text-[10px] font-bold text-indigo-500 group-hover:underline flex items-center gap-0.5">
-                                عرض الفاتورة ↗
-                              </span>
-                            </div>
-
-                            <div className="space-y-1">
-                              {exp.items.slice(0, 3).map((it, idx) => (
-                                <div key={idx} className="flex justify-between items-center text-[10px] text-gray-700 dark:text-gray-300 bg-white/80 dark:bg-zinc-900/70 px-2 py-0.5 rounded-lg border border-indigo-50/60 dark:border-zinc-800">
-                                  <span className="truncate max-w-[140px] font-bold">• {it.name}</span>
-                                  <span className="font-mono font-black text-rose-600 dark:text-rose-400 text-[10px] shrink-0">
-                                    {fmt(it.price)} <span className="text-[8px] font-normal text-gray-400">د.ع</span>
-                                  </span>
-                                </div>
-                              ))}
-                              {exp.items.length > 3 && (
-                                <div className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 text-center pt-0.5">
-                                  + {exp.items.length - 3} مواد أخرى (اضغط للعرض الكامل)
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
+                        <div className="font-black text-rose-600 dark:text-rose-400 text-sm">-{fmt(exp.amount)} <span className="text-[10px] font-bold text-rose-400/70">د.ع</span></div>
                         {/* Footer */}
-                        <div className="flex items-center gap-1 flex-wrap mt-auto pt-1">
-                          <span className="text-[9px] bg-gray-100 dark:bg-zinc-800 text-gray-500 px-1.5 py-0.5 rounded-full font-bold truncate max-w-[90px]">{exp.category}</span>
+                        <div className="flex items-center gap-1 flex-wrap mt-auto">
+                          <span className="text-[9px] bg-gray-100 dark:bg-zinc-800 text-gray-500 px-1.5 py-0.5 rounded-full font-bold truncate max-w-[80px]">{exp.category}</span>
                           <span className="text-[9px] text-gray-400">{exp.createdAt ? new Date(exp.createdAt).toLocaleDateString("ar-IQ") : new Date(exp.date).toLocaleDateString("ar-IQ")}</span>
                         </div>
+
+                        {/* Items badge / view receipt button */}
+                        {exp.items && exp.items.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
+                            className="w-full mt-1.5 py-1 px-2.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-[10px] font-black flex items-center justify-between border border-indigo-100 dark:border-indigo-800/40 transition active:scale-[0.98]"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <Receipt className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                              <span>تفاصيل القائمة ({exp.items.length} مواد)</span>
+                            </span>
+                            <ChevronLeft className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -5495,7 +5418,7 @@ setEditTrip(null);
                   <input 
                     name="name" 
                     type="text" 
-                    required={expenseItems.filter(i => (i.name || "").trim()).length === 0} 
+                    required 
                     autoComplete="off" 
                     value={expNameInput}
                     onChange={e => {
@@ -5505,7 +5428,7 @@ setEditTrip(null);
                     onFocus={() => setShowExpSuggestions(expNameInput.length >= 1)}
                     onBlur={() => setTimeout(() => setShowExpSuggestions(false), 200)}
                     className="input-field" 
-                    placeholder={expenseItems.length > 0 ? "اختياري (سيتم التسمية تلقائياً من القائمة)" : "مثال: هايبرماركت البركات، بنزين السيارة..."} 
+                    placeholder="مثال: هايبرماركت البركات، بنزين السيارة..." 
                   />
                   
                   {showExpSuggestions && (
@@ -5579,7 +5502,7 @@ setEditTrip(null);
                     defaultValue={expenseItems.length === 0 ? editExpense?.amount : undefined} 
                     value={expenseItems.length > 0 ? expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0) : undefined} 
                     readOnly={expenseItems.length > 0} 
-                    required={expenseItems.length === 0} 
+                    required 
                     placeholder="0" 
                     className={`input-field font-black text-rose-600 dark:text-rose-400 ${expenseItems.length > 0 ? 'bg-indigo-50/50 dark:bg-zinc-800/80 cursor-not-allowed border-indigo-200 dark:border-indigo-800/40' : ''}`} 
                   />
@@ -5683,6 +5606,7 @@ setEditTrip(null);
                                 setExpenseItems(newItems);
                               }} 
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
+                              required 
                             />
                             {focusedProductIdx === idx && (item.name || "").length >= 1 && uniqueProductNames.filter(n => n.includes(item.name || "")).length > 0 && (
                               <div className="absolute z-30 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-36 overflow-y-auto">
@@ -5720,6 +5644,7 @@ setEditTrip(null);
                                   setExpenseItems(newItems);
                                 }} 
                                 className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-xs sm:text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
+                                required 
                               />
                             </div>
 
@@ -5753,6 +5678,7 @@ setEditTrip(null);
                                   setExpenseItems(newItems);
                                 }} 
                                 className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-black text-rose-600 dark:text-rose-400 text-left transition" 
+                                required 
                               />
                             </div>
 
@@ -5878,8 +5804,8 @@ setEditTrip(null);
 
       {/* ─── Viewing Full Receipt Details Modal ─── */}
       {viewingReceiptExpense && (
-        <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-2xl rounded-t-[32px] sm:rounded-[32px] px-5 sm:px-7 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[92svh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-2xl rounded-t-[32px] sm:rounded-[32px] px-5 sm:px-7 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[92svh] overflow-y-auto mb-[75px] sm:mb-0 custom-scrollbar">
             
             {/* Header */}
             <div className="flex justify-between items-start mb-4 pb-4 border-b border-gray-100 dark:border-zinc-800">
@@ -6966,21 +6892,13 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
               name: desc,
               category: "ألعاب ويانصيب",
               amount,
-              date: today(),
-              createdAt: new Date().toISOString(),
-              items: [
-                {
-                  id: `item-${Date.now()}`,
-                  name: desc,
-                  quantity: 1,
-                  price: amount
-                }
-              ]
+              date: date || today(),
+              createdAt: new Date().toISOString()
             };
             const updated = [item, ...expenses];
             setExpenses(updated);
             syncToFirebase("expenses", updated);
-            toast.success("تم تسجيل المصروف وتفاصيله تلقائياً في سجل المصاريف!");
+            toast.success("تم تسجيل المصروف تلقائياً في سجل المصاريف!");
           }}
         />
       )}
