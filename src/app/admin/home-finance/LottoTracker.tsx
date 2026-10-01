@@ -53,6 +53,10 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   const [drawNumbersInput, setDrawNumbersInput] = useState<number[]>([]);
   const [drawLuckyInput, setDrawLuckyInput] = useState<number | undefined>();
 
+  // Batch import draws modal
+  const [showBatchImportModal, setShowBatchImportModal] = useState(false);
+  const [batchImportText, setBatchImportText] = useState("");
+
   // 1. Subscribe to Firestore
   useEffect(() => {
     if (!isOpen) return;
@@ -256,6 +260,111 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     setShowRecordDrawModal(false);
     setDrawNumbersInput([]);
     setDrawLuckyInput(undefined);
+  };
+
+  // Batch import parser for pasting results copied from iraqloto.iq
+  const handleBatchImportResults = async () => {
+    if (!batchImportText.trim()) {
+      toast.error("يرجى لصق نص السحوبات أولاً");
+      return;
+    }
+
+    const maxNum = GAME_DETAILS[selectedGame].maxNumber;
+    const lines = batchImportText.split("\n").map(l => l.trim()).filter(Boolean);
+    const parsedDraws: LottoDraw[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Extract all numbers
+      const allNumbers = (line.match(/\b\d+\b/g) || []).map(Number);
+      const validBalls = allNumbers.filter(n => n >= 1 && n <= maxNum);
+
+      // Check date: e.g. 2026-09-28 or 28/09/2026 or 28-9-2026
+      const dateMatch = line.match(/(\d{4}[/-]\d{1,2}[/-]\d{1,2})|(\d{1,2}[/-]\d{1,2}[/-]\d{4})/);
+      let dateFormatted = "";
+      if (dateMatch) {
+        const raw = dateMatch[0];
+        if (raw.includes("-") && raw.split("-")[0].length === 4) {
+          dateFormatted = raw;
+        } else {
+          const parts = raw.replace(/\//g, "-").split("-");
+          if (parts[2]?.length === 4) {
+            dateFormatted = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+          } else {
+            dateFormatted = raw;
+          }
+        }
+      }
+
+      // Check draw number (e.g. "سحبة 415" or "#415" or large number)
+      const drawNumMatch = line.match(/(?:سحبة|draw|#)\s*(\d+)/i);
+      let drawNum = drawNumMatch ? Number(drawNumMatch[1]) : 0;
+
+      // Extract 6 balls
+      if (validBalls.length >= 6) {
+        const numbers = Array.from(new Set(validBalls.slice(0, 6))).sort((a, b) => a - b);
+        if (numbers.length === 6) {
+          // If no draw number found from regex, find first number outside the 6 balls
+          if (!drawNum) {
+            const potentialDrawNums = allNumbers.filter(n => !numbers.includes(n) && (n > maxNum || n >= 100));
+            if (potentialDrawNums.length > 0) {
+              drawNum = potentialDrawNums[0];
+            } else {
+              drawNum = currentDraws.length + parsedDraws.length + 1;
+            }
+          }
+
+          // Optional lucky number for Super Key
+          let luckyNum: number | undefined;
+          if (selectedGame === "super_key") {
+            const luckyMatch = line.match(/(?:حظ|lucky|\+)\s*:?\s*(\d{1,2})/i);
+            if (luckyMatch) {
+              luckyNum = Number(luckyMatch[1]);
+            } else if (validBalls.length >= 7) {
+              luckyNum = validBalls[6];
+            }
+          }
+
+          parsedDraws.push({
+            id: `${selectedGame}-${drawNum}-${Date.now()}-${parsedDraws.length}`,
+            game: selectedGame,
+            drawNumber: drawNum,
+            date: dateFormatted || new Date().toISOString().split("T")[0],
+            numbers,
+            luckyNumber: luckyNum,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+    }
+
+    if (parsedDraws.length === 0) {
+      toast.error("لم يتم التعرف على أي سحبات صالحة. تأكد من أن كل سطر يحتوي على 6 أرقام (من 1 إلى " + maxNum + ").");
+      return;
+    }
+
+    // Merge without duplicates
+    const existing = selectedGame === "super_key" ? superKeyDraws : iraqLottoDraws;
+    const existingNums = new Set(existing.map(d => d.drawNumber));
+    const newItems = parsedDraws.filter(d => !existingNums.has(d.drawNumber));
+
+    const merged = [...newItems, ...existing].sort((a, b) => b.drawNumber - a.drawNumber);
+
+    if (selectedGame === "super_key") {
+      setSuperKeyDraws(merged);
+    } else {
+      setIraqLottoDraws(merged);
+    }
+
+    await setDoc(doc(db, "home_finance", "lotto_hub"), {
+      superKeyDraws: selectedGame === "super_key" ? merged : superKeyDraws,
+      iraqLottoDraws: selectedGame === "iraq_lotto" ? merged : iraqLottoDraws
+    }, { merge: true });
+
+    toast.success(`تم بنجاح استيراد ${newItems.length} سحبة جديدة وتحديث الأرشيف بالكامل! 🎉`);
+    setShowBatchImportModal(false);
+    setBatchImportText("");
   };
 
   // Pending draws counter
@@ -780,17 +889,27 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                   </p>
                 </div>
 
-                <button
-                  onClick={() => {
-                    const nextNum = currentDraws[0]?.drawNumber ? currentDraws[0].drawNumber + 1 : 1;
-                    setDrawNumInput(nextNum);
-                    setShowRecordDrawModal(true);
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-purple-600 text-white font-bold text-xs flex items-center gap-1.5 hover:bg-purple-700 transition"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>إضافة سحبة جديدة</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowBatchImportModal(true)}
+                    className="px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold text-xs flex items-center gap-1.5 hover:bg-amber-100 transition active:scale-95"
+                  >
+                    <span>📋</span>
+                    <span>استيراد ولصق نتائج مجمعة</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const nextNum = currentDraws[0]?.drawNumber ? currentDraws[0].drawNumber + 1 : 1;
+                      setDrawNumInput(nextNum);
+                      setShowRecordDrawModal(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-purple-600 text-white font-bold text-xs flex items-center gap-1.5 hover:bg-purple-700 transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة سحبة جديدة</span>
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2.5 max-h-[55vh] overflow-y-auto pr-1">
@@ -1117,6 +1236,70 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                   <Trophy className="w-4 h-4" />
                   <span>حفظ ومطابقة جميع البطاقات فورياً</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* ══════════════════════════════════════════
+            MODAL 3: BATCH IMPORT DRAWS
+        ══════════════════════════════════════════ */}
+        {showBatchImportModal && (
+          <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white dark:bg-[#1A1625] rounded-3xl p-5 max-w-lg w-full border border-gray-100 dark:border-white/10 shadow-2xl text-right max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">📋</span>
+                  <h4 className="font-black text-gray-900 dark:text-white text-base">
+                    استيراد ولصق نتائج السحوبات دفعة واحدة
+                  </h4>
+                </div>
+                <button
+                  onClick={() => setShowBatchImportModal(false)}
+                  className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-500"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-bold leading-relaxed">
+                  انسخ أي قائمة نتائج أو جدول من موقع لوتو العراق والصقه في المربع أدناه. سيقوم الذكاء باستخراج رقم السحبة، التاريخ، والأرقام الفائزة الستة تلقائياً وضمها إلى الأرشيف!
+                </p>
+
+                <div>
+                  <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5 block">
+                    نص السحوبات / الجدول المنسوخ:
+                  </label>
+                  <textarea
+                    rows={8}
+                    value={batchImportText}
+                    onChange={(e) => setBatchImportText(e.target.value)}
+                    placeholder={`مثال لصيغ متعددة يدعمها النظام:\nسحبة 415 | 28/09/2026 | 6 - 12 - 14 - 18 - 24 - 26\n414  24/09/2026  3, 7, 11, 15, 22, 28\n413  21-9-2026  2 8 13 19 23 27\n\nأو الصق النص الكامل كما هو من الصفحة مباشرة!`}
+                    className="w-full p-3 rounded-2xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900 text-xs font-mono text-gray-800 dark:text-gray-200 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBatchImportResults}
+                    className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-rose-600 text-white font-black text-sm shadow-lg shadow-purple-500/25 active:scale-95 transition flex items-center justify-center gap-2"
+                  >
+                    <span>استخراج وإضافة السحوبات للأرشيف 🚀</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowBatchImportModal(false);
+                      setBatchImportText("");
+                    }}
+                    className="px-4 py-3 rounded-2xl bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 font-bold text-xs"
+                  >
+                    إلغاء
+                  </button>
+                </div>
               </div>
             </div>
           </div>
