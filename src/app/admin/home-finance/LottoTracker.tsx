@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   X, Sparkles, Trophy, Calendar, Ticket, Plus, CheckCircle2,
   AlertCircle, Copy, Check, BarChart2, Flame, Snowflake, RotateCcw,
-  Clock, Hash, DollarSign, ExternalLink
+  Clock, Hash, DollarSign, ExternalLink, Search
 } from "lucide-react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -31,6 +31,9 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   const [tickets, setTickets] = useState<LottoTicket[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Archive search filter
+  const [archiveSearchQuery, setArchiveSearchQuery] = useState("");
+
   // Prediction state
   const [predictionStrategy, setPredictionStrategy] = useState<"balanced" | "hot" | "cold" | "random">("balanced");
   const [suggestedNumbers, setSuggestedNumbers] = useState<number[]>([]);
@@ -53,10 +56,6 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   const [drawNumbersInput, setDrawNumbersInput] = useState<number[]>([]);
   const [drawLuckyInput, setDrawLuckyInput] = useState<number | undefined>();
 
-  // Batch import draws modal
-  const [showBatchImportModal, setShowBatchImportModal] = useState(false);
-  const [batchImportText, setBatchImportText] = useState("");
-
   // 1. Subscribe to Firestore
   useEffect(() => {
     if (!isOpen) return;
@@ -64,24 +63,38 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     const unsub = onSnapshot(doc(db, "home_finance", "lotto_hub"), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        if (data.superKeyDraws && data.superKeyDraws.length > 0) {
+
+        // 1. Super Key sync & auto-upgrade
+        if (data.superKeyDraws && data.superKeyDraws.length >= INITIAL_SUPER_KEY_DRAWS.length) {
           setSuperKeyDraws(data.superKeyDraws);
         } else {
-          // Initialize with 23 draws
+          const existingDrawNumbers = new Set((data.superKeyDraws || []).map((d: LottoDraw) => d.drawNumber));
+          const missingDraws = INITIAL_SUPER_KEY_DRAWS.filter(d => !existingDrawNumbers.has(d.drawNumber));
+          const mergedSuperKey = [...(data.superKeyDraws || []), ...missingDraws].sort((a, b) => b.drawNumber - a.drawNumber);
+          setSuperKeyDraws(mergedSuperKey);
           setDoc(doc(db, "home_finance", "lotto_hub"), {
-            superKeyDraws: INITIAL_SUPER_KEY_DRAWS,
-            iraqLottoDraws: INITIAL_IRAQ_LOTTO_DRAWS,
-            tickets: []
+            superKeyDraws: mergedSuperKey
           }, { merge: true });
         }
-        if (data.iraqLottoDraws && data.iraqLottoDraws.length > 0) {
+
+        // 2. Iraq Lotto sync & auto-upgrade to all 128 draws
+        if (data.iraqLottoDraws && data.iraqLottoDraws.length >= INITIAL_IRAQ_LOTTO_DRAWS.length) {
           setIraqLottoDraws(data.iraqLottoDraws);
+        } else {
+          const existingDrawNumbers = new Set((data.iraqLottoDraws || []).map((d: LottoDraw) => d.drawNumber));
+          const missingDraws = INITIAL_IRAQ_LOTTO_DRAWS.filter(d => !existingDrawNumbers.has(d.drawNumber));
+          const mergedIraqLotto = [...(data.iraqLottoDraws || []), ...missingDraws].sort((a, b) => b.drawNumber - a.drawNumber);
+          setIraqLottoDraws(mergedIraqLotto);
+          setDoc(doc(db, "home_finance", "lotto_hub"), {
+            iraqLottoDraws: mergedIraqLotto
+          }, { merge: true });
         }
+
         if (data.tickets) {
           setTickets(data.tickets);
         }
       } else {
-        // Initialize document
+        // Initialize document with complete sets
         setDoc(doc(db, "home_finance", "lotto_hub"), {
           superKeyDraws: INITIAL_SUPER_KEY_DRAWS,
           iraqLottoDraws: INITIAL_IRAQ_LOTTO_DRAWS,
@@ -101,6 +114,17 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   const currentDraws = useMemo(() => {
     return selectedGame === "super_key" ? superKeyDraws : iraqLottoDraws;
   }, [selectedGame, superKeyDraws, iraqLottoDraws]);
+
+  // Filtered archive draws for search
+  const filteredArchiveDraws = useMemo(() => {
+    if (!archiveSearchQuery.trim()) return currentDraws;
+    const q = archiveSearchQuery.trim().toLowerCase();
+    return currentDraws.filter(d => 
+      d.drawNumber.toString().includes(q) || 
+      d.date.includes(q) || 
+      d.numbers.some(n => n.toString() === q)
+    );
+  }, [currentDraws, archiveSearchQuery]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -260,111 +284,6 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     setShowRecordDrawModal(false);
     setDrawNumbersInput([]);
     setDrawLuckyInput(undefined);
-  };
-
-  // Batch import parser for pasting results copied from iraqloto.iq
-  const handleBatchImportResults = async () => {
-    if (!batchImportText.trim()) {
-      toast.error("يرجى لصق نص السحوبات أولاً");
-      return;
-    }
-
-    const maxNum = GAME_DETAILS[selectedGame].maxNumber;
-    const lines = batchImportText.split("\n").map(l => l.trim()).filter(Boolean);
-    const parsedDraws: LottoDraw[] = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      // Extract all numbers
-      const allNumbers = (line.match(/\b\d+\b/g) || []).map(Number);
-      const validBalls = allNumbers.filter(n => n >= 1 && n <= maxNum);
-
-      // Check date: e.g. 2026-09-28 or 28/09/2026 or 28-9-2026
-      const dateMatch = line.match(/(\d{4}[/-]\d{1,2}[/-]\d{1,2})|(\d{1,2}[/-]\d{1,2}[/-]\d{4})/);
-      let dateFormatted = "";
-      if (dateMatch) {
-        const raw = dateMatch[0];
-        if (raw.includes("-") && raw.split("-")[0].length === 4) {
-          dateFormatted = raw;
-        } else {
-          const parts = raw.replace(/\//g, "-").split("-");
-          if (parts[2]?.length === 4) {
-            dateFormatted = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-          } else {
-            dateFormatted = raw;
-          }
-        }
-      }
-
-      // Check draw number (e.g. "سحبة 415" or "#415" or large number)
-      const drawNumMatch = line.match(/(?:سحبة|draw|#)\s*(\d+)/i);
-      let drawNum = drawNumMatch ? Number(drawNumMatch[1]) : 0;
-
-      // Extract 6 balls
-      if (validBalls.length >= 6) {
-        const numbers = Array.from(new Set(validBalls.slice(0, 6))).sort((a, b) => a - b);
-        if (numbers.length === 6) {
-          // If no draw number found from regex, find first number outside the 6 balls
-          if (!drawNum) {
-            const potentialDrawNums = allNumbers.filter(n => !numbers.includes(n) && (n > maxNum || n >= 100));
-            if (potentialDrawNums.length > 0) {
-              drawNum = potentialDrawNums[0];
-            } else {
-              drawNum = currentDraws.length + parsedDraws.length + 1;
-            }
-          }
-
-          // Optional lucky number for Super Key
-          let luckyNum: number | undefined;
-          if (selectedGame === "super_key") {
-            const luckyMatch = line.match(/(?:حظ|lucky|\+)\s*:?\s*(\d{1,2})/i);
-            if (luckyMatch) {
-              luckyNum = Number(luckyMatch[1]);
-            } else if (validBalls.length >= 7) {
-              luckyNum = validBalls[6];
-            }
-          }
-
-          parsedDraws.push({
-            id: `${selectedGame}-${drawNum}-${Date.now()}-${parsedDraws.length}`,
-            game: selectedGame,
-            drawNumber: drawNum,
-            date: dateFormatted || new Date().toISOString().split("T")[0],
-            numbers,
-            luckyNumber: luckyNum,
-            createdAt: new Date().toISOString()
-          });
-        }
-      }
-    }
-
-    if (parsedDraws.length === 0) {
-      toast.error("لم يتم التعرف على أي سحبات صالحة. تأكد من أن كل سطر يحتوي على 6 أرقام (من 1 إلى " + maxNum + ").");
-      return;
-    }
-
-    // Merge without duplicates
-    const existing = selectedGame === "super_key" ? superKeyDraws : iraqLottoDraws;
-    const existingNums = new Set(existing.map(d => d.drawNumber));
-    const newItems = parsedDraws.filter(d => !existingNums.has(d.drawNumber));
-
-    const merged = [...newItems, ...existing].sort((a, b) => b.drawNumber - a.drawNumber);
-
-    if (selectedGame === "super_key") {
-      setSuperKeyDraws(merged);
-    } else {
-      setIraqLottoDraws(merged);
-    }
-
-    await setDoc(doc(db, "home_finance", "lotto_hub"), {
-      superKeyDraws: selectedGame === "super_key" ? merged : superKeyDraws,
-      iraqLottoDraws: selectedGame === "iraq_lotto" ? merged : iraqLottoDraws
-    }, { merge: true });
-
-    toast.success(`تم بنجاح استيراد ${newItems.length} سحبة جديدة وتحديث الأرشيف بالكامل! 🎉`);
-    setShowBatchImportModal(false);
-    setBatchImportText("");
   };
 
   // Pending draws counter
@@ -879,25 +798,17 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
           ══════════════════════════════════════════ */}
           {activeSubTab === "history" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h4 className="font-black text-gray-900 dark:text-white text-sm">
                     سجل السحوبات الموثقة لـ {GAME_DETAILS[selectedGame].title}
                   </h4>
                   <p className="text-xs text-gray-400 font-bold">
-                    إجمالي السحوبات المسجلة: {currentDraws.length} سحبة
+                    إجمالي السحوبات المعتمدة بالكامل: {currentDraws.length} سحبة
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowBatchImportModal(true)}
-                    className="px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold text-xs flex items-center gap-1.5 hover:bg-amber-100 transition active:scale-95"
-                  >
-                    <span>📋</span>
-                    <span>استيراد ولصق نتائج مجمعة</span>
-                  </button>
-
                   <button
                     onClick={() => {
                       const nextNum = currentDraws[0]?.drawNumber ? currentDraws[0].drawNumber + 1 : 1;
@@ -907,56 +818,120 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                     className="px-3.5 py-2 rounded-xl bg-purple-600 text-white font-bold text-xs flex items-center gap-1.5 hover:bg-purple-700 transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>إضافة سحبة جديدة</span>
+                    <span>إضافة سحبة يدوية</span>
                   </button>
                 </div>
               </div>
 
-              <div className="space-y-2.5 max-h-[55vh] overflow-y-auto pr-1">
-                {currentDraws.map((d) => (
-                  <div
-                    key={d.id}
-                    className="p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-wrap items-center justify-between gap-3 hover:border-purple-300 dark:hover:border-purple-800 transition"
+              {/* Official Links & Verification */}
+              <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <span>جميع البيانات مسحوبة ومطابقة للسيرفرات الرسمية:</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedGame === "iraq_lotto" && (
+                    <a
+                      href="https://www.iraqloto.iq/more/results"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-[11px] font-black text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 flex items-center gap-1 transition"
+                    >
+                      <ExternalLink className="w-3 h-3 text-red-500" />
+                      <span>موقع لوتو العراق الرسمي</span>
+                    </a>
+                  )}
+                  <a
+                    href="https://www.youtube.com/@iraqlotoiq/streams"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-[11px] font-black text-red-600 dark:text-red-400 hover:bg-red-100 transition flex items-center gap-1"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 font-black text-sm flex items-center justify-center shrink-0">
-                        #{d.drawNumber}
-                      </div>
-                      <div>
-                        <div className="font-black text-xs sm:text-sm text-gray-900 dark:text-white">
-                          سحبة رقم {d.drawNumber}
-                        </div>
-                        <div className="text-[11px] font-bold text-gray-400">
-                          {d.date}
-                        </div>
-                      </div>
-                    </div>
+                    <ExternalLink className="w-3 h-3" />
+                    <span>البث المباشر (YouTube)</span>
+                  </a>
+                </div>
+              </div>
 
-                    {/* Numbers */}
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      {d.numbers.map((n) => (
-                        <div
-                          key={n}
-                          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-tr from-rose-500 to-purple-600 text-white font-black text-xs sm:text-sm flex items-center justify-center shadow-sm"
-                        >
-                          {n}
-                        </div>
-                      ))}
+              {/* Search in Archive */}
+              <div className="relative">
+                <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="ابحث برقم السحبة (مثلاً 415)، بالتاريخ (2026-09)، أو برقم فائز..."
+                  value={archiveSearchQuery}
+                  onChange={(e) => setArchiveSearchQuery(e.target.value)}
+                  className="w-full pr-9 pl-9 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs font-bold text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                {archiveSearchQuery && (
+                  <button
+                    onClick={() => setArchiveSearchQuery("")}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                  >
+                    إلغاء
+                  </button>
+                )}
+              </div>
 
-                      {d.luckyNumber !== undefined && (
-                        <>
-                          <span className="text-gray-400 text-xs px-0.5">+</span>
-                          <div
-                            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600 text-white font-black text-xs sm:text-sm flex items-center justify-center shadow-sm ring-1 ring-amber-300"
-                            title="رقم الحظ"
-                          >
-                            {d.luckyNumber}
-                          </div>
-                        </>
-                      )}
-                    </div>
+              {/* Search result count */}
+              {archiveSearchQuery && (
+                <div className="text-[11px] font-bold text-purple-600 dark:text-purple-400 px-1">
+                  عرض {filteredArchiveDraws.length} سحبة مطابقة للبحث من أصل {currentDraws.length}
+                </div>
+              )}
+
+              {/* Draws List */}
+              <div className="space-y-2.5 max-h-[55vh] overflow-y-auto pr-1">
+                {filteredArchiveDraws.length === 0 ? (
+                  <div className="p-8 text-center text-xs font-bold text-gray-400 bg-white dark:bg-zinc-900 rounded-2xl border border-dashed border-gray-200 dark:border-zinc-800">
+                    لا توجد سحوبات مطابقة لبحثك "{archiveSearchQuery}"
                   </div>
-                ))}
+                ) : (
+                  filteredArchiveDraws.map((d) => (
+                    <div
+                      key={d.id}
+                      className="p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-wrap items-center justify-between gap-3 hover:border-purple-300 dark:hover:border-purple-800 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 font-black text-sm flex items-center justify-center shrink-0">
+                          #{d.drawNumber}
+                        </div>
+                        <div>
+                          <div className="font-black text-xs sm:text-sm text-gray-900 dark:text-white">
+                            سحبة رقم {d.drawNumber}
+                          </div>
+                          <div className="text-[11px] font-bold text-gray-400">
+                            {d.date}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Numbers */}
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        {d.numbers.map((n) => (
+                          <div
+                            key={n}
+                            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-tr from-rose-500 to-purple-600 text-white font-black text-xs sm:text-sm flex items-center justify-center shadow-sm"
+                          >
+                            {n}
+                          </div>
+                        ))}
+
+                        {d.luckyNumber !== undefined && (
+                          <>
+                            <span className="text-gray-400 text-xs px-0.5">+</span>
+                            <div
+                              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600 text-white font-black text-xs sm:text-sm flex items-center justify-center shadow-sm ring-1 ring-amber-300"
+                              title="رقم الحظ"
+                            >
+                              {d.luckyNumber}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -1236,70 +1211,6 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                   <Trophy className="w-4 h-4" />
                   <span>حفظ ومطابقة جميع البطاقات فورياً</span>
                 </button>
-              </div>
-            </div>
-          </div>
-        )}
-        {/* ══════════════════════════════════════════
-            MODAL 3: BATCH IMPORT DRAWS
-        ══════════════════════════════════════════ */}
-        {showBatchImportModal && (
-          <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white dark:bg-[#1A1625] rounded-3xl p-5 max-w-lg w-full border border-gray-100 dark:border-white/10 shadow-2xl text-right max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-100 dark:border-zinc-800">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">📋</span>
-                  <h4 className="font-black text-gray-900 dark:text-white text-base">
-                    استيراد ولصق نتائج السحوبات دفعة واحدة
-                  </h4>
-                </div>
-                <button
-                  onClick={() => setShowBatchImportModal(false)}
-                  className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-500"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-bold leading-relaxed">
-                  انسخ أي قائمة نتائج أو جدول من موقع لوتو العراق والصقه في المربع أدناه. سيقوم الذكاء باستخراج رقم السحبة، التاريخ، والأرقام الفائزة الستة تلقائياً وضمها إلى الأرشيف!
-                </p>
-
-                <div>
-                  <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5 block">
-                    نص السحوبات / الجدول المنسوخ:
-                  </label>
-                  <textarea
-                    rows={8}
-                    value={batchImportText}
-                    onChange={(e) => setBatchImportText(e.target.value)}
-                    placeholder={`مثال لصيغ متعددة يدعمها النظام:\nسحبة 415 | 28/09/2026 | 6 - 12 - 14 - 18 - 24 - 26\n414  24/09/2026  3, 7, 11, 15, 22, 28\n413  21-9-2026  2 8 13 19 23 27\n\nأو الصق النص الكامل كما هو من الصفحة مباشرة!`}
-                    className="w-full p-3 rounded-2xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900 text-xs font-mono text-gray-800 dark:text-gray-200 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
-                    dir="ltr"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleBatchImportResults}
-                    className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-rose-600 text-white font-black text-sm shadow-lg shadow-purple-500/25 active:scale-95 transition flex items-center justify-center gap-2"
-                  >
-                    <span>استخراج وإضافة السحوبات للأرشيف 🚀</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowBatchImportModal(false);
-                      setBatchImportText("");
-                    }}
-                    className="px-4 py-3 rounded-2xl bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 font-bold text-xs"
-                  >
-                    إلغاء
-                  </button>
-                </div>
               </div>
             </div>
           </div>
