@@ -16,6 +16,7 @@ import { customConfirm } from "@/lib/customConfirm";
 import { db, storage } from "@/lib/firebase";
 import FamilyCompetition from "./FamilyCompetition";
 import FamilyCompetitionOverview from "./FamilyCompetitionOverview";
+import LottoTracker from "./LottoTracker";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
@@ -427,6 +428,7 @@ export default function HomeFinanceDashboard() {
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [expenseItems, setExpenseItems] = useState<ExpenseItem[]>([]);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [showLottoTrackerModal, setShowLottoTrackerModal] = useState(false);
   const [expCategoryInput, setExpCategoryInput] = useState<string>("سوبر ماركت");
   const [expDateInput, setExpDateInput] = useState<string>(today());
   const [isScanningReceipt, setIsScanningReceipt] = useState(false);
@@ -1338,7 +1340,8 @@ setEditFuturePlan(null);
 
   const handleSaveExpense = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     const isEdit = !!editExpense;
     
     const name = (expNameInput || (fd.get("name") as string) || "").trim();
@@ -1349,9 +1352,11 @@ setEditFuturePlan(null);
       : Number(fd.get("amount") || 0);
     const date = expDateInput || (fd.get("date") as string) || today();
 
-    // 1. Blacklist Check
-    if (name.includes("لوتو") || name.includes("عراق لوتو")) {
-      if (!(await customConfirm("تحذير: هذا البند يعتبر هدراً مالياً مباشراً. هل أنت متأكد من رغبتك في تسجيله؟"))) {
+    // 1. Lottery Check & Confirmation
+    const isLottoRelated = name.includes("لوتو") || name.includes("عراق لوتو") || category === "ألعاب ويانصيب";
+    if (isLottoRelated) {
+      const confirmed = await customConfirm("تأكيد تسجيل المصروف: هل ترغب في حفظ هذا المصروف ضمن فئة اليانصيب ومتابعته في مركز اللوتو؟");
+      if (!confirmed) {
         return;
       }
     }
@@ -1412,9 +1417,25 @@ setEditFuturePlan(null);
           });
         }
       }
+
+      // If it's lotto related, show notification offering lotto center
+      if (isLottoRelated) {
+        setTimeout(() => {
+          toast("يمكنك توقع الأرقام القادمة ومتابعة نتيجة السحب في مركز اللوتو 🎰", {
+            action: {
+              label: "فتح المركز",
+              onClick: () => setShowLottoTrackerModal(true)
+            }
+          });
+        }, 600);
+      }
     }
     
-    e.currentTarget.reset();
+    try {
+      form?.reset();
+    } catch (err) {
+      console.warn("Form reset safely caught:", err);
+    }
     setExpNameInput("");
     setExpCategoryInput("سوبر ماركت");
     setExpDateInput(today());
@@ -2718,6 +2739,7 @@ setEditTrip(null);
                 { label: "دين", icon: Banknote, color: "from-cyan-500 to-blue-500", action: () => setShowDebtModal(true) },
                 { label: "خطة مستقبلية", icon: Target, color: "from-fuchsia-500 to-pink-500", action: () => setShowFuturePlanModal(true) },
                 { label: "رحلة ومصاريف", icon: Plane, color: "from-sky-500 to-blue-500", action: () => setShowTravelShortcutModal(true) },
+                { label: "مركز اللوتو 🎰", icon: Sparkles, color: "from-purple-600 via-pink-600 to-amber-500", action: () => setShowLottoTrackerModal(true) },
               ].map(q => {
                 const Icon = q.icon;
                 return (
@@ -3047,6 +3069,13 @@ setEditTrip(null);
                 سجل المصاريف
               </h2>
               <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setShowLottoTrackerModal(true)}
+                  className="bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white text-xs font-black px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-purple-500/20 hover:opacity-95 active:scale-95 transition"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>مركز اللوتو</span>
+                </button>
                 <button onClick={() => setShowProductSearchModal(true)}
                   className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 active:scale-95 transition">
                   <Activity className="w-3.5 h-3.5" /> البحث عن منتج
@@ -5415,6 +5444,32 @@ setEditTrip(null);
                 </div>
               </div>
 
+              {(expCategoryInput === "ألعاب ويانصيب" || expNameInput.includes("لوتو")) && (
+                <div className="p-3 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-amber-500/10 border border-purple-200 dark:border-purple-500/30 rounded-2xl flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">🎰</span>
+                    <div>
+                      <span className="font-black text-xs text-purple-700 dark:text-purple-300 block">
+                        مركز لوتو سوبر كي ولوتو العراق
+                      </span>
+                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-bold block">
+                        توقع الأرقام القادمة، إدارة البطاقات، ومطابقة نتائج السحب
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowExpenseModal(false);
+                      setShowLottoTrackerModal(true);
+                    }}
+                    className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl text-xs hover:shadow-md transition active:scale-95 shrink-0"
+                  >
+                    فتح المركز ↗
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="flex justify-between items-center mb-1">
@@ -6810,6 +6865,27 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
             </div>
           </div>
         </div>
+      )}
+
+      {showLottoTrackerModal && (
+        <LottoTracker
+          isOpen={showLottoTrackerModal}
+          onClose={() => setShowLottoTrackerModal(false)}
+          onAddExpenseLinked={(amount, desc, date) => {
+            const item: Expense = {
+              id: Date.now().toString(),
+              name: desc,
+              category: "ألعاب ويانصيب",
+              amount,
+              date: date || today(),
+              createdAt: new Date().toISOString()
+            };
+            const updated = [item, ...expenses];
+            setExpenses(updated);
+            syncToFirebase("expenses", updated);
+            toast.success("تم تسجيل المصروف تلقائياً في سجل المصاريف!");
+          }}
+        />
       )}
 
     </div>
