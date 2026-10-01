@@ -216,6 +216,10 @@ const EXPENSE_CATEGORIES = [
   { label: "مفروشات", icon: "🛏️", color: "from-teal-400 to-emerald-500" },
   { label: "ألعاب ويانصيب", icon: "🎲", color: "from-indigo-500 to-purple-500" },
   { label: "بنوك وصراف", icon: "🏦", color: "from-blue-600 to-sky-700" },
+  { label: "انشائية", icon: "🏗️", color: "from-amber-700 to-stone-600" },
+  { label: "مواد سفري", icon: "🥡", color: "from-orange-500 to-amber-600" },
+  { label: "منزلية", icon: "🏡", color: "from-cyan-600 to-blue-600" },
+  { label: "كهربائية", icon: "🔌", color: "from-amber-400 to-yellow-500" },
 ];
 
 const BILL_CATEGORIES = ["كهرباء", "ماء", "إنترنت", "إيجار", "هاتف", "تنظيف", "غاز"];
