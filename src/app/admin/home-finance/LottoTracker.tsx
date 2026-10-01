@@ -293,12 +293,25 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2.5 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/20 text-gray-600 dark:text-gray-300 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href="https://www.iraqloto.iq/more/results"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/20 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-200 transition"
+              title="فتح صفحة نتائج السحب الرسمية لموقع لوتو العراق"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-rose-500" />
+              <span className="hidden sm:inline">نتائج السحب الرسمية</span>
+            </a>
+
+            <button
+              onClick={onClose}
+              className="p-2.5 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/20 text-gray-600 dark:text-gray-300 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Game Switcher Tabs */}

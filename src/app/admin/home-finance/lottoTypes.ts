@@ -55,11 +55,11 @@ export const INITIAL_SUPER_KEY_DRAWS: LottoDraw[] = [
 ];
 
 export const INITIAL_IRAQ_LOTTO_DRAWS: LottoDraw[] = [
-  { id: "il-10", game: "iraq_lotto", drawNumber: 10, date: "2026-09-28", numbers: [4, 9, 14, 18, 22, 27] },
-  { id: "il-9", game: "iraq_lotto", drawNumber: 9, date: "2026-09-24", numbers: [2, 7, 11, 16, 23, 29] },
-  { id: "il-8", game: "iraq_lotto", drawNumber: 8, date: "2026-09-21", numbers: [5, 10, 13, 20, 25, 28] },
-  { id: "il-7", game: "iraq_lotto", drawNumber: 7, date: "2026-09-17", numbers: [3, 8, 15, 19, 24, 26] },
-  { id: "il-6", game: "iraq_lotto", drawNumber: 6, date: "2026-09-14", numbers: [1, 6, 12, 17, 21, 28] }
+  { id: "il-415", game: "iraq_lotto", drawNumber: 415, date: "2026-09-28", numbers: [6, 12, 14, 18, 24, 26] },
+  { id: "il-414", game: "iraq_lotto", drawNumber: 414, date: "2026-09-24", numbers: [3, 7, 11, 15, 22, 28] },
+  { id: "il-413", game: "iraq_lotto", drawNumber: 413, date: "2026-09-21", numbers: [2, 8, 13, 19, 23, 27] },
+  { id: "il-412", game: "iraq_lotto", drawNumber: 412, date: "2026-09-17", numbers: [4, 9, 14, 17, 21, 29] },
+  { id: "il-411", game: "iraq_lotto", drawNumber: 411, date: "2026-09-14", numbers: [1, 5, 10, 16, 20, 25] }
 ];
 
 export const GAME_DETAILS = {
