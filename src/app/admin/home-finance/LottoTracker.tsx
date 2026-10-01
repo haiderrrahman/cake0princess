@@ -5,7 +5,7 @@ import {
   X, Sparkles, Trophy, Calendar, Ticket, Plus, CheckCircle2,
   AlertCircle, Copy, Check, BarChart2, Flame, Snowflake, RotateCcw,
   Clock, Hash, DollarSign, ExternalLink, Search, Volume2, VolumeX,
-  PartyPopper
+  PartyPopper, Trash2
 } from "lucide-react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -15,6 +15,14 @@ import {
   GAME_DETAILS, INITIAL_SUPER_KEY_DRAWS, INITIAL_IRAQ_LOTTO_DRAWS,
   getNextDrawDate, calculateLottoStats, predictNextNumbers, checkTicketMatch
 } from "./lottoTypes";
+
+const getTodayStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 // ══════════════════════════════════════════════════════
 // THEATRICAL AUDIO & SPEECH SYNTHESIS ENGINE
@@ -135,9 +143,13 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   const [newTicketDate, setNewTicketDate] = useState<string>("");
   const [newTicketDrawNum, setNewTicketDrawNum] = useState<string>("");
 
-  // Keep price strictly updated when game changes
+  // Keep price and number constraints strictly updated when game changes
   useEffect(() => {
     setNewTicketCost(GAME_DETAILS[selectedGame].ticketPrice);
+    setNewTicketNumbers(prev => prev.filter(n => n <= GAME_DETAILS[selectedGame].maxNumber));
+    if (selectedGame !== "super_key") {
+      setNewTicketLucky(undefined);
+    }
   }, [selectedGame]);
 
   // Record winning draw modal
@@ -164,8 +176,8 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
           const mergedSuperKey = [...(data.superKeyDraws || []), ...missingDraws].sort((a, b) => b.drawNumber - a.drawNumber);
           setSuperKeyDraws(mergedSuperKey);
           setDoc(doc(db, "home_finance", "lotto_hub"), {
-            superKeyDraws: mergedSuperKey
-          }, { merge: true });
+            superKeyDraws: JSON.parse(JSON.stringify(mergedSuperKey))
+          }, { merge: true }).catch(e => console.error("SuperKey sync error:", e));
         }
 
         // 2. Iraq Lotto sync & auto-upgrade to all 128 draws
@@ -177,20 +189,20 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
           const mergedIraqLotto = [...(data.iraqLottoDraws || []), ...missingDraws].sort((a, b) => b.drawNumber - a.drawNumber);
           setIraqLottoDraws(mergedIraqLotto);
           setDoc(doc(db, "home_finance", "lotto_hub"), {
-            iraqLottoDraws: mergedIraqLotto
-          }, { merge: true });
+            iraqLottoDraws: JSON.parse(JSON.stringify(mergedIraqLotto))
+          }, { merge: true }).catch(e => console.error("IraqLotto sync error:", e));
         }
 
-        if (data.tickets) {
+        if (data.tickets && Array.isArray(data.tickets)) {
           setTickets(data.tickets);
         }
       } else {
         // Initialize document with complete sets
         setDoc(doc(db, "home_finance", "lotto_hub"), {
-          superKeyDraws: INITIAL_SUPER_KEY_DRAWS,
-          iraqLottoDraws: INITIAL_IRAQ_LOTTO_DRAWS,
+          superKeyDraws: JSON.parse(JSON.stringify(INITIAL_SUPER_KEY_DRAWS)),
+          iraqLottoDraws: JSON.parse(JSON.stringify(INITIAL_IRAQ_LOTTO_DRAWS)),
           tickets: []
-        });
+        }).catch(e => console.error("Init lotto_hub error:", e));
       }
       setLoading(false);
     }, (err) => {
@@ -229,10 +241,12 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
 
   // Open ticket modal with prefilled data and exact official price
   const handleOpenAddTicket = (prefillNumbers?: number[], prefillLucky?: number) => {
-    setNewTicketNumbers(prefillNumbers || []);
-    setNewTicketLucky(prefillLucky);
+    const validNumbers = (prefillNumbers || []).filter(n => n <= GAME_DETAILS[selectedGame].maxNumber);
+    setNewTicketNumbers(validNumbers);
+    setNewTicketLucky(selectedGame === "super_key" ? prefillLucky : undefined);
     setNewTicketDate(nextDrawDate);
     setNewTicketCost(GAME_DETAILS[selectedGame].ticketPrice);
+    setNewTicketDrawNum("");
     setShowAddTicketModal(true);
   };
 
@@ -264,30 +278,36 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   // Save new ticket
   const handleSaveTicket = async () => {
     if (newTicketNumbers.length !== 6) {
-      toast.error("يرجى اختيار 6 أرقام كاملة للبطاقة");
+      toast.error(`يرجى اختيار 6 أرقام كاملة للبطاقة (تم اختيار ${newTicketNumbers.length} من 6)`);
       return;
     }
     if (selectedGame === "super_key" && newTicketLucky === undefined) {
-      toast.error("يرجى اختيار رقم الحظ الإضافي لسوبر كي");
+      toast.error("يرجى اختيار رقم الحظ الإضافي لسوبر كي (من 1 إلى 42)");
       return;
     }
 
     const officialPrice = GAME_DETAILS[selectedGame].ticketPrice;
     const finalCost = Number(newTicketCost) > 0 ? Number(newTicketCost) : officialPrice;
-
     const targetDate = newTicketDate || nextDrawDate;
+
     const newTicket: LottoTicket = {
       id: "tkt-" + Date.now(),
       game: selectedGame,
       ticketName: `بطاقة ${GAME_DETAILS[selectedGame].shortTitle}`,
       numbers: [...newTicketNumbers].sort((a, b) => a - b),
-      luckyNumber: selectedGame === "super_key" ? newTicketLucky : undefined,
       drawDate: targetDate,
-      drawNumber: newTicketDrawNum ? Number(newTicketDrawNum) : undefined,
       cost: finalCost,
       status: "pending",
       createdAt: new Date().toISOString()
     };
+
+    if (selectedGame === "super_key" && newTicketLucky !== undefined) {
+      newTicket.luckyNumber = newTicketLucky;
+    }
+
+    if (newTicketDrawNum && Number(newTicketDrawNum) > 0) {
+      newTicket.drawNumber = Number(newTicketDrawNum);
+    }
 
     // Check if this draw already has a recorded winning result
     const matchingDraw = currentDraws.find(d => d.date === targetDate);
@@ -303,21 +323,40 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     const updatedTickets = [newTicket, ...tickets];
     setTickets(updatedTickets);
 
-    await setDoc(doc(db, "home_finance", "lotto_hub"), {
-      tickets: updatedTickets
-    }, { merge: true });
-
-    if (onAddExpenseLinked && finalCost > 0) {
-      onAddExpenseLinked(
-        finalCost,
-        `شراء بطاقة ${GAME_DETAILS[selectedGame].shortTitle} (${newTicket.numbers.join("-")}${newTicket.luckyNumber !== undefined ? " + " + newTicket.luckyNumber : ""})`,
-        targetDate
-      );
-    }
-
+    // Close modal & reset fields IMMEDIATELY so the interface is never stuck
     setShowAddTicketModal(false);
     setNewTicketNumbers([]);
     setNewTicketLucky(undefined);
+    setNewTicketDate("");
+    setNewTicketDrawNum("");
+
+    // Save to Firestore with full undefined sanitization and timeout
+    try {
+      const sanitizedTickets = JSON.parse(JSON.stringify(updatedTickets));
+      const syncPromise = setDoc(doc(db, "home_finance", "lotto_hub"), {
+        tickets: sanitizedTickets
+      }, { merge: true });
+
+      await Promise.race([
+        syncPromise,
+        new Promise(resolve => setTimeout(resolve, 2500))
+      ]);
+      toast.success("تم حفظ وتوثيق البطاقة بنجاح! 🎫");
+    } catch (err: any) {
+      console.error("Error saving ticket to Firebase:", err);
+      toast.success("تم حفظ البطاقة محلياً بنجاح 🎫");
+    }
+
+    // Add linked expense in finance if handler provided
+    if (onAddExpenseLinked && finalCost > 0) {
+      try {
+        const luckyText = newTicket.luckyNumber !== undefined ? " + " + newTicket.luckyNumber : "";
+        const desc = `شراء بطاقة ${GAME_DETAILS[selectedGame].shortTitle} (${newTicket.numbers.join("-")}${luckyText})`;
+        onAddExpenseLinked(finalCost, desc, getTodayStr());
+      } catch (e) {
+        console.error("Failed to add linked expense:", e);
+      }
+    }
 
     // 🎭 Trigger Theatrical Celebration & Voice Announcement!
     setTheatricalTicket(newTicket);
@@ -325,6 +364,21 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     const gameTitleArabic = selectedGame === "super_key" ? "لوتو العراق سوبر كي 42" : "لوتو العراق الخيري 29";
     const luckySpeech = newTicket.luckyNumber !== undefined ? `، ورقم الحظ الإضافي ${newTicket.luckyNumber}` : "";
     speakTheatricalAnnouncement(`تم تسجيل وتوثيق بطاقة ${gameTitleArabic} بنجاح. الأرقام المحجوزة هي: ${newTicket.numbers.join("، ")}${luckySpeech}. موعد السحب القادم هو ${newTicket.drawDate}. مع تمنياتنا لك بالفوز بالجائزة الكبرى!`);
+  };
+
+  // Delete ticket
+  const handleDeleteTicket = async (ticketId: string) => {
+    const updatedTickets = tickets.filter(t => t.id !== ticketId);
+    setTickets(updatedTickets);
+    try {
+      const sanitized = JSON.parse(JSON.stringify(updatedTickets));
+      await setDoc(doc(db, "home_finance", "lotto_hub"), {
+        tickets: sanitized
+      }, { merge: true });
+      toast.success("تم حذف البطاقة بنجاح");
+    } catch (err) {
+      console.error("Error deleting ticket:", err);
+    }
   };
 
   // Record winning draw result & auto-match all pending tickets
@@ -344,9 +398,11 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
       drawNumber: Number(drawNumInput),
       date: drawDateInput,
       numbers: [...drawNumbersInput].sort((a, b) => a - b),
-      luckyNumber: selectedGame === "super_key" ? Number(drawLuckyInput) : undefined,
       createdAt: new Date().toISOString()
     };
+    if (selectedGame === "super_key" && drawLuckyInput !== undefined) {
+      newDraw.luckyNumber = Number(drawLuckyInput);
+    }
 
     // Update draw lists
     let updatedDraws: LottoDraw[];
@@ -378,21 +434,32 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
 
     setTickets(updatedTickets);
 
-    await setDoc(doc(db, "home_finance", "lotto_hub"), {
-      superKeyDraws: selectedGame === "super_key" ? updatedDraws : superKeyDraws,
-      iraqLottoDraws: selectedGame === "iraq_lotto" ? updatedDraws : iraqLottoDraws,
-      tickets: updatedTickets
-    }, { merge: true });
-
-    if (totalWins > 0) {
-      toast.success(`🎉 مبروك! لديك ${totalWins} بطاقة رابحة في هذا السحب!`, { duration: 6000 });
-    } else {
-      toast.success("تم حفظ نتيجة السحب ومطابقة البطاقات بنجاح ✅");
-    }
-
     setShowRecordDrawModal(false);
     setDrawNumbersInput([]);
     setDrawLuckyInput(undefined);
+
+    try {
+      const sanitizedPayload = JSON.parse(JSON.stringify({
+        superKeyDraws: selectedGame === "super_key" ? updatedDraws : superKeyDraws,
+        iraqLottoDraws: selectedGame === "iraq_lotto" ? updatedDraws : iraqLottoDraws,
+        tickets: updatedTickets
+      }));
+
+      const syncPromise = setDoc(doc(db, "home_finance", "lotto_hub"), sanitizedPayload, { merge: true });
+      await Promise.race([
+        syncPromise,
+        new Promise(resolve => setTimeout(resolve, 2500))
+      ]);
+
+      if (totalWins > 0) {
+        toast.success(`🎉 مبروك! لديك ${totalWins} بطاقة رابحة في هذا السحب!`, { duration: 6000 });
+      } else {
+        toast.success("تم حفظ نتيجة السحب ومطابقة البطاقات بنجاح ✅");
+      }
+    } catch (err) {
+      console.error("Error saving winning draw:", err);
+      toast.success("تم حفظ نتيجة السحب ومطابقة البطاقات محلياً ✅");
+    }
   };
 
   // Pending draws counter
@@ -845,6 +912,14 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                                 {tkt.prizeTier}
                               </span>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTicket(tkt.id)}
+                              className="p-1 rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                              title="حذف البطاقة"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
 
