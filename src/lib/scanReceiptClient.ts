@@ -164,10 +164,24 @@ export async function scanReceiptWithGemini(
     category = "سوبر ماركت";
   }
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const todayStr = now.toISOString().split("T")[0];
+  const currentYear = now.getFullYear();
   let receiptDate = (parsed.date || "").trim();
-  // Ensure date is in YYYY-MM-DD and not in the future
-  if (!receiptDate || !/^\d{4}-\d{2}-\d{2}$/.test(receiptDate) || receiptDate > todayStr) {
+
+  // Ensure date is in YYYY-MM-DD and aligns with the current year
+  if (receiptDate && /^\d{4}-\d{2}-\d{2}$/.test(receiptDate)) {
+    const [yearStr, monthStr, dayStr] = receiptDate.split("-");
+    const yearNum = parseInt(yearStr, 10);
+    // If POS receipt has an outdated year (e.g. 2024 instead of current 2026)
+    if (yearNum !== currentYear) {
+      receiptDate = `${currentYear}-${monthStr}-${dayStr}`;
+    }
+    // Never allow dates in the future
+    if (receiptDate > todayStr) {
+      receiptDate = todayStr;
+    }
+  } else {
     receiptDate = todayStr;
   }
 

@@ -514,6 +514,7 @@ export default function HomeFinanceDashboard() {
   const [expenseSearch, setExpenseSearch] = useState("");
   const [expenseStartDate, setExpenseStartDate] = useState("");
   const [expenseEndDate, setExpenseEndDate] = useState("");
+  const [showAllDates, setShowAllDates] = useState(false);
   const [inventorySearch, setInventorySearch] = useState("");
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
 
@@ -776,6 +777,7 @@ export default function HomeFinanceDashboard() {
   };
 
   const isExpenseInDateRange = (dateString: string) => {
+    if (showAllDates) return true;
     if (!expenseStartDate && !expenseEndDate) return isInCycle(dateString);
     if (!dateString) return false;
     const dStr = dateString.split("T")[0];
@@ -1257,11 +1259,25 @@ setEditFuturePlan(null);
       }
 
       const todayStr = today();
-      if (data.date && data.date <= todayStr) {
-        setExpDateInput(data.date);
+      const currentYear = new Date().getFullYear().toString();
+      let extractedDate = data.date;
+
+      // Normalize scanned date: prevent old cash register dates (e.g. 2024)
+      if (extractedDate) {
+        const parts = extractedDate.split("-");
+        if (parts.length === 3) {
+          if (parts[0] !== currentYear) {
+            extractedDate = `${currentYear}-${parts[1]}-${parts[2]}`;
+          }
+        }
+        if (extractedDate > todayStr) {
+          extractedDate = todayStr;
+        }
       } else {
-        setExpDateInput(todayStr);
+        extractedDate = todayStr;
       }
+
+      setExpDateInput(extractedDate);
 
       if (Array.isArray(data.items) && data.items.length > 0) {
         setExpenseItems(data.items);
@@ -1397,6 +1413,13 @@ setEditFuturePlan(null);
       });
       if (matchingCycle && matchingCycle.id !== selectedCycleId) {
         setSelectedCycleId(matchingCycle.id);
+      } else if (!isInCycle(date) && !expenseStartDate && !expenseEndDate && !showAllDates) {
+        // If not in current cycle, activate all periods so expense is visible immediately
+        setShowAllDates(true);
+        toast("تنبيه: تاريخ المصروف (" + date + ") خارج الدورة المعروضة، تم تفعيل عرض كل الفترات لتشاهده فوراً 👁️", {
+          icon: "💡",
+          duration: 6000
+        });
       }
       
       // 2. Micro-Shopping Alert (New Expenses Only)
@@ -3170,32 +3193,56 @@ setEditTrip(null);
                 )}
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAllDates(!showAllDates);
+                    if (!showAllDates) {
+                      setExpenseStartDate('');
+                      setExpenseEndDate('');
+                    }
+                  }}
+                  className={`px-3 py-2 rounded-2xl text-xs font-black transition flex items-center gap-1.5 shrink-0 border shadow-sm ${
+                    showAllDates 
+                      ? "bg-rose-500 text-white border-rose-500 shadow-rose-500/20" 
+                      : "bg-white dark:bg-zinc-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-zinc-700 hover:border-rose-400"
+                  }`}
+                  title={showAllDates ? "العودة للدورة الحالية فقط" : "عرض جميع المصاريف عبر كل التواريخ"}
+                >
+                  {showAllDates ? "📅 كل الفترات" : "🔄 الدورة الحالية"}
+                </button>
                 <div className="relative shrink-0">
                   <input
                     type="date"
                     value={expenseStartDate}
-                    onChange={e => setExpenseStartDate(e.target.value)}
-                    className="w-[140px] bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-3 py-2.5 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
+                    onChange={e => {
+                      setExpenseStartDate(e.target.value);
+                      if (e.target.value) setShowAllDates(false);
+                    }}
+                    className="w-[135px] bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-2.5 py-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
                     title="من تاريخ"
                   />
                   {expenseStartDate && (
                     <button onClick={() => setExpenseStartDate('')} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-white dark:bg-zinc-900 px-1">
-                      <X className="w-4 h-4" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
-                <span className="text-gray-500 font-bold shrink-0 text-sm">-</span>
+                <span className="text-gray-500 font-bold shrink-0 text-xs">-</span>
                 <div className="relative shrink-0">
                   <input
                     type="date"
                     value={expenseEndDate}
-                    onChange={e => setExpenseEndDate(e.target.value)}
-                    className="w-[140px] bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-3 py-2.5 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
+                    onChange={e => {
+                      setExpenseEndDate(e.target.value);
+                      if (e.target.value) setShowAllDates(false);
+                    }}
+                    className="w-[135px] bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-2.5 py-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
                     title="إلى تاريخ"
                   />
                   {expenseEndDate && (
                     <button onClick={() => setExpenseEndDate('')} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-white dark:bg-zinc-900 px-1">
-                      <X className="w-4 h-4" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
@@ -3266,13 +3313,45 @@ setEditTrip(null);
             </div>
 
             {(() => {
-              const filtered = allExpenses.filter(exp =>
-                isExpenseInDateRange(exp.date) &&
-                (!expenseCategoryFilter || exp.category === expenseCategoryFilter) &&
-                (!expenseSearch || (exp.name && exp.name.includes(expenseSearch)) || (exp.category && exp.category.includes(expenseSearch)))
-              ).sort((a, b) => b.date.localeCompare(a.date));
+              const query = expenseSearch.trim();
+              const norm = (s: string) => (s || "")
+                .replace(/[أإآ]/g, "ا")
+                .replace(/ة/g, "ه")
+                .replace(/ى/g, "ي")
+                .toLowerCase()
+                .trim();
+              const normQuery = norm(query);
 
-              const isAnyFilterActive = expenseCategoryFilter || expenseSearch || expenseStartDate || expenseEndDate;
+              const filtered = allExpenses.filter(exp => {
+                // If user typed a search term, search across ALL time unless an explicit date range was picked
+                const isDateValid = (expenseStartDate || expenseEndDate)
+                  ? isExpenseInDateRange(exp.date)
+                  : (showAllDates || query.length > 0 ? true : isInCycle(exp.date));
+
+                if (!isDateValid) return false;
+
+                if (expenseCategoryFilter && exp.category !== expenseCategoryFilter) return false;
+
+                if (!query) return true;
+
+                // Match name
+                if (norm(exp.name).includes(normQuery)) return true;
+
+                // Match category
+                if (norm(exp.category).includes(normQuery)) return true;
+
+                // Match amount
+                if (exp.amount.toString().includes(query)) return true;
+
+                // Match any item inside receipt
+                if (exp.items && exp.items.some(item => norm(item.name).includes(normQuery))) {
+                  return true;
+                }
+
+                return false;
+              }).sort((a, b) => b.date.localeCompare(a.date));
+
+              const isAnyFilterActive = expenseCategoryFilter || expenseSearch || expenseStartDate || expenseEndDate || showAllDates;
 
               return (
                 <>
@@ -3281,7 +3360,7 @@ setEditTrip(null);
                     <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/40 rounded-2xl px-4 py-3 flex justify-between items-center mb-3">
                       <div className="flex flex-col gap-0.5">
                         <span className="text-rose-700 dark:text-rose-400 text-xs font-bold">
-                          إجمالي {expenseCategoryFilter ? expenseCategoryFilter : expenseSearch ? `البحث: ${expenseSearch}` : 'الفترة المحددة'}:
+                          إجمالي {expenseCategoryFilter ? expenseCategoryFilter : expenseSearch ? `البحث: ${expenseSearch}` : showAllDates ? 'كل الفترات' : 'الفترة المحددة'}:
                         </span>
                         <span className="text-rose-600 dark:text-rose-400 font-black">
                           {fmt(filtered.reduce((s,e)=>s+e.amount,0))} د.ع
@@ -3305,7 +3384,24 @@ setEditTrip(null);
                   {filtered.length === 0 ? (
                     <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
                       <span className="text-5xl block mb-3">💸</span>
-                      <p className="text-gray-400 font-bold text-sm">{expenseSearch ? `لا نتائج عن "${expenseSearch}"` : (expenseStartDate || expenseEndDate) ? `لا توجد مصاريف في الفترة المحددة` : expenseCategoryFilter ? `لا توجد مصاريف في قسم ${expenseCategoryFilter}` : 'لا توجد مصاريف في هذه الدورة'}</p>
+                      <p className="text-gray-400 font-bold text-sm mb-3">
+                        {expenseSearch 
+                          ? `لا نتائج عن "${expenseSearch}"` 
+                          : (expenseStartDate || expenseEndDate) 
+                            ? `لا توجد مصاريف في الفترة المحددة` 
+                            : expenseCategoryFilter 
+                              ? `لا توجد مصاريف في قسم ${expenseCategoryFilter}` 
+                              : 'لا توجد مصاريف في هذه الدورة'}
+                      </p>
+                      {!showAllDates && !expenseStartDate && !expenseEndDate && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllDates(true)}
+                          className="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-300 font-bold text-xs rounded-xl border border-rose-200 dark:border-rose-800/40 hover:bg-rose-100 transition"
+                        >
+                          📅 عرض كل المصاريف السابقة واللاحقة (كل الفترات)
+                        </button>
+                      )}
                     </div>
                   ) : (
                 <div className="grid grid-cols-2 gap-3">
