@@ -1352,14 +1352,8 @@ setEditFuturePlan(null);
       : Number(fd.get("amount") || 0);
     const date = expDateInput || (fd.get("date") as string) || today();
 
-    // 1. Lottery Check & Confirmation
+    // 1. Lottery Check
     const isLottoRelated = name.includes("لوتو") || name.includes("عراق لوتو") || category === "ألعاب ويانصيب";
-    if (isLottoRelated) {
-      const confirmed = await customConfirm("تأكيد تسجيل المصروف: هل ترغب في حفظ هذا المصروف ضمن فئة اليانصيب ومتابعته في مركز اللوتو؟");
-      if (!confirmed) {
-        return;
-      }
-    }
 
     const item: Expense = {
       id: isEdit ? editExpense!.id : Date.now().toString(),

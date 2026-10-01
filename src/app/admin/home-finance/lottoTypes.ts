@@ -194,6 +194,7 @@ export const GAME_DETAILS = {
     hasLuckyNumber: true,
     drawDaysArabic: "كل سبت وأربعاء",
     drawDays: [3, 6], // 3: Wednesday, 6: Saturday
+    ticketPrice: 2650, // 2,650 IQD
     badgeColor: "from-amber-500 via-rose-500 to-purple-600",
     themeColor: "#8b5cf6"
   },
@@ -205,6 +206,7 @@ export const GAME_DETAILS = {
     hasLuckyNumber: false,
     drawDaysArabic: "كل اثنين وخميس",
     drawDays: [1, 4], // 1: Monday, 4: Thursday
+    ticketPrice: 1500, // 1,500 IQD
     badgeColor: "from-red-600 via-pink-600 to-amber-500",
     themeColor: "#e11d48"
   }

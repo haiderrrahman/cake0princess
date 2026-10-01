@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   X, Sparkles, Trophy, Calendar, Ticket, Plus, CheckCircle2,
   AlertCircle, Copy, Check, BarChart2, Flame, Snowflake, RotateCcw,
-  Clock, Hash, DollarSign, ExternalLink, Search
+  Clock, Hash, DollarSign, ExternalLink, Search, Volume2, VolumeX,
+  PartyPopper
 } from "lucide-react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -14,6 +15,87 @@ import {
   GAME_DETAILS, INITIAL_SUPER_KEY_DRAWS, INITIAL_IRAQ_LOTTO_DRAWS,
   getNextDrawDate, calculateLottoStats, predictNextNumbers, checkTicketMatch
 } from "./lottoTypes";
+
+// ══════════════════════════════════════════════════════
+// THEATRICAL AUDIO & SPEECH SYNTHESIS ENGINE
+// ══════════════════════════════════════════════════════
+function playTheatricalFanfare() {
+  try {
+    if (typeof window === "undefined") return;
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === "suspended") {
+      ctx.resume();
+    }
+
+    // Celebratory Trumpet Fanfare: G4 -> C5 -> E5 -> G5 -> C6
+    const fanfareNotes = [
+      { f: 392.00, t: 0.00, d: 0.12, type: "sawtooth" },
+      { f: 523.25, t: 0.12, d: 0.14, type: "sawtooth" },
+      { f: 659.25, t: 0.26, d: 0.14, type: "sawtooth" },
+      { f: 783.99, t: 0.40, d: 0.20, type: "sawtooth" },
+      { f: 1046.50, t: 0.60, d: 0.65, type: "sawtooth" },
+    ];
+
+    fanfareNotes.forEach(({ f, t, d, type }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type as OscillatorType;
+      osc.frequency.setValueAtTime(f, ctx.currentTime + t);
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(2200, ctx.currentTime + t);
+
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + t + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + d);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + d + 0.05);
+    });
+
+    // Glittering high bell arpeggios
+    const bells = [1318.51, 1567.98, 2093.00, 2637.02];
+    bells.forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(f, ctx.currentTime + 0.62 + i * 0.08);
+
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + 0.62 + i * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.62 + i * 0.08 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.62 + i * 0.08 + 0.45);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(ctx.currentTime + 0.62 + i * 0.08);
+      osc.stop(ctx.currentTime + 0.62 + i * 0.08 + 0.5);
+    });
+  } catch (err) {
+    console.warn("Fanfare Web Audio error:", err);
+  }
+}
+
+function speakTheatricalAnnouncement(text: string) {
+  try {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "ar-SA";
+    utterance.rate = 1.05;
+    utterance.pitch = 1.1;
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    console.warn("Speech synthesis error:", err);
+  }
+}
 
 interface LottoTrackerProps {
   isOpen: boolean;
@@ -41,13 +123,22 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // New ticket modal state
+  // Theatrical Celebration state
+  const [theatricalTicket, setTheatricalTicket] = useState<LottoTicket | null>(null);
+  const [theatricalCopied, setTheatricalCopied] = useState(false);
+
+  // New ticket modal state - Prices: Super Key = 2,650 IQD | Iraq Lotto = 1,500 IQD
   const [showAddTicketModal, setShowAddTicketModal] = useState(false);
   const [newTicketNumbers, setNewTicketNumbers] = useState<number[]>([]);
   const [newTicketLucky, setNewTicketLucky] = useState<number | undefined>();
-  const [newTicketCost, setNewTicketCost] = useState<number>(3000);
+  const [newTicketCost, setNewTicketCost] = useState<number>(GAME_DETAILS["super_key"].ticketPrice);
   const [newTicketDate, setNewTicketDate] = useState<string>("");
   const [newTicketDrawNum, setNewTicketDrawNum] = useState<string>("");
+
+  // Keep price strictly updated when game changes
+  useEffect(() => {
+    setNewTicketCost(GAME_DETAILS[selectedGame].ticketPrice);
+  }, [selectedGame]);
 
   // Record winning draw modal
   const [showRecordDrawModal, setShowRecordDrawModal] = useState(false);
@@ -136,6 +227,15 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     return getNextDrawDate(selectedGame);
   }, [selectedGame]);
 
+  // Open ticket modal with prefilled data and exact official price
+  const handleOpenAddTicket = (prefillNumbers?: number[], prefillLucky?: number) => {
+    setNewTicketNumbers(prefillNumbers || []);
+    setNewTicketLucky(prefillLucky);
+    setNewTicketDate(nextDrawDate);
+    setNewTicketCost(GAME_DETAILS[selectedGame].ticketPrice);
+    setShowAddTicketModal(true);
+  };
+
   // Generate initial prediction on mount or game change
   useEffect(() => {
     handleGeneratePrediction();
@@ -172,6 +272,9 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
       return;
     }
 
+    const officialPrice = GAME_DETAILS[selectedGame].ticketPrice;
+    const finalCost = Number(newTicketCost) > 0 ? Number(newTicketCost) : officialPrice;
+
     const targetDate = newTicketDate || nextDrawDate;
     const newTicket: LottoTicket = {
       id: "tkt-" + Date.now(),
@@ -181,7 +284,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
       luckyNumber: selectedGame === "super_key" ? newTicketLucky : undefined,
       drawDate: targetDate,
       drawNumber: newTicketDrawNum ? Number(newTicketDrawNum) : undefined,
-      cost: Number(newTicketCost) || 3000,
+      cost: finalCost,
       status: "pending",
       createdAt: new Date().toISOString()
     };
@@ -204,18 +307,24 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
       tickets: updatedTickets
     }, { merge: true });
 
-    if (onAddExpenseLinked && Number(newTicketCost) > 0) {
+    if (onAddExpenseLinked && finalCost > 0) {
       onAddExpenseLinked(
-        Number(newTicketCost) || 3000,
+        finalCost,
         `شراء بطاقة ${GAME_DETAILS[selectedGame].shortTitle} (${newTicket.numbers.join("-")}${newTicket.luckyNumber !== undefined ? " + " + newTicket.luckyNumber : ""})`,
         targetDate
       );
     }
 
-    toast.success("تم تسجيل البطاقة وحفظها في سجل السحوبات والمصاريف 🎟️");
     setShowAddTicketModal(false);
     setNewTicketNumbers([]);
     setNewTicketLucky(undefined);
+
+    // 🎭 Trigger Theatrical Celebration & Voice Announcement!
+    setTheatricalTicket(newTicket);
+    playTheatricalFanfare();
+    const gameTitleArabic = selectedGame === "super_key" ? "لوتو العراق سوبر كي 42" : "لوتو العراق الخيري 29";
+    const luckySpeech = newTicket.luckyNumber !== undefined ? `، ورقم الحظ الإضافي ${newTicket.luckyNumber}` : "";
+    speakTheatricalAnnouncement(`تم تسجيل وتوثيق بطاقة ${gameTitleArabic} بنجاح. الأرقام المحجوزة هي: ${newTicket.numbers.join("، ")}${luckySpeech}. موعد السحب القادم هو ${newTicket.drawDate}. مع تمنياتنا لك بالفوز بالجائزة الكبرى!`);
   };
 
   // Record winning draw result & auto-match all pending tickets
@@ -575,12 +684,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                   </button>
 
                   <button
-                    onClick={() => {
-                      setNewTicketNumbers(suggestedNumbers);
-                      setNewTicketLucky(suggestedLucky);
-                      setNewTicketDate(nextDrawDate);
-                      setShowAddTicketModal(true);
-                    }}
+                    onClick={() => handleOpenAddTicket(suggestedNumbers, suggestedLucky)}
                     className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-500 hover:to-rose-500 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-purple-500/20 transition active:scale-95"
                   >
                     <Ticket className="w-4 h-4" />
@@ -662,7 +766,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                     </button>
 
                     <button
-                      onClick={() => setShowAddTicketModal(true)}
+                      onClick={() => handleOpenAddTicket()}
                       className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs shadow-md transition active:scale-95 flex items-center gap-1.5"
                     >
                       <Plus className="w-4 h-4" />
@@ -693,7 +797,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                       عند شراء بطاقة لوتو، سجل أرقامها هنا أو من خلال تسجيل المصروف ليتم مطابقتها فور إعلان السحب!
                     </p>
                     <button
-                      onClick={() => setShowAddTicketModal(true)}
+                      onClick={() => handleOpenAddTicket()}
                       className="px-4 py-2 rounded-xl bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 transition"
                     >
                       تسجيل بطاقة الآن
@@ -1078,13 +1182,23 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold text-gray-500 mb-1 block">سعر البطاقة (د.ع)</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-bold text-gray-500 block">سعر البطاقة (د.ع)</label>
+                      <button
+                        type="button"
+                        onClick={() => setNewTicketCost(GAME_DETAILS[selectedGame].ticketPrice)}
+                        className="text-[10px] font-black text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 px-1.5 py-0.5 rounded transition"
+                        title="انقر لتطبيق السعر الرسمي"
+                      >
+                        الرسمي: {GAME_DETAILS[selectedGame].ticketPrice.toLocaleString()} د.ع
+                      </button>
+                    </div>
                     <input
                       type="number"
                       value={newTicketCost}
                       onChange={e => setNewTicketCost(Number(e.target.value))}
                       className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold"
-                      placeholder="3000"
+                      placeholder={GAME_DETAILS[selectedGame].ticketPrice.toString()}
                     />
                   </div>
                 </div>
@@ -1210,6 +1324,159 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                 >
                   <Trophy className="w-4 h-4" />
                   <span>حفظ ومطابقة جميع البطاقات فورياً</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════
+            MODAL 3: THEATRICAL TICKET CELEBRATION (إشعار مسرحي رسمي)
+        ══════════════════════════════════════════ */}
+        {theatricalTicket && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+            {/* Spotlight and ambient celebratory glows */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-gradient-to-tr from-amber-500/20 via-purple-600/30 to-rose-500/20 rounded-full blur-3xl animate-pulse" />
+              {/* Confetti & stars simulation */}
+              <div className="absolute top-10 left-10 text-3xl animate-bounce">✨</div>
+              <div className="absolute top-16 right-12 text-4xl animate-bounce delay-150">👑</div>
+              <div className="absolute bottom-16 left-14 text-3xl animate-bounce delay-300">🌟</div>
+              <div className="absolute bottom-12 right-16 text-4xl animate-bounce delay-75">🎉</div>
+            </div>
+
+            <div className="relative bg-gradient-to-b from-[#1F1733] via-[#161226] to-[#0E0B18] text-white rounded-3xl p-6 sm:p-7 max-w-lg w-full border-2 border-amber-400/40 shadow-[0_0_60px_rgba(245,158,11,0.3)] text-center max-h-[92vh] overflow-y-auto">
+              {/* Close corner button */}
+              <button
+                onClick={() => setTheatricalTicket(null)}
+                className="absolute top-4 left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Theater Ribbon & Trophy */}
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 text-white font-black text-xs shadow-lg shadow-amber-500/30 mb-3 animate-pulse">
+                <span>🎭</span>
+                <span>إشعار مسرحي رسمي: تم حجز وتوثيق البطاقة!</span>
+                <span>🎟️</span>
+              </div>
+
+              <h3 className="text-xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-100 mb-1">
+                مبارك! تم تسجيل بطاقتك بنجاح
+              </h3>
+              <p className="text-xs text-amber-200/80 font-bold mb-5">
+                تم قيد مبلغ الشراء تلقائياً في سجل المصاريف وربط البطاقة بالسحب القادم
+              </p>
+
+              {/* Authentic Iraqi Luxury Ticket Slip */}
+              <div className="relative p-5 rounded-2xl bg-[#28203E]/90 border border-amber-400/30 shadow-inner text-right space-y-4 overflow-hidden mb-5">
+                {/* Perforation circles */}
+                <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#161226]" />
+                <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#161226]" />
+
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">👑</span>
+                    <div>
+                      <span className="font-black text-sm text-white block">
+                        {GAME_DETAILS[theatricalTicket.game].title}
+                      </span>
+                      <span className="text-[11px] font-bold text-amber-400 block">
+                        {GAME_DETAILS[theatricalTicket.game].drawDaysArabic}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <span className="text-[10px] text-gray-400 font-mono block">#{theatricalTicket.id.slice(-8)}</span>
+                    <span className="inline-block px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-black text-[10px] border border-emerald-500/30">
+                      معتمدة ومسجلة ✓
+                    </span>
+                  </div>
+                </div>
+
+                {/* 6 Lucky Spheres */}
+                <div>
+                  <div className="text-[11px] font-black text-gray-300 mb-2 flex items-center justify-between">
+                    <span>الأرقام المحجوزة للبطاقة:</span>
+                    <span className="text-[10px] text-amber-400">6 أرقام {theatricalTicket.luckyNumber !== undefined ? "+ رقم الحظ" : ""}</span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-2 py-2">
+                    {theatricalTicket.numbers.map((num) => (
+                      <div
+                        key={num}
+                        className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-b from-amber-300 via-amber-500 to-amber-700 text-stone-950 font-black text-sm sm:text-base flex items-center justify-center shadow-[0_4px_12px_rgba(245,158,11,0.4)] border border-amber-200"
+                      >
+                        {num}
+                      </div>
+                    ))}
+
+                    {theatricalTicket.luckyNumber !== undefined && (
+                      <>
+                        <span className="text-amber-400 text-lg font-black px-1">+</span>
+                        <div
+                          className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-b from-rose-400 via-rose-600 to-purple-800 text-white font-black text-sm sm:text-base flex items-center justify-center shadow-[0_4px_12px_rgba(225,29,72,0.4)] border-2 border-white ring-2 ring-rose-400"
+                          title="رقم الحظ الإضافي"
+                        >
+                          {theatricalTicket.luckyNumber}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Draw Date & Price Badges */}
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+                  <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-center">
+                    <span className="text-[10px] text-gray-400 font-bold block mb-0.5">موعد السحب</span>
+                    <span className="text-xs font-black text-amber-300 block">{theatricalTicket.drawDate}</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-center">
+                    <span className="text-[10px] text-gray-400 font-bold block mb-0.5">المبلغ المقيد بالمصاريف</span>
+                    <span className="text-xs font-black text-emerald-400 block">{theatricalTicket.cost.toLocaleString()} د.ع</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive buttons */}
+              <div className="flex flex-col sm:flex-row items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = theatricalTicket.luckyNumber !== undefined
+                      ? `بطاقة ${GAME_DETAILS[theatricalTicket.game].title} - الأرقام: ${theatricalTicket.numbers.join(" - ")} | رقم الحظ: ${theatricalTicket.luckyNumber} | موعد السحب: ${theatricalTicket.drawDate} | السعر: ${theatricalTicket.cost.toLocaleString()} د.ع`
+                      : `بطاقة ${GAME_DETAILS[theatricalTicket.game].title} - الأرقام: ${theatricalTicket.numbers.join(" - ")} | موعد السحب: ${theatricalTicket.drawDate} | السعر: ${theatricalTicket.cost.toLocaleString()} د.ع`;
+                    navigator.clipboard.writeText(text);
+                    setTheatricalCopied(true);
+                    toast.success("تم نسخ تفاصيل البطاقة بنجاح!");
+                    setTimeout(() => setTheatricalCopied(false), 2000);
+                  }}
+                  className="w-full sm:flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-black text-xs flex items-center justify-center gap-1.5 transition active:scale-95 border border-white/15"
+                >
+                  {theatricalCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-amber-300" />}
+                  <span>{theatricalCopied ? "تم النسخ!" : "نسخ بيانات البطاقة 📋"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTheatricalFanfare();
+                    const luckyStr = theatricalTicket.luckyNumber !== undefined ? `مع رقم الحظ ${theatricalTicket.luckyNumber}` : "";
+                    speakTheatricalAnnouncement(`تم تسجيل بطاقة ${GAME_DETAILS[theatricalTicket.game].title} بنجاح. الأرقام: ${theatricalTicket.numbers.join("، ")} ${luckyStr}. موعد السحب: ${theatricalTicket.drawDate}. فالكم الفوز بالجائزة الكبرى!`);
+                  }}
+                  className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 transition border border-white/15"
+                  title="إعادة سماع الإشعار الصوتي"
+                >
+                  <Volume2 className="w-4 h-4" />
+                  <span>إعادة النداء 🔊</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTheatricalTicket(null)}
+                  className="w-full sm:flex-1 py-3 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 text-stone-950 font-black text-xs shadow-lg shadow-amber-500/25 hover:from-amber-300 hover:to-yellow-400 transition active:scale-95"
+                >
+                  تم، فالنا الفوز إن شاء الله! ✨
                 </button>
               </div>
             </div>
