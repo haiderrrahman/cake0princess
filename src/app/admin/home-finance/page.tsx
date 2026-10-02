@@ -8,7 +8,8 @@ import {
   Banknote, Activity, Package, Zap, Heart, BookOpen, ChevronRight, ChevronLeft, ClipboardCopy, Plane,
   Map as MapIcon, MapPin, ArrowLeft, Calculator, Share2, Target, Flag, Circle, CheckCircle2,
   MessageCircle, Send, Bot, Sparkles, BrainCircuit, CheckCircle, PackageCheck,
-  Camera, Upload, ScanLine, FileText, ListPlus, Copy, Search, RefreshCw, Loader2
+  Camera, Upload, ScanLine, FileText, ListPlus, Copy, Search, RefreshCw, Loader2,
+  Pill, Image as ImageIcon, Eye
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp } 
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
 import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
+import { scanNeedItemWithGemini } from "@/lib/scanNeedItemClient";
 
 // ══════════════════════════════════════════════
 // TYPES
@@ -105,6 +107,10 @@ interface Need {
   quantity?: number;
   unit?: string;
   category?: string;
+  imageUrl?: string;
+  notes?: string;
+  dosageOrSpecs?: string;
+  sourceType?: "manual" | "photo" | "inventory" | "car" | "travel" | "family";
 }
 
 interface Debt {
@@ -234,6 +240,19 @@ const CAR_INVENTORY_CATEGORIES = [
 ];
 const TRAVEL_INVENTORY_CATEGORIES = [
   "تذاكر", "فنادق", "أمتعة", "تأشيرات", "مستلزمات شخصية", "مأكولات ومشروبات", "أخرى"
+];
+const NEED_CATEGORIES = [
+  "أدوية وصيدلية",
+  "سوبر ماركت",
+  "منظفات",
+  "عناية شخصية",
+  "مستلزمات منزلية",
+  "أغذية ومسواك",
+  "أدوات وصيانة",
+  "أطفال ورضع",
+  "سيارة",
+  "سفر",
+  "أخرى"
 ];
 const HOME_INVENTORY_UNITS = ["كغم", "لتر", "قطعة", "كيس", "علبة", "بطل", "كيلو"];
 
@@ -487,8 +506,17 @@ export default function HomeFinanceDashboard() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const [editNeed, setEditNeed] = useState<InventoryItem | null>(null);
+  const [editNeed, setEditNeed] = useState<any | null>(null);
   const [showNeedModal, setShowNeedModal] = useState(false);
+  const [needFilterTab, setNeedFilterTab] = useState<"all" | "medicine" | "photo" | "inventory" | "family" | "car" | "travel">("all");
+  const [needSearchQuery, setNeedSearchQuery] = useState("");
+  const [isScanningNeed, setIsScanningNeed] = useState(false);
+  const [scanNeedStatus, setScanNeedStatus] = useState("");
+  const [needImageFile, setNeedImageFile] = useState<File | null>(null);
+  const [needImagePreview, setNeedImagePreview] = useState<string | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<{ url: string; title: string } | null>(null);
+  const needFileInputRef = useRef<HTMLInputElement>(null);
+  const needModalFileInputRef = useRef<HTMLInputElement>(null);
   const [fulfillModal, setFulfillModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -878,21 +906,195 @@ export default function HomeFinanceDashboard() {
     ...travelInventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "travel" as const }))
   ];
 
+  interface UnifiedDeficit {
+    id: string;
+    key: string;
+    sourceType: "need" | "inventory" | "family" | "car" | "travel";
+    name: string;
+    category: string;
+    quantity: number;
+    unit: string;
+    estimatedPrice: number;
+    imageUrl?: string;
+    notes?: string;
+    dosageOrSpecs?: string;
+    member?: string;
+    isMedicine: boolean;
+    tripDestination?: string;
+    originalItem: any;
+  }
+
+  const unifiedDeficits = useMemo<UnifiedDeficit[]>(() => {
+    const list: UnifiedDeficit[] = [];
+
+    // 1. Direct / Photo Needs (including medicines & custom items)
+    needs.filter(n => !n.isBought).forEach(n => {
+      const isMed = n.category === "أدوية وصيدلية" || n.name.includes("دواء") || n.name.includes("علاج") || !!n.dosageOrSpecs;
+      list.push({
+        id: n.id,
+        key: `need-${n.id}`,
+        sourceType: "need",
+        name: n.name,
+        category: n.category || (isMed ? "أدوية وصيدلية" : "أخرى"),
+        quantity: n.quantity || 1,
+        unit: n.unit || (isMed ? "علبة" : "قطعة"),
+        estimatedPrice: n.estimatedPrice || 0,
+        imageUrl: n.imageUrl,
+        notes: n.notes,
+        dosageOrSpecs: n.dosageOrSpecs,
+        isMedicine: isMed,
+        originalItem: n,
+      });
+    });
+
+    // 2. Home Inventory shortages
+    inventory.filter(i => (i.neededQuantity || 0) > 0).forEach(i => {
+      const isMed = i.category === "أدوية وصيدلية" || i.category?.includes("دواء") || i.name.includes("دواء") || i.name.includes("علاج");
+      list.push({
+        id: i.id,
+        key: `inv-${i.id}`,
+        sourceType: "inventory",
+        name: i.name,
+        category: i.category || "مستلزمات منزلية",
+        quantity: i.neededQuantity || 1,
+        unit: i.unit || "قطعة",
+        estimatedPrice: i.estimatedPrice || 0,
+        imageUrl: i.imageUrl,
+        notes: i.notes,
+        isMedicine: isMed,
+        originalItem: i,
+      });
+    });
+
+    // 3. Family Needs
+    familyNeeds.filter(f => f.status === "pending" && f.type !== "duty").forEach(f => {
+      const isMed = f.category === "أدوية وصيدلية" || f.category?.includes("دواء") || f.title.includes("دواء") || f.title.includes("علاج");
+      list.push({
+        id: f.id,
+        key: `fam-${f.id}`,
+        sourceType: "family",
+        name: f.title,
+        category: f.category || "عائلة",
+        quantity: Number(f.quantity) || 1,
+        unit: "قطعة",
+        estimatedPrice: Number(f.estimatedPrice) || 0,
+        member: f.member,
+        notes: f.notes,
+        isMedicine: isMed,
+        originalItem: f,
+      });
+    });
+
+    // 4. Car Inventory shortages
+    carInventory.filter(c => (c.neededQuantity || 0) > 0).forEach(c => {
+      list.push({
+        id: c.id,
+        key: `car-${c.id}`,
+        sourceType: "car",
+        name: c.name,
+        category: c.category || "سيارة",
+        quantity: c.neededQuantity || 1,
+        unit: c.unit || "قطعة",
+        estimatedPrice: c.estimatedPrice || 0,
+        imageUrl: c.imageUrl,
+        notes: c.notes,
+        isMedicine: false,
+        originalItem: c,
+      });
+    });
+
+    // 5. Travel Inventory shortages
+    travelInventory.filter(t => (t.neededQuantity || 0) > 0).forEach(t => {
+      list.push({
+        id: t.id,
+        key: `travel-${t.id}`,
+        sourceType: "travel",
+        name: t.name,
+        category: t.category || "سفر",
+        quantity: t.neededQuantity || 1,
+        unit: t.unit || "قطعة",
+        estimatedPrice: t.estimatedPrice || 0,
+        imageUrl: t.imageUrl,
+        notes: t.notes,
+        isMedicine: false,
+        tripDestination: t.tripDestination,
+        originalItem: t,
+      });
+    });
+
+    return list;
+  }, [needs, inventory, familyNeeds, carInventory, travelInventory]);
+
   const needsSummaryStats = useMemo(() => {
     const summary: { id: string; name: string; count: number; price: number; icon: string; colorClass: string }[] = [];
     
-    // Home Inventory only
-    const homeItems = shoppingList;
-    if (homeItems.length > 0) {
-      const totalQty = homeItems.reduce((s, i) => s + (i.neededQuantity || 1), 0);
-      const totalPrice = homeItems.reduce((s, i) => s + ((i.neededQuantity || 1) * (i.estimatedPrice || 0)), 0);
-      summary.push({ id: "home", name: "موجودات البيت", count: totalQty, price: totalPrice, icon: "📦", colorClass: "bg-blue-100/50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800" });
+    // Medicines
+    const medItems = unifiedDeficits.filter(i => i.isMedicine);
+    if (medItems.length > 0) {
+      summary.push({
+        id: "medicine",
+        name: "أدوية وصيدلية",
+        count: medItems.reduce((s, i) => s + (i.quantity || 1), 0),
+        price: medItems.reduce((s, i) => s + ((i.quantity || 1) * (i.estimatedPrice || 0)), 0),
+        icon: "💊",
+        colorClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800"
+      });
     }
 
-    // Car and Travel shortages are handled inside their respective tabs now!
+    // Home Inventory
+    const homeItems = unifiedDeficits.filter(i => i.sourceType === "inventory" || (i.sourceType === "need" && !i.isMedicine));
+    if (homeItems.length > 0) {
+      summary.push({
+        id: "home",
+        name: "موجودات ومسواك البيت",
+        count: homeItems.reduce((s, i) => s + (i.quantity || 1), 0),
+        price: homeItems.reduce((s, i) => s + ((i.quantity || 1) * (i.estimatedPrice || 0)), 0),
+        icon: "📦",
+        colorClass: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
+      });
+    }
+
+    // Family
+    const famItems = unifiedDeficits.filter(i => i.sourceType === "family");
+    if (famItems.length > 0) {
+      summary.push({
+        id: "family",
+        name: "طلبات العائلة",
+        count: famItems.reduce((s, i) => s + (i.quantity || 1), 0),
+        price: famItems.reduce((s, i) => s + ((i.quantity || 1) * (i.estimatedPrice || 0)), 0),
+        icon: "👨‍👩‍👧‍👦",
+        colorClass: "bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-950/30 dark:text-pink-300 dark:border-pink-800"
+      });
+    }
+
+    // Car
+    const carItems = unifiedDeficits.filter(i => i.sourceType === "car");
+    if (carItems.length > 0) {
+      summary.push({
+        id: "car",
+        name: "نواقص السيارة",
+        count: carItems.reduce((s, i) => s + (i.quantity || 1), 0),
+        price: carItems.reduce((s, i) => s + ((i.quantity || 1) * (i.estimatedPrice || 0)), 0),
+        icon: "🚗",
+        colorClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+      });
+    }
+
+    // Travel
+    const travelItems = unifiedDeficits.filter(i => i.sourceType === "travel");
+    if (travelItems.length > 0) {
+      summary.push({
+        id: "travel",
+        name: "نواقص السفر",
+        count: travelItems.reduce((s, i) => s + (i.quantity || 1), 0),
+        price: travelItems.reduce((s, i) => s + ((i.quantity || 1) * (i.estimatedPrice || 0)), 0),
+        icon: "✈️",
+        colorClass: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/30 dark:text-teal-300 dark:border-teal-800"
+      });
+    }
 
     return summary;
-  }, [shoppingList, familyNeeds]);
+  }, [unifiedDeficits]);
 
   const effectiveDebts = useMemo(() => {
     // إخفاء الدين القديم الذي كان يسجل يدوياً باسم "دين الكيك"
@@ -911,7 +1113,7 @@ export default function HomeFinanceDashboard() {
     return cleaned;
   }, [debts, cakeSalaryDebt]);
 
-  const totalNeedsAmt = needs.filter(n => !n.isBought).reduce((s, n) => s + (n.estimatedPrice || 0), 0) + shoppingList.reduce((s, i) => s + (i.estimatedPrice || 0), 0);
+  const totalNeedsAmt = unifiedDeficits.reduce((s, i) => s + ((i.quantity || 1) * (i.estimatedPrice || 0)), 0);
   const totalDebtsForMe = effectiveDebts.filter(d => d.type === "دين لي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
   const totalDebtsOnMe = effectiveDebts.filter(d => d.type === "دين علي").reduce((s, d) => s + (d.amount - d.payments.reduce((ps, p) => ps + p.amount, 0)), 0);
 
@@ -1687,10 +1889,84 @@ setEditInventory(null);
   };
 
   // ──────────────────────────────────────────
-  // NEEDS HANDLERS
+  // NEEDS & UNIFIED DEFICITS HANDLERS
   // ──────────────────────────────────────────
-  const handleSaveNeed = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleScanNeedPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanningNeed(true);
+    setScanNeedStatus("جارٍ تجهيز وضغط الصورة...");
+
+    try {
+      // 1. Read file as base64 for Gemini Vision
+      const imageCompression = (await import('browser-image-compression')).default;
+      const compressed = await imageCompression(file, { maxSizeMB: 0.25, maxWidthOrHeight: 900, useWebWorker: false });
+
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(compressed);
+      const base64Data = await base64Promise;
+
+      // 2. Upload image to Firebase Storage (with base64 fallback)
+      setScanNeedStatus("جارٍ حفظ الصورة في السحابة...");
+      const needId = Date.now().toString() + Math.random().toString(36).substring(2, 7);
+      let uploadedImageUrl = base64Data;
+      try {
+        const storageRef = ref(storage, `home_finance/needs/${needId}_${Date.now()}.jpg`);
+        await uploadBytes(storageRef, compressed);
+        uploadedImageUrl = await getDownloadURL(storageRef);
+      } catch (uploadErr) {
+        console.warn("Storage upload failed, fallback to base64 data url", uploadErr);
+      }
+
+      // 3. Analyze image using Gemini AI
+      setScanNeedStatus("جارٍ تحليل علبة الدواء أو المنتج بالذكاء الاصطناعي...");
+      const aiResult = await scanNeedItemWithGemini(base64Data, (status) => {
+        setScanNeedStatus(status);
+      });
+
+      // 4. Create new Need item
+      const newNeed: Need = {
+        id: needId,
+        name: aiResult.name || "منتج غير محدد",
+        category: aiResult.category || "أدوية وصيدلية",
+        quantity: aiResult.quantity || 1,
+        unit: aiResult.unit || (aiResult.category === "أدوية وصيدلية" ? "علبة" : "قطعة"),
+        estimatedPrice: aiResult.estimatedPrice || 0,
+        notes: aiResult.notes || "",
+        dosageOrSpecs: aiResult.dosageOrSpecs || "",
+        imageUrl: uploadedImageUrl,
+        sourceType: "photo",
+        isBought: false,
+        createdAt: new Date().toISOString()
+      };
+
+      const updated = [newNeed, ...needs];
+      setNeeds(updated);
+      syncToFirebase("needs", updated);
+
+      toast.success(`تم إضافة النقص: ${newNeed.name}`, {
+        description: newNeed.dosageOrSpecs ? `المواصفات/الجرعة: ${newNeed.dosageOrSpecs}` : undefined
+      });
+    } catch (err: any) {
+      console.error("Scan need error:", err);
+      toast.error("فشل قراءة الصورة، يرجى المحاولة مجدداً أو كتابة النقص يدوياً");
+    } finally {
+      setIsScanningNeed(false);
+      setScanNeedStatus("");
+      if (needFileInputRef.current) {
+        needFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleSaveNeed = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isUploading) return;
     const fd = new FormData(e.currentTarget);
     const isEdit = !!editNeed;
     
@@ -1699,22 +1975,43 @@ setEditInventory(null);
     const estPrice = Number(fd.get("price")) || 0;
     const unit = fd.get("unit") as string || "قطعة";
     const category = fd.get("category") as string || "سوبر ماركت";
+    const dosageOrSpecs = (fd.get("dosageOrSpecs") as string) || "";
+    const notes = (fd.get("notes") as string) || "";
     
-    const source = editNeed?._source || (activeTab === "car" ? "car" : activeTab === "travel" ? "travel" : "inventory");
+    let uploadedUrl = editNeed?.imageUrl || needImagePreview || "";
+
+    if (needImageFile) {
+      setIsUploading(true);
+      try {
+        const imageCompression = (await import('browser-image-compression')).default;
+        const compressed = await imageCompression(needImageFile, { maxSizeMB: 0.25, maxWidthOrHeight: 900, useWebWorker: false });
+        const needId = isEdit ? editNeed!.id : Date.now().toString();
+        const storageRef = ref(storage, `home_finance/needs/${needId}_${Date.now()}.jpg`);
+        await uploadBytes(storageRef, compressed);
+        uploadedUrl = await getDownloadURL(storageRef);
+      } catch (err) {
+        console.error("Image upload failed", err);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
+    const source = editNeed?._source || editNeed?.sourceType || (activeTab === "car" ? "car" : activeTab === "travel" ? "travel" : activeTab === "inventory" ? "inventory" : "need");
 
     if (source === "car") {
       let updated = [...carInventory];
       if (isEdit) {
-        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category } : x);
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes, imageUrl: uploadedUrl || x.imageUrl } : x);
         toast.success("تم التعديل");
       } else {
         const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
         if (existing) {
           existing.neededQuantity = (existing.neededQuantity || 0) + neededQty;
           existing.estimatedPrice = estPrice;
+          if (uploadedUrl) existing.imageUrl = uploadedUrl;
           toast.success("تم التحديث");
         } else {
-          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, createdAt: new Date().toISOString() });
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, imageUrl: uploadedUrl, createdAt: new Date().toISOString() });
           toast.success("تم إضافة الاحتياج");
         }
       }
@@ -1723,45 +2020,205 @@ setEditInventory(null);
     } else if (source === "travel") {
       let updated = [...travelInventory];
       if (isEdit) {
-        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category } : x);
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes, imageUrl: uploadedUrl || x.imageUrl } : x);
         toast.success("تم التعديل");
       } else {
         const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
         if (existing) {
           existing.neededQuantity = (existing.neededQuantity || 0) + neededQty;
           existing.estimatedPrice = estPrice;
+          if (uploadedUrl) existing.imageUrl = uploadedUrl;
           toast.success("تم التحديث");
         } else {
-          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, createdAt: new Date().toISOString() });
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, imageUrl: uploadedUrl, createdAt: new Date().toISOString() });
           toast.success("تم إضافة الاحتياج");
         }
       }
       setTravelInventory(updated);
       syncToFirebase("travelInventory", updated);
-    } else {
+    } else if (source === "inventory") {
       let updated = [...inventory];
       if (isEdit) {
-        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category } : x);
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes, imageUrl: uploadedUrl || x.imageUrl } : x);
         toast.success("تم التعديل");
       } else {
         const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
         if (existing) {
           existing.neededQuantity = (existing.neededQuantity || 0) + neededQty;
           existing.estimatedPrice = estPrice;
+          if (uploadedUrl) existing.imageUrl = uploadedUrl;
           toast.success("تم التحديث في النواقص");
         } else {
-          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, createdAt: new Date().toISOString() });
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, imageUrl: uploadedUrl, createdAt: new Date().toISOString() });
           toast.success("تم إضافة الاحتياج");
         }
       }
       setInventory(updated);
       syncToFirebase("inventory", updated);
+    } else {
+      // Direct Need
+      let updated = [...needs];
+      if (isEdit) {
+        updated = updated.map(x => x.id === editNeed!.id ? {
+          ...x,
+          name: needName,
+          quantity: neededQty,
+          estimatedPrice: estPrice,
+          unit,
+          category,
+          dosageOrSpecs,
+          notes,
+          imageUrl: uploadedUrl || x.imageUrl
+        } : x);
+        toast.success("تم التعديل");
+      } else {
+        const newNeed: Need = {
+          id: Date.now().toString() + Math.random().toString(36).substring(2, 7),
+          name: needName,
+          quantity: neededQty,
+          estimatedPrice: estPrice,
+          unit,
+          category,
+          dosageOrSpecs,
+          notes,
+          imageUrl: uploadedUrl,
+          sourceType: uploadedUrl ? "photo" : "manual",
+          isBought: false,
+          createdAt: new Date().toISOString()
+        };
+        updated = [newNeed, ...updated];
+        toast.success("تم إضافة الاحتياج بنجاح");
+      }
+      setNeeds(updated);
+      syncToFirebase("needs", updated);
     }
     
     e.currentTarget.reset();
     setShowNeedModal(false);
     setEditNeed(null);
-setNeedNameInput("");
+    setNeedNameInput("");
+    setNeedImageFile(null);
+    setNeedImagePreview(null);
+  };
+
+  const handleDeleteUnifiedDeficit = async (item: UnifiedDeficit) => {
+    if (!(await customConfirm(`هل أنت متأكد من حذف "${item.name}" من قائمة النواقص؟`))) return;
+    
+    if (item.sourceType === "need") {
+      const updated = needs.filter(x => x.id !== item.originalItem.id);
+      setNeeds(updated);
+      syncToFirebase("needs", updated);
+      toast.success("تم حذف النقص");
+    } else if (item.sourceType === "inventory") {
+      const updated = inventory.map(x => x.id === item.originalItem.id ? { ...x, neededQuantity: 0 } : x);
+      setInventory(updated);
+      syncToFirebase("inventory", updated);
+      toast.success("تم إزالة الاحتياج من موجودات البيت");
+    } else if (item.sourceType === "car") {
+      const updated = carInventory.map(x => x.id === item.originalItem.id ? { ...x, neededQuantity: 0 } : x);
+      setCarInventory(updated);
+      syncToFirebase("carInventory", updated);
+      toast.success("تم إزالة الاحتياج من نواقص السيارة");
+    } else if (item.sourceType === "travel") {
+      const updated = travelInventory.map(x => x.id === item.originalItem.id ? { ...x, neededQuantity: 0 } : x);
+      setTravelInventory(updated);
+      syncToFirebase("travelInventory", updated);
+      toast.success("تم إزالة الاحتياج من نواقص السفر");
+    } else if (item.sourceType === "family") {
+      const updated = familyNeeds.filter(x => x.id !== item.originalItem.id);
+      setFamilyNeeds(updated);
+      syncToFirebase("familyNeeds", updated);
+      toast.success("تم حذف طلب العائلة");
+    }
+  };
+
+  const handleUpdateDeficitQty = (item: UnifiedDeficit, delta: number) => {
+    if (item.sourceType === "need") {
+      const updated = needs.map(x => {
+        if (x.id === item.originalItem.id) {
+          const newQty = Math.max(1, (x.quantity || 1) + delta);
+          return { ...x, quantity: newQty };
+        }
+        return x;
+      });
+      setNeeds(updated);
+      syncToFirebase("needs", updated);
+    } else if (item.sourceType === "inventory") {
+      const updated = inventory.map(x => {
+        if (x.id === item.originalItem.id) {
+          const newQty = Math.max(1, (x.neededQuantity || 1) + delta);
+          return { ...x, neededQuantity: newQty };
+        }
+        return x;
+      });
+      setInventory(updated);
+      syncToFirebase("inventory", updated);
+    } else if (item.sourceType === "car") {
+      const updated = carInventory.map(x => {
+        if (x.id === item.originalItem.id) {
+          const newQty = Math.max(1, (x.neededQuantity || 1) + delta);
+          return { ...x, neededQuantity: newQty };
+        }
+        return x;
+      });
+      setCarInventory(updated);
+      syncToFirebase("carInventory", updated);
+    } else if (item.sourceType === "travel") {
+      const updated = travelInventory.map(x => {
+        if (x.id === item.originalItem.id) {
+          const newQty = Math.max(1, (x.neededQuantity || 1) + delta);
+          return { ...x, neededQuantity: newQty };
+        }
+        return x;
+      });
+      setTravelInventory(updated);
+      syncToFirebase("travelInventory", updated);
+    } else if (item.sourceType === "family") {
+      const updated = familyNeeds.map(x => {
+        if (x.id === item.originalItem.id) {
+          const newQty = Math.max(1, (Number(x.quantity) || 1) + delta);
+          return { ...x, quantity: newQty };
+        }
+        return x;
+      });
+      setFamilyNeeds(updated);
+      syncToFirebase("familyNeeds", updated);
+    }
+  };
+
+  const handleFulfillUnifiedDeficit = (item: UnifiedDeficit) => {
+    if (item.sourceType === "need") {
+      setFulfillModal({
+        isOpen: true,
+        title: item.name,
+        category: item.category || "أخرى",
+        estimatedPrice: (item.estimatedPrice || 0) * (item.quantity || 1),
+        quantity: item.quantity || 1,
+        type: "need",
+        item: item.originalItem
+      });
+    } else if (item.sourceType === "family") {
+      setFulfillModal({
+        isOpen: true,
+        title: item.name,
+        category: item.category || "عائلة",
+        estimatedPrice: (item.estimatedPrice || 0) * (item.quantity || 1),
+        quantity: item.quantity || 1,
+        member: item.member,
+        type: "family",
+        item: item.originalItem
+      });
+    } else {
+      setFulfillModal({
+        isOpen: true,
+        title: item.name,
+        category: item.category || "الاحتياجات المنزلية",
+        estimatedPrice: (item.estimatedPrice || 0) * (item.quantity || 1),
+        quantity: item.quantity || 1,
+        type: "shopping",
+        item: { ...item.originalItem, _source: item.sourceType }
+      });
+    }
   };
 
   const handleDeleteNeed = async (id: string) => {
@@ -2439,7 +2896,7 @@ setEditTrip(null);
   // ══════════════════════════════════════════════
 
   // Compute badge counts for tabs
-  const totalShortages = shoppingList.length + familyNeeds.filter(n => n.status === "pending" && n.type !== "duty").length;
+  const totalShortages = unifiedDeficits.length;
   const unpaidBillsCount = bills.filter(b => !isBillPaidThisCycle(b)).length;
   const delayedInstallmentsCount = installments.filter(i => isInstallmentOwedThisCycle(i)).length;
   const unsettledDebtsCount = effectiveDebts.filter(d => { const total = d.payments.reduce((s, p) => s + p.amount, 0); return d.amount - total > 0; }).length;
@@ -2691,7 +3148,7 @@ setEditTrip(null);
 
           } else if (activeTab === "needs") {
             const totalAvailQty = inventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + carInventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + travelInventory.reduce((s, i) => s + (Number(i.quantity) || 0), 0) + familyNeeds.filter(n => n.status === "available").length;
-            const totalShortQty = shoppingList.reduce((s, i) => s + (Number(i.neededQuantity) || 1), 0) + familyNeeds.filter(n => n.status === "pending").length;
+            const totalShortQty = unifiedDeficits.reduce((s, i) => s + (Number(i.quantity) || 1), 0);
             const totalAvailVal = inventory.reduce((s, i) => s + ((Number(i.quantity) || 0) * (Number(i.estimatedPrice) || 0)), 0) + carInventory.reduce((s, i) => s + ((Number(i.quantity) || 0) * (Number(i.estimatedPrice) || 0)), 0) + travelInventory.reduce((s, i) => s + ((Number(i.quantity) || 0) * (Number(i.estimatedPrice) || 0)), 0);
             availCard = { title: "إجمالي المتوفر (منزل وعائلة)", count: totalAvailQty, countLabel: "عنصر متوفر", value: totalAvailVal, color: "emerald", icon: "📦" };
             shortCard = { title: "إجمالي النواقص والاحتياجات", count: totalShortQty, countLabel: "طلب/عنصر ناقص", value: totalNeedsAmt, color: "orange", icon: "🚨" };
@@ -2969,10 +3426,10 @@ setEditTrip(null);
               </div>
               <span className="text-base font-black text-white">{fmt(totalNeedsAmt)} <span className="text-[10px] text-orange-300/50">د.ع</span></span>
             </div>
-            {shoppingList.length > 0 && (
+            {unifiedDeficits.length > 0 && (
               <div className="mt-2 text-[10px] text-orange-300/80 font-bold bg-black/20 rounded-xl p-2 flex items-center justify-between border border-white/5">
-                <span>{shoppingList.length} مواد مفقودة من موجودات البيت</span>
-                <button onClick={() => setActiveTab("needs")} className="bg-orange-500/20 hover:bg-orange-500/40 px-2 py-1 rounded-lg transition text-white">الذهاب للمخزن</button>
+                <span>{unifiedDeficits.length} احتياجات ونواقص مسجلة (بيت، عائلة، سيارة، سفر)</span>
+                <button onClick={() => setActiveTab("needs")} className="bg-orange-500/20 hover:bg-orange-500/40 px-2 py-1 rounded-lg transition text-white">عرض النواقص</button>
               </div>
             )}
           </div>
@@ -3690,194 +4147,365 @@ setEditTrip(null);
 
         {/* ═══════════════ NEEDS TAB ═══════════════ */}
         {activeTab === "needs" && (
-          <div className="space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="font-black text-gray-800 dark:text-white flex items-center gap-2">
-                  <ShoppingCart className="w-5 h-5 text-red-500" />
-                  النواقص والاحتياجات
-                </h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">سجل يضم جميع النواقص لمتطلبات البيت، السيارة، والعائلة</p>
+          <div className="space-y-4">
+            {/* Header with AI Camera & Add */}
+            <div className="bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 rounded-3xl p-5 md:p-6 text-white shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none transform -translate-y-1/2 translate-x-1/4" />
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="p-2 bg-white/20 backdrop-blur-md rounded-2xl shadow-inner">
+                      <ShoppingCart className="w-6 h-6 text-white" />
+                    </span>
+                    <h2 className="font-black text-xl md:text-2xl text-white">سجل النواقص والاحتياجات</h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-xs font-black text-white">
+                      {unifiedDeficits.length} ناقص
+                    </span>
+                  </div>
+                  <p className="text-xs md:text-sm text-white/85">
+                    تزامن تلقائي شامل للنواقص من (البيت، العائلة، السيارة، والسفر) + فحص صور الأدوية والمنتجات بالذكاء الاصطناعي 🧠📸
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={needFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleScanNeedPhoto}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => needFileInputRef.current?.click()}
+                    disabled={isScanningNeed}
+                    className="flex-1 sm:flex-initial bg-white text-rose-600 hover:bg-rose-50 text-xs font-black px-4 py-3 rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition cursor-pointer"
+                  >
+                    {isScanningNeed ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-rose-600" />
+                    ) : (
+                      <Camera className="w-4 h-4 text-rose-600" />
+                    )}
+                    <span>تصوير / رفع دواء أو منتج 📸</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setEditNeed(null);
+                      setNeedImageFile(null);
+                      setNeedImagePreview(null);
+                      setNeedNameInput("");
+                      setShowNeedModal(true);
+                    }}
+                    className="bg-black/25 hover:bg-black/35 text-white border border-white/20 text-xs font-black px-4 py-3 rounded-2xl flex items-center justify-center gap-2 shadow active:scale-95 transition cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة يدوي</span>
+                  </button>
+                </div>
               </div>
-              <button onClick={() => setShowNeedModal(true)}
-                className="bg-red-500 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1 shadow-lg shadow-red-500/25 active:scale-95 transition">
-                <Plus className="w-3.5 h-3.5" /> إضافة
-              </button>
             </div>
-            
-            {/* Needs Summary */}
+
+            {/* AI Scanning Status Banner */}
+            {isScanningNeed && (
+              <div className="bg-gradient-to-r from-purple-700 via-indigo-600 to-purple-600 text-white rounded-2xl p-4 shadow-xl flex items-center gap-3 animate-pulse border border-purple-400/30">
+                <Loader2 className="w-6 h-6 animate-spin flex-shrink-0 text-white" />
+                <div className="flex-1">
+                  <div className="font-black text-sm">جارٍ مسح وتحليل الصورة بالذكاء الاصطناعي...</div>
+                  <div className="text-xs text-purple-200 mt-0.5">{scanNeedStatus || "يتم استخراج اسم الدواء أو المنتج والجرعة..."}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Needs Summary Stats */}
             {needsSummaryStats.length > 0 && (
-              <div className="flex flex-wrap justify-center gap-3 pb-2 pt-1">
-                {needsSummaryStats.map(stat => (
-                  <div key={stat.id} className={`flex flex-col justify-center px-4 py-2.5 rounded-2xl border shadow-sm ${stat.colorClass} min-w-[140px] flex-1`}>
-                    <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex flex-wrap gap-2.5">
+                {needsSummaryStats.map((stat) => (
+                  <div
+                    key={stat.id}
+                    className={`flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl border shadow-sm ${stat.colorClass} min-w-[130px] flex-1`}
+                  >
+                    <div className="flex items-center gap-2">
                       <span className="text-base">{stat.icon}</span>
                       <span className="font-black text-xs">{stat.name}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-3 text-[10px] font-bold opacity-90">
-                      <span>العدد: {stat.count}</span>
-                      {stat.price > 0 && <span>{fmt(stat.price)} د.ع</span>}
+                    <div className="flex items-center gap-2 text-xs font-black">
+                      <span className="px-2 py-0.5 bg-white/40 dark:bg-black/30 rounded-lg">{stat.count}</span>
+                      {stat.price > 0 && <span className="opacity-90">{fmt(stat.price)} د.ع</span>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            
-            {(shoppingList.length === 0 && familyNeeds.filter(n => n.status === "pending").length === 0) ? (
-              <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
-                <span className="text-5xl block mb-3">🛒</span>
-                <p className="text-gray-400 font-bold text-sm">لا توجد احتياجات مسجلة</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {["inventory", "car", "travel"].map(source => {
-                  const items = shoppingList.filter(i => i._source === source);
-                  if (items.length === 0) return null;
-                  const titles = { inventory: "نواقص البيت", car: "نواقص السيارة", travel: "نواقص السفر" };
-                  const icons = { inventory: <Package className="w-3.5 h-3.5" />, car: <span className="text-sm">🚗</span>, travel: <span className="text-sm">✈️</span> };
+            {/* Filter Tabs & Search Bar */}
+            <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-3 shadow-sm space-y-3">
+              <div className="flex flex-wrap gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {[
+                  { id: "all", label: "الكل", icon: "🛒", count: unifiedDeficits.length },
+                  { id: "medicine", label: "أدوية وصيدلية", icon: "💊", count: unifiedDeficits.filter(i => i.isMedicine).length },
+                  { id: "photo", label: "مصورة / أدوية", icon: "📸", count: unifiedDeficits.filter(i => i.sourceType === "need" || !!i.imageUrl).length },
+                  { id: "inventory", label: "البيت", icon: "📦", count: unifiedDeficits.filter(i => i.sourceType === "inventory").length },
+                  { id: "family", label: "العائلة", icon: "👨‍👩‍👧‍👦", count: unifiedDeficits.filter(i => i.sourceType === "family").length },
+                  { id: "car", label: "السيارة", icon: "🚗", count: unifiedDeficits.filter(i => i.sourceType === "car").length },
+                  { id: "travel", label: "السفر", icon: "✈️", count: unifiedDeficits.filter(i => i.sourceType === "travel").length },
+                ].map((tab) => {
+                  const isActive = needFilterTab === tab.id;
                   return (
-                    <div key={source}>
-                      <div className="text-xs font-black text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-2 mt-4 first:mt-0">
-                        {icons[source as keyof typeof icons]} {titles[source as keyof typeof titles]} ({items.length})
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 mb-4">
-                        {items.map(item => {
-                          const neededQty = item.neededQuantity || 1;
-                          const estimatedTotal = neededQty * (item.estimatedPrice || 0);
-                          return (
-                            <div key={`inv-${item.id}`} className="bg-orange-50 dark:bg-orange-900/15 rounded-2xl p-2.5 border border-orange-200 dark:border-orange-800/40 shadow-sm flex flex-col relative overflow-hidden aspect-square group">
-                              <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-orange-400 to-red-500 opacity-60 rounded-t-2xl" />
-                              
-                              <button onClick={() => { setEditNeed(item); setShowNeedModal(true); }} className="absolute top-2 left-2 p-1.5 bg-white/80 dark:bg-zinc-800/80 hover:bg-orange-100 dark:hover:bg-orange-900/50 rounded-lg text-gray-500 opacity-0 group-hover:opacity-100 transition shadow-sm z-10">
-                                <Edit2 className="w-3 h-3" />
-                              </button>
-
-                              <span className="absolute top-2 right-2 text-[8px] font-black px-1.5 py-0.5 rounded bg-white/80 dark:bg-zinc-800/80 text-orange-600 shadow-sm z-10">{item.category}</span>
-
-                              {/* Image/Icon + Item Name */}
-                              <div className="flex flex-col gap-1.5 flex-1 items-center text-center justify-center pt-3">
-                                <div className="w-10 h-10 bg-orange-100 dark:bg-orange-800/30 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                  {item.imageUrl ? (
-                                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                                  ) : (
-                                    <span className="text-xl">📦</span>
-                                  )}
-                                </div>
-                                <div className="min-w-0 flex flex-col gap-0.5">
-                                  <div className="font-black text-xs text-gray-800 dark:text-gray-100 line-clamp-2 leading-tight">{item.name}</div>
-                                  {item.tripDestination && (
-                                    <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[8px] px-1.5 py-0.5 rounded font-black border border-blue-200 dark:border-blue-800/50 inline-block w-fit mx-auto">رحلة {item.tripDestination}</span>
-                                  )}
-                                </div>
-                              </div>
-                              {/* Stats */}
-                              <div className="text-[9px] text-gray-500 flex flex-col gap-0.5 text-center mt-1">
-                                <span>متوفر: {item.quantity} {item.unit} | تحتاج: {neededQty}</span>
-                                {estimatedTotal > 0 && <span className="text-orange-600 dark:text-orange-400 font-black">{fmt(estimatedTotal)} د.ع</span>}
-                              </div>
-                              {/* Actions */}
-                              <div className="flex flex-col items-stretch gap-1 mt-auto pt-2">
-                                <div className="flex gap-1">
-                                  <div className="flex items-center justify-between w-full bg-white dark:bg-zinc-800/50 rounded-full px-1 border border-orange-100 dark:border-orange-800/30">
-                                    <button onClick={async () => {
-                                      const src = item._source;
-                                      if (src === "car") { const updated = carInventory.map(x => x.id === item.id ? { ...x, neededQuantity: neededQty + 1 } : x); setCarInventory(updated); syncToFirebase("carInventory", updated);
-                                      } else if (src === "travel") { const updated = travelInventory.map(x => x.id === item.id ? { ...x, neededQuantity: neededQty + 1 } : x); setTravelInventory(updated); syncToFirebase("travelInventory", updated);
-                                      } else { const updated = inventory.map(x => x.id === item.id ? { ...x, neededQuantity: neededQty + 1 } : x); setInventory(updated); syncToFirebase("inventory", updated); }
-                                    }} className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 font-bold text-sm flex items-center justify-center hover:bg-red-200 transition">+</button>
-                                    <span className="text-[10px] font-black text-gray-700 dark:text-gray-300 w-4 text-center">{neededQty}</span>
-                                    <button onClick={async () => {
-                                      const src = item._source;
-                                      if (src === "car") { const updated = carInventory.map(x => x.id === item.id ? { ...x, neededQuantity: Math.max(0, neededQty - 1) } : x); setCarInventory(updated); syncToFirebase("carInventory", updated);
-                                      } else if (src === "travel") { const updated = travelInventory.map(x => x.id === item.id ? { ...x, neededQuantity: Math.max(0, neededQty - 1) } : x); setTravelInventory(updated); syncToFirebase("travelInventory", updated);
-                                      } else { const updated = inventory.map(x => x.id === item.id ? { ...x, neededQuantity: Math.max(0, neededQty - 1) } : x); setInventory(updated); syncToFirebase("inventory", updated); }
-                                    }} className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 font-bold text-sm flex items-center justify-center hover:bg-red-200 transition">-</button>
-                                  </div>
-                                  <button onClick={() => {
-                                    setFulfillModal({
-                                      isOpen: true,
-                                      title: item.name,
-                                      category: item.category || "الاحتياجات المنزلية",
-                                      estimatedPrice: estimatedTotal,
-                                      quantity: neededQty,
-                                      type: "shopping",
-                                      item: item
-                                    });
-                                  }} className="flex-1 bg-orange-500 text-white text-[10px] font-black px-2 py-1 rounded-xl active:scale-95 transition flex items-center justify-center gap-0.5">
-                                    <Check className="w-3 h-3" /> تم
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <button
+                      key={tab.id}
+                      onClick={() => setNeedFilterTab(tab.id as any)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 flex-shrink-0 cursor-pointer ${
+                        isActive
+                          ? "bg-red-500 text-white shadow-md shadow-red-500/25"
+                          : "bg-gray-100 dark:bg-zinc-800/80 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      <span>{tab.icon}</span>
+                      <span>{tab.label}</span>
+                      <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${isActive ? "bg-white/30 text-white" : "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300"}`}>
+                        {tab.count}
+                      </span>
+                    </button>
                   );
                 })}
-                {familyNeeds.filter(n => n.status === "pending" && n.type !== "duty").length > 0 && (
-                  <>
-                    <div className="font-black text-pink-600 dark:text-pink-400 text-xs mb-2 flex items-center gap-2">
-                      <Users className="w-3.5 h-3.5" /> طلبات العائلة (نواقص)
-                    </div>
-                    {/* Family Members Summary Badges */}
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {["حيدر", "إيمان", "رقية", "قنوت", "إيڤا"].map(member => {
-                        const memberNeeds = familyNeeds.filter(n => n.status === "pending" && n.type !== "duty" && (n.member === member || (member === "إيڤا" && n.member === "ايفا") || (member === "إيمان" && n.member === "ايمان")));
-                        if (memberNeeds.length === 0) return null;
-                        const totalQty = memberNeeds.reduce((sum, n) => sum + (Number(n.quantity) || 1), 0);
-                        const totalPrice = memberNeeds.reduce((sum, n) => sum + ((Number(n.estimatedPrice) || 0) * (Number(n.quantity) || 1)), 0);
-                        const memberColor = member === "إيڤا" ? "bg-red-100 text-red-600 border-red-200" : member === "إيمان" ? "bg-green-100 text-green-600 border-green-200" : member === "رقية" ? "bg-purple-100 text-purple-600 border-purple-200" : member === "قنوت" ? "bg-amber-100 text-amber-600 border-amber-200" : "bg-blue-100 text-blue-600 border-blue-200";
-                        return (
-                          <div key={member} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-black shadow-sm ${memberColor}`}>
-                            <span>{member} ({totalQty})</span>
-                            {totalPrice > 0 && <span className="bg-white/50 px-1.5 py-0.5 rounded-md text-[10px]">{fmt(totalPrice)} د.ع</span>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {familyNeeds.filter(n => n.status === "pending" && n.type !== "duty").map(need => {
-                        const memberColor = need.member.includes("إيڤا") || need.member.includes("إيفا") || need.member.includes("ايفا") ? "text-red-500" : need.member.includes("إيمان") || need.member.includes("ايمان") ? "text-green-500" : need.member.includes("رقية") ? "text-purple-500" : need.member.includes("قنوت") ? "text-amber-500" : need.member.includes("حيدر") ? "text-blue-500" : "text-indigo-500";
-                        const memberBg = need.member.includes("إيڤا") || need.member.includes("ايفا") ? "bg-red-100 dark:bg-red-900/30" : need.member.includes("إيمان") || need.member.includes("ايمان") ? "bg-green-100 dark:bg-green-900/30" : need.member.includes("رقية") ? "bg-purple-100 dark:bg-purple-900/30" : need.member.includes("قنوت") ? "bg-amber-100 dark:bg-amber-900/30" : "bg-blue-100 dark:bg-blue-900/30";
-                        return (
-                          <div key={`fam-${need.id}`} className="bg-pink-50 dark:bg-pink-900/15 rounded-2xl p-3 border border-pink-200 dark:border-pink-800/40 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-pink-400 to-rose-500 opacity-60 rounded-t-2xl" />
-                            
-                            <button onClick={() => { setEditFamilyNeed(need); setFamilyNeedType(need.type || "need"); setShowFamilyNeedModal(true); }} className="absolute top-2 left-2 p-1.5 bg-white/80 dark:bg-zinc-800/80 hover:bg-pink-100 dark:hover:bg-pink-900/50 rounded-lg text-gray-500 opacity-0 group-hover:opacity-100 transition shadow-sm z-10">
-                              <Edit2 className="w-3 h-3" />
-                            </button>
-
-                            <span className="absolute top-2 right-2 text-[8px] font-black px-1.5 py-0.5 rounded bg-white/80 dark:bg-zinc-800/80 text-pink-600 shadow-sm z-10">{need.category || "عائلة"}</span>
-
-                            {/* Member badge + name */}
-                            <div className="flex items-start gap-2 pt-3">
-                              <div className={`w-8 h-8 ${memberBg} rounded-xl flex items-center justify-center text-sm flex-shrink-0`}>
-                                👤
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="font-black text-xs text-gray-800 dark:text-gray-100 line-clamp-2">{need.title}</div>
-                                <span className={`text-[9px] font-black ${memberColor}`}>{need.member} - {need.quantity} قطعة</span>
-                              </div>
-                            </div>
-                            {/* Price */}
-                            {need.estimatedPrice && Number(need.estimatedPrice) > 0 ? (
-                              <div className="font-black text-emerald-600 dark:text-emerald-400 text-xs">{fmt(Number(need.estimatedPrice))} <span className="text-[9px] font-bold opacity-70">د.ع</span></div>
-                            ) : null}
-                            {/* Action */}
-                            <button onClick={() => handleToggleFamilyNeedStatus(need)} className="w-full bg-pink-500 text-white text-[9px] font-black py-1.5 rounded-xl active:scale-95 transition flex items-center justify-center gap-0.5 mt-auto">
-                              <Check className="w-2.5 h-2.5" /> توفير
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-
               </div>
-            )}
+
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="ابحث عن دواء، مسواك، منتج، أو فرد من العائلة..."
+                  value={needSearchQuery}
+                  onChange={(e) => setNeedSearchQuery(e.target.value)}
+                  className="w-full pr-10 pl-9 py-2.5 bg-gray-50 dark:bg-zinc-800 border-none rounded-xl text-xs font-bold text-gray-800 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-red-500/30 outline-none transition"
+                />
+                {needSearchQuery && (
+                  <button
+                    onClick={() => setNeedSearchQuery("")}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Filtered Deficits Grid */}
+            {(() => {
+              const filtered = unifiedDeficits.filter((item) => {
+                // Tab filter
+                if (needFilterTab === "medicine" && !item.isMedicine) return false;
+                if (needFilterTab === "photo" && !(item.sourceType === "need" || !!item.imageUrl)) return false;
+                if (needFilterTab === "inventory" && item.sourceType !== "inventory") return false;
+                if (needFilterTab === "family" && item.sourceType !== "family") return false;
+                if (needFilterTab === "car" && item.sourceType !== "car") return false;
+                if (needFilterTab === "travel" && item.sourceType !== "travel") return false;
+
+                // Search query
+                if (needSearchQuery.trim()) {
+                  const q = needSearchQuery.trim().toLowerCase();
+                  const inName = item.name.toLowerCase().includes(q);
+                  const inCat = item.category.toLowerCase().includes(q);
+                  const inNotes = (item.notes || "").toLowerCase().includes(q);
+                  const inSpecs = (item.dosageOrSpecs || "").toLowerCase().includes(q);
+                  const inMember = (item.member || "").toLowerCase().includes(q);
+                  if (!inName && !inCat && !inNotes && !inSpecs && !inMember) return false;
+                }
+
+                return true;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="bg-white dark:bg-zinc-900 rounded-3xl p-10 text-center border border-gray-100 dark:border-zinc-800 shadow-sm space-y-3">
+                    <span className="text-6xl block mb-2">🎉</span>
+                    <h3 className="font-black text-gray-800 dark:text-white text-base">
+                      {needSearchQuery ? "لا توجد نتائج تطابق بحثك" : "لا توجد نواقص في هذا القسم"}
+                    </h3>
+                    <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                      كل احتياجات البيت ومستلزمات العائلة والسيارة متوفرة حالياً. يمكنك التقاط صورة دواء أو إضافة أي نقص في أي وقت!
+                    </p>
+                    <button
+                      onClick={() => needFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl text-xs font-black hover:bg-red-100 transition cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      تصوير علبة دواء أو منتج
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filtered.map((item) => {
+                    const estTotal = (item.quantity || 1) * (item.estimatedPrice || 0);
+
+                    // Badge colors by source
+                    const sourceBadge =
+                      item.isMedicine || item.category === "أدوية وصيدلية"
+                        ? { text: "💊 دواء / صيدلية", style: "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border-rose-200 dark:border-rose-800" }
+                        : item.sourceType === "family"
+                        ? { text: `👨‍👩‍👧‍👦 ${item.member || "عائلة"}`, style: "bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-300 border-pink-200 dark:border-pink-800" }
+                        : item.sourceType === "car"
+                        ? { text: "🚗 السيارة", style: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800" }
+                        : item.sourceType === "travel"
+                        ? { text: "✈️ السفر", style: "bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300 border-teal-200 dark:border-teal-800" }
+                        : item.imageUrl
+                        ? { text: "📸 صورة نقص", style: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800" }
+                        : { text: "📦 البيت", style: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800" };
+
+                    return (
+                      <div
+                        key={item.key}
+                        className="bg-white dark:bg-zinc-900 rounded-3xl p-4 border border-gray-100 dark:border-zinc-800/80 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between relative group overflow-hidden"
+                      >
+                        {/* Top decorative gradient line */}
+                        <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-red-500 via-rose-500 to-amber-500 opacity-60" />
+
+                        {/* Top Meta Bar */}
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg border ${sourceBadge.style}`}>
+                              {sourceBadge.text}
+                            </span>
+                            <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-lg">
+                              {item.category}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            {item.sourceType === "need" && (
+                              <button
+                                onClick={() => {
+                                  setEditNeed(item.originalItem);
+                                  setNeedNameInput(item.name);
+                                  setNeedImagePreview(item.imageUrl || null);
+                                  setShowNeedModal(true);
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition cursor-pointer"
+                                title="تعديل"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteUnifiedDeficit(item)}
+                              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition cursor-pointer"
+                              title="حذف من النواقص"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Card Center: Thumbnail + Title + Specs */}
+                        <div className="flex items-start gap-3 mb-3">
+                          {/* Photo or Icon */}
+                          <div className="relative flex-shrink-0">
+                            {item.imageUrl ? (
+                              <div
+                                onClick={() => setPreviewImageUrl({ url: item.imageUrl!, title: item.name })}
+                                className="w-16 h-16 rounded-2xl overflow-hidden bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 cursor-pointer group/img relative shadow-sm"
+                              >
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.name}
+                                  className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-110"
+                                />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-white">
+                                  <Eye className="w-4 h-4" />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="w-16 h-16 rounded-2xl bg-gray-50 dark:bg-zinc-800/80 border border-gray-100 dark:border-zinc-700/60 flex items-center justify-center text-2xl flex-shrink-0">
+                                {item.isMedicine ? "💊" : item.sourceType === "car" ? "🚗" : item.sourceType === "travel" ? "✈️" : item.sourceType === "family" ? "👤" : "📦"}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Details */}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-black text-sm text-gray-900 dark:text-white line-clamp-2 leading-snug">
+                              {item.name}
+                            </h4>
+
+                            {item.dosageOrSpecs && (
+                              <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 text-purple-700 dark:text-purple-300 rounded-lg text-[10px] font-black">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>{item.dosageOrSpecs}</span>
+                              </div>
+                            )}
+
+                            {item.notes && (
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
+                                {item.notes}
+                              </p>
+                            )}
+
+                            {item.tripDestination && (
+                              <div className="text-[10px] text-teal-600 dark:text-teal-400 font-bold mt-1">
+                                وجهة: {item.tripDestination}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Price & Quantity Stats */}
+                        <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-2xl p-2.5 mb-3 flex items-center justify-between border border-gray-100 dark:border-zinc-800 text-xs">
+                          <div>
+                            <span className="text-[10px] text-gray-400 block font-bold">الكمية المطلوبة</span>
+                            <span className="font-black text-gray-800 dark:text-gray-200">
+                              {item.quantity} {item.unit}
+                            </span>
+                          </div>
+
+                          <div className="text-left">
+                            <span className="text-[10px] text-gray-400 block font-bold">السعر التقديري</span>
+                            <span className="font-black text-rose-600 dark:text-rose-400">
+                              {estTotal > 0 ? `${fmt(estTotal)} د.ع` : "غير محدد"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Card Footer: Quantity Adjuster + Fulfill Button */}
+                        <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-zinc-800/80">
+                          {/* +/- Counter */}
+                          <div className="flex items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-1 py-0.5 border border-gray-200 dark:border-zinc-700">
+                            <button
+                              onClick={() => handleUpdateDeficitQty(item, 1)}
+                              className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-700 text-gray-700 dark:text-white font-bold flex items-center justify-center hover:bg-red-500 hover:text-white transition shadow-xs text-xs cursor-pointer"
+                            >
+                              +
+                            </button>
+                            <span className="w-7 text-center font-black text-xs text-gray-800 dark:text-gray-200">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={() => handleUpdateDeficitQty(item, -1)}
+                              className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-700 text-gray-700 dark:text-white font-bold flex items-center justify-center hover:bg-red-500 hover:text-white transition shadow-xs text-xs cursor-pointer"
+                            >
+                              -
+                            </button>
+                          </div>
+
+                          {/* Fulfill / Buy button */}
+                          <button
+                            onClick={() => handleFulfillUnifiedDeficit(item)}
+                            className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-black py-2 px-3 rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>تم الشراء / التوفير</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -6362,72 +6990,284 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
         {/* NEEDS MODAL */}
         {showNeedModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800">
               <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gray-50/50 dark:bg-zinc-800/50">
-                <h3 className="font-black text-gray-800 dark:text-white text-lg">{editNeed ? "تعديل احتياج" : "إضافة احتياج"}</h3>
-                <button onClick={() => { setShowNeedModal(false); setEditNeed(null);
-}} className="p-2 bg-white dark:bg-zinc-800 rounded-full text-gray-400 hover:text-gray-600 transition shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🛒</span>
+                  <h3 className="font-black text-gray-800 dark:text-white text-lg">
+                    {editNeed ? "تعديل الاحتياج" : "إضافة احتياج / دواء جديد"}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowNeedModal(false);
+                    setEditNeed(null);
+                    setNeedImageFile(null);
+                    setNeedImagePreview(null);
+                    setNeedNameInput("");
+                  }}
+                  className="p-2 bg-white dark:bg-zinc-800 rounded-full text-gray-400 hover:text-gray-600 transition shadow-sm cursor-pointer"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <form onSubmit={handleSaveNeed} className="p-5 space-y-4">
+
+              <form onSubmit={handleSaveNeed} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+                {/* Photo attachment zone */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1.5">
+                    صورة الدواء أو المنتج (اختياري)
+                  </label>
+                  <input
+                    ref={needModalFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setNeedImageFile(file);
+                      const reader = new FileReader();
+                      reader.onload = () => setNeedImagePreview(reader.result as string);
+                      reader.readAsDataURL(file);
+                    }}
+                    className="hidden"
+                  />
+
+                  {needImagePreview ? (
+                    <div className="relative rounded-2xl overflow-hidden border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 p-2 flex items-center gap-3">
+                      <img
+                        src={needImagePreview}
+                        alt="Preview"
+                        className="w-16 h-16 rounded-xl object-cover border"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300 block line-clamp-1">
+                          تم إرفاق الصورة بنجاح
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isScanningNeed}
+                          onClick={async () => {
+                            if (!needImagePreview) return;
+                            setIsScanningNeed(true);
+                            setScanNeedStatus("جارٍ فحص صورة الدواء/المنتج بالذكاء الاصطناعي...");
+                            try {
+                              const res = await scanNeedItemWithGemini(needImagePreview, (msg) => setScanNeedStatus(msg));
+                              if (res.name) setNeedNameInput(res.name);
+                              toast.success(`تم استخراج: ${res.name}`, {
+                                description: res.dosageOrSpecs ? `الجرعة/المواصفة: ${res.dosageOrSpecs}` : undefined
+                              });
+                            } catch (e: any) {
+                              toast.error("تعذر استخراج البيانات من الصورة");
+                            } finally {
+                              setIsScanningNeed(false);
+                              setScanNeedStatus("");
+                            }
+                          }}
+                          className="mt-1 text-[11px] font-black text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          {isScanningNeed ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                          استخراج الاسم والبيانات بالذكاء الاصطناعي
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNeedImageFile(null);
+                          setNeedImagePreview(null);
+                        }}
+                        className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => needModalFileInputRef.current?.click()}
+                      className="w-full py-3 px-4 border-2 border-dashed border-gray-200 dark:border-zinc-700 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold text-gray-500 hover:border-red-400 hover:text-red-500 transition bg-gray-50/50 dark:bg-zinc-800/30 cursor-pointer"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>التقط صورة علبة الدواء أو اختر من المعرض</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Name */}
                 <div className="relative">
-                  <label className="block text-xs font-bold text-gray-500 mb-1.5">الاحتياج</label>
-                  <input name="name" type="text" required autoComplete="off" 
+                  <label className="block text-xs font-bold text-gray-500 mb-1.5">
+                    اسم المنتج أو الدواء <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    name="name"
+                    type="text"
+                    required
+                    autoComplete="off"
                     value={needNameInput || editNeed?.name || ""}
-                    onChange={e => {
+                    onChange={(e) => {
                       setNeedNameInput(e.target.value);
                       setShowNeedSuggestions(e.target.value.length >= 1);
                     }}
                     onFocus={() => setShowNeedSuggestions(needNameInput.length >= 1)}
                     onBlur={() => setTimeout(() => setShowNeedSuggestions(false), 200)}
-                    className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-4 py-3 text-sm font-bold text-gray-800 dark:text-white focus:ring-2 focus:ring-orange-500/50 outline-none transition" />
-                  
+                    placeholder="مثال: بنادول إكسترا 500 ملغ، حليب، تايد..."
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-4 py-3 text-sm font-bold text-gray-800 dark:text-white focus:ring-2 focus:ring-red-500/50 outline-none transition"
+                  />
+
                   {showNeedSuggestions && (
                     <div className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-lg max-h-40 overflow-y-auto">
-                      {Array.from(new Set([...inventory.map(i=>i.name), ...needs.map(n=>n.name)])).filter(n => n.includes(needNameInput)).map((suggestedName, idx) => (
-                        <div key={idx} onClick={() => { setNeedNameInput(suggestedName); setShowNeedSuggestions(false); }} className="px-4 py-2 hover:bg-orange-50 dark:hover:bg-zinc-700 cursor-pointer text-sm">
-                          {suggestedName}
-                        </div>
-                      ))}
+                      {Array.from(new Set([...inventory.map((i) => i.name), ...needs.map((n) => n.name)]))
+                        .filter((n) => n.includes(needNameInput))
+                        .map((suggestedName, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => {
+                              setNeedNameInput(suggestedName);
+                              setShowNeedSuggestions(false);
+                            }}
+                            className="px-4 py-2 hover:bg-red-50 dark:hover:bg-zinc-700 cursor-pointer text-sm"
+                          >
+                            {suggestedName}
+                          </div>
+                        ))}
                     </div>
                   )}
                 </div>
 
+                {/* Category & Dosage/Specs */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1.5">التصنيف</label>
-                    <select name="category" defaultValue={editNeed?.category || (activeTab === "car" ? "صيانة" : activeTab === "travel" ? "أمتعة" : "سوبر ماركت")}
-                      className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-orange-500/50 outline-none">
-                      {(activeTab === "car" ? CAR_INVENTORY_CATEGORIES : activeTab === "travel" ? TRAVEL_INVENTORY_CATEGORIES : HOME_INVENTORY_CATEGORIES).map(c => <option key={c}>{c}</option>)}
+                    <select
+                      name="category"
+                      defaultValue={editNeed?.category || (activeTab === "car" ? "سيارة" : activeTab === "travel" ? "سفر" : "أدوية وصيدلية")}
+                      className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-3 py-3 text-xs font-bold focus:ring-2 focus:ring-red-500/50 outline-none"
+                    >
+                      {NEED_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
                     </select>
                   </div>
+
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1.5">الكمية</label>
-                    <input name="quantity" type="number" step="0.1" required defaultValue={editNeed?.neededQuantity || 1}
-                      className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-orange-500/50 outline-none" />
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">العيار / المواصفة</label>
+                    <input
+                      name="dosageOrSpecs"
+                      type="text"
+                      defaultValue={editNeed?.dosageOrSpecs || ""}
+                      placeholder="مثال: 500mg، 24 قرص"
+                      className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-3 py-3 text-xs font-bold focus:ring-2 focus:ring-red-500/50 outline-none"
+                    />
                   </div>
                 </div>
 
+                {/* Quantity & Unit */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1.5">الوحدة</label>
-                    <select name="unit" defaultValue={editNeed?.unit || "قطعة"}
-                      className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-orange-500/50 outline-none">
-                      {HOME_INVENTORY_UNITS.map(u => <option key={u}>{u}</option>)}
-                    </select>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">الكمية</label>
+                    <input
+                      name="quantity"
+                      type="number"
+                      step="0.1"
+                      required
+                      defaultValue={editNeed?.quantity || editNeed?.neededQuantity || 1}
+                      className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-red-500/50 outline-none"
+                    />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1.5">السعر التقديري</label>
-                    <input name="price" type="number" defaultValue={editNeed?.estimatedPrice}
-                      className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-orange-500/50 outline-none" />
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">الوحدة</label>
+                    <select
+                      name="unit"
+                      defaultValue={editNeed?.unit || "علبة"}
+                      className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-3 py-3 text-xs font-bold focus:ring-2 focus:ring-red-500/50 outline-none"
+                    >
+                      {["علبة", "شريط", "قطعة", "بطل", "كيس", "كغم", "لتر", "كيلو"].map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
-                <button type="submit" className="w-full bg-orange-500 text-white font-black py-3.5 rounded-2xl shadow-lg shadow-orange-500/25 active:scale-[0.98] transition">
-                  حفظ
+                {/* Price & Notes */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">السعر التقديري (د.ع)</label>
+                    <input
+                      name="price"
+                      type="number"
+                      defaultValue={editNeed?.estimatedPrice || ""}
+                      placeholder="0"
+                      className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-red-500/50 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5">ملاحظات إضافية</label>
+                    <input
+                      name="notes"
+                      type="text"
+                      defaultValue={editNeed?.notes || ""}
+                      placeholder="دواعي الاستخدام أو ملاحظة"
+                      className="w-full bg-gray-50 dark:bg-zinc-800 border-none rounded-2xl px-3 py-3 text-xs font-bold focus:ring-2 focus:ring-red-500/50 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isUploading}
+                  className="w-full bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black py-3.5 rounded-2xl shadow-lg shadow-red-500/25 active:scale-[0.98] transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>{isUploading ? "جارٍ حفظ ورفع الصورة..." : "حفظ النقص"}</span>
                 </button>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* IMAGE PREVIEW MODAL */}
+        {previewImageUrl && (
+          <div
+            className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
+            onClick={() => setPreviewImageUrl(null)}
+          >
+            <div
+              className="relative max-w-lg w-full bg-zinc-900 border border-white/10 rounded-3xl p-4 overflow-hidden shadow-2xl flex flex-col items-center gap-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between w-full px-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">📸</span>
+                  <h3 className="font-black text-white text-sm line-clamp-1">{previewImageUrl.title}</h3>
+                </div>
+                <button
+                  onClick={() => setPreviewImageUrl(null)}
+                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="relative w-full max-h-[70vh] rounded-2xl overflow-hidden bg-black/50 flex items-center justify-center">
+                <img
+                  src={previewImageUrl.url}
+                  alt={previewImageUrl.title}
+                  className="max-h-[68vh] w-auto max-w-full object-contain rounded-xl"
+                />
+              </div>
+              <div className="w-full flex justify-between items-center text-xs text-gray-400 px-2">
+                <span>صورة علبة الدواء / المنتج للنواقص</span>
+                <button
+                  onClick={() => window.open(previewImageUrl.url, "_blank")}
+                  className="text-purple-400 hover:text-purple-300 font-bold flex items-center gap-1 text-[11px] cursor-pointer"
+                >
+                  عرض بالحجم الكامل ↗
+                </button>
+              </div>
             </div>
           </div>
         )}
