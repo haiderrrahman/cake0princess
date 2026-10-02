@@ -4411,7 +4411,7 @@ setEditTrip(null);
 
             {/* Filter Tabs & Search Bar */}
             <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-2.5 shadow-sm space-y-2.5">
-              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none" dir="rtl">
+              <div className="flex flex-wrap items-center gap-1.5" dir="rtl">
                 {[
                   { id: "all", label: "الكل", icon: "🛒", count: unifiedDeficits.length },
                   { id: "medicine", label: "أدوية وصيدلية", icon: "💊", count: unifiedDeficits.filter(i => i.isMedicine).length },
@@ -4426,7 +4426,7 @@ setEditTrip(null);
                     <button
                       key={tab.id}
                       onClick={() => setNeedFilterTab(tab.id as any)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 flex-shrink-0 cursor-pointer ${
+                      className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 active:scale-95 cursor-pointer ${
                         isActive
                           ? "bg-red-500 text-white shadow-sm"
                           : "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700"
