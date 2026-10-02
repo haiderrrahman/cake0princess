@@ -22,7 +22,7 @@ import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp } 
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
 import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
-import { scanNeedItemWithGemini } from "@/lib/scanNeedItemClient";
+import { scanNeedItemWithGemini, cropItemFromImage, ScannedNeedItem } from "@/lib/scanNeedItemClient";
 
 // ══════════════════════════════════════════════
 // TYPES
@@ -517,6 +517,8 @@ export default function HomeFinanceDashboard() {
   const [previewImageUrl, setPreviewImageUrl] = useState<{ url: string; title: string } | null>(null);
   const needFileInputRef = useRef<HTMLInputElement>(null);
   const needModalFileInputRef = useRef<HTMLInputElement>(null);
+  const [scannedReviewItems, setScannedReviewItems] = useState<ScannedNeedItem[] | null>(null);
+  const [isSavingScannedBatch, setIsSavingScannedBatch] = useState(false);
   const [fulfillModal, setFulfillModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -1889,9 +1891,9 @@ setEditInventory(null);
   };
 
   // ──────────────────────────────────────────
-  // NEEDS & UNIFIED DEFICITS HANDLERS (FAST & NON-BLOCKING)
+  // NEEDS & UNIFIED DEFICITS HANDLERS (MULTI-ITEM DETECTION & AI CROPPING)
   // ──────────────────────────────────────────
-  const compressImageFast = (file: File, maxDim = 800, quality = 0.7): Promise<string> => {
+  const compressImageFast = (file: File, maxDim = 900, quality = 0.75): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -1932,80 +1934,109 @@ setEditInventory(null);
     if (!file) return;
 
     setIsScanningNeed(true);
-    setScanNeedStatus("جارٍ فحص وتحليل الصورة بالذكاء الاصطناعي 🧠...");
+    setScanNeedStatus("جارٍ تجهيز وضغط الصورة 📸...");
 
     try {
-      // 1. Ultra-fast canvas compression (<100ms)
-      const base64Data = await compressImageFast(file, 800, 0.7);
+      // 1. Ultra-fast local canvas compression (<100ms)
+      const base64Data = await compressImageFast(file, 900, 0.75);
 
-      const needId = Date.now().toString() + Math.random().toString(36).substring(2, 7);
-
-      // 2. Start Gemini AI analysis immediately
-      const aiPromise = scanNeedItemWithGemini(base64Data, (status) => {
+      // 2. Scan photo with Gemini AI (detects all medicines/products & bounding boxes)
+      setScanNeedStatus("جارٍ فحص واكتشاف الأدوية والمنتجات بالذكاء الاصطناعي 🧠...");
+      const detectedItems = await scanNeedItemWithGemini(base64Data, (status) => {
         setScanNeedStatus(status);
       });
 
-      // 3. Concurrently upload to Firebase Storage with a 3.5s timeout (never blocks AI)
-      const uploadPromise = (async () => {
-        try {
-          const storageRef = ref(storage, `home_finance/needs/${needId}_${Date.now()}.jpg`);
-          const res = await fetch(base64Data);
-          const blob = await res.blob();
-          await uploadBytes(storageRef, blob);
-          return await getDownloadURL(storageRef);
-        } catch (uploadErr) {
-          console.warn("Storage upload fallback to base64", uploadErr);
-          return base64Data;
-        }
-      })();
+      // 3. Crop each medicine/product individually from the original photo!
+      setScanNeedStatus(`جارٍ استخراج وتوليد صورة مقصوصة لكل مادة (${detectedItems.length} مواد) ✂️📸...`);
+      const croppedItems: ScannedNeedItem[] = await Promise.all(
+        detectedItems.map(async (item, idx) => {
+          let cropUrl = base64Data;
+          if (item.box_2d) {
+            try {
+              cropUrl = await cropItemFromImage(base64Data, item.box_2d);
+            } catch (cropErr) {
+              console.warn("Crop failed for item", item.name, cropErr);
+            }
+          }
+          return {
+            ...item,
+            id: `scan_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+            croppedImageUrl: cropUrl,
+            selected: true
+          };
+        })
+      );
 
-      const fastUploadPromise = Promise.race([
-        uploadPromise,
-        new Promise<string>((resolve) => setTimeout(() => resolve(base64Data), 3500))
-      ]);
-
-      const [aiResult, uploadedImageUrl] = await Promise.all([aiPromise, fastUploadPromise]);
-
-      // 4. Create new Need item
-      const newNeed: Need = {
-        id: needId,
-        name: aiResult.name || "منتج غير محدد",
-        category: aiResult.category || "أدوية وصيدلية",
-        quantity: aiResult.quantity || 1,
-        unit: aiResult.unit || (aiResult.category === "أدوية وصيدلية" ? "علبة" : "قطعة"),
-        estimatedPrice: aiResult.estimatedPrice || 0,
-        notes: aiResult.notes || "",
-        dosageOrSpecs: aiResult.dosageOrSpecs || "",
-        imageUrl: uploadedImageUrl,
-        sourceType: "photo",
-        isBought: false,
-        createdAt: new Date().toISOString()
-      };
-
-      const updated = [newNeed, ...needs];
-      setNeeds(updated);
-      syncToFirebase("needs", updated);
-
-      // If storage upload finishes later in background and returned a permanent URL, update it silently
-      uploadPromise.then((finalUrl) => {
-        if (finalUrl && finalUrl !== base64Data) {
-          setNeeds(prev => prev.map(n => n.id === needId ? { ...n, imageUrl: finalUrl } : n));
-          syncToFirebase("needs", updated.map(n => n.id === needId ? { ...n, imageUrl: finalUrl } : n));
-        }
-      }).catch(() => {});
-
-      toast.success(`تم إضافة النقص: ${newNeed.name}`, {
-        description: newNeed.dosageOrSpecs ? `الجرعة/المواصفات: ${newNeed.dosageOrSpecs}` : undefined
-      });
+      // 4. Open the Scanned Items Review Modal for the user!
+      setScannedReviewItems(croppedItems);
     } catch (err: any) {
       console.error("Scan need error:", err);
-      toast.error("فشل قراءة الصورة، يرجى المحاولة مجدداً أو كتابة النقص يدوياً");
+      toast.error("فشل قراءة الصورة، يرجى التأكد من وضوح علب الأدوية أو كتابة النقص يدوياً");
     } finally {
       setIsScanningNeed(false);
       setScanNeedStatus("");
       if (needFileInputRef.current) {
         needFileInputRef.current.value = "";
       }
+    }
+  };
+
+  const handleConfirmScannedItems = async (itemsToAdd: ScannedNeedItem[]) => {
+    if (!itemsToAdd || itemsToAdd.length === 0) {
+      setScannedReviewItems(null);
+      return;
+    }
+
+    setIsSavingScannedBatch(true);
+    try {
+      const newNeeds: Need[] = itemsToAdd.map((item, idx) => {
+        const needId = Date.now().toString() + "_" + idx + "_" + Math.random().toString(36).substring(2, 6);
+        return {
+          id: needId,
+          name: item.name || "دواء/منتج غير محدد",
+          category: item.category || "أدوية وصيدلية",
+          quantity: item.quantity || 1,
+          unit: item.unit || (item.category === "أدوية وصيدلية" ? "علبة" : "قطعة"),
+          estimatedPrice: item.estimatedPrice || 0,
+          notes: item.notes || "",
+          dosageOrSpecs: item.dosageOrSpecs || "",
+          imageUrl: item.croppedImageUrl || "",
+          sourceType: "photo",
+          isBought: false,
+          createdAt: new Date().toISOString()
+        };
+      });
+
+      const updated = [...newNeeds, ...needs];
+      setNeeds(updated);
+      syncToFirebase("needs", updated);
+
+      // Background upload of cropped images to Firebase Storage
+      newNeeds.forEach(async (need) => {
+        if (need.imageUrl && need.imageUrl.startsWith("data:image")) {
+          try {
+            const storageRef = ref(storage, `home_finance/needs/${need.id}_${Date.now()}.jpg`);
+            const res = await fetch(need.imageUrl);
+            const blob = await res.blob();
+            await uploadBytes(storageRef, blob);
+            const downloadUrl = await getDownloadURL(storageRef);
+            setNeeds(prev => prev.map(n => n.id === need.id ? { ...n, imageUrl: downloadUrl } : n));
+            syncToFirebase("needs", updated.map(n => n.id === need.id ? { ...n, imageUrl: downloadUrl } : n));
+          } catch (uploadErr) {
+            console.warn("Background storage upload failed for need item", need.id);
+          }
+        }
+      });
+
+      setScannedReviewItems(null);
+      toast.success(`تمت إضافة ${newNeeds.length} مواد بنجاح إلى سجل النواقص 🛒!`, {
+        description: newNeeds.map(n => n.name).slice(0, 3).join("، ") + (newNeeds.length > 3 ? "..." : "")
+      });
+    } catch (err) {
+      console.error("Save scanned batch error:", err);
+      toast.error("حدث خطأ أثناء حفظ المواد");
+    } finally {
+      setIsSavingScannedBatch(false);
     }
   };
 
@@ -7019,6 +7050,233 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
           </div>
         </div>
       )}
+        {/* ─── SCANNED MEDICINES & PRODUCTS REVIEW MODAL ─── */}
+        {scannedReviewItems && (
+          <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-zinc-900 w-full sm:max-w-2xl rounded-t-[32px] sm:rounded-[32px] shadow-2xl border border-gray-100 dark:border-zinc-800 flex flex-col max-h-[92vh] sm:max-h-[85vh] overflow-hidden">
+              {/* Header Banner */}
+              <div className="p-4 sm:p-5 bg-gradient-to-r from-purple-700 via-indigo-600 to-rose-600 text-white relative overflow-hidden flex-shrink-0">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none transform -translate-y-1/2 translate-x-1/4" />
+                <div className="relative z-10 flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl shadow-inner flex-shrink-0">
+                      ✂️
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-base sm:text-lg text-white">
+                          قائمة الأدوية والمنتجات المكتشفة
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full bg-white/25 backdrop-blur-md text-[11px] font-black text-white">
+                          {scannedReviewItems.length} مواد
+                        </span>
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-white/90 mt-0.5">
+                        تم استخراج كل دواء وقص صورته الخاصة بالذكاء الاصطناعي 🧠📸
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setScannedReviewItems(null)}
+                    className="p-1.5 bg-black/20 hover:bg-black/40 rounded-full text-white/80 hover:text-white transition cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Sub-bar: Select All / Deselect All */}
+                <div className="mt-3 pt-2.5 border-t border-white/15 flex items-center justify-between text-xs font-black">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allSelected = scannedReviewItems.every(i => i.selected);
+                      setScannedReviewItems(scannedReviewItems.map(i => ({ ...i, selected: !allSelected })));
+                    }}
+                    className="px-2.5 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white text-[11px] transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{scannedReviewItems.every(i => i.selected) ? "إلغاء تحديد الكل" : "تحديد الكل"}</span>
+                  </button>
+
+                  <span className="text-[11px] text-white/90">
+                    المحدد للإضافة: {scannedReviewItems.filter(i => i.selected).length} من {scannedReviewItems.length}
+                  </span>
+                </div>
+              </div>
+
+              {/* List of Detected Items */}
+              <div className="p-3 sm:p-4 overflow-y-auto space-y-2.5 flex-1 divide-y divide-gray-100 dark:divide-zinc-800/80">
+                {scannedReviewItems.map((item, idx) => (
+                  <div
+                    key={item.id || idx}
+                    className={`pt-2.5 first:pt-0 flex items-start gap-2.5 sm:gap-3.5 transition-all ${
+                      !item.selected ? "opacity-40 grayscale-[50%]" : ""
+                    }`}
+                  >
+                    {/* Selection Checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={item.selected !== false}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setScannedReviewItems(prev => prev ? prev.map((it, i) => i === idx ? { ...it, selected: checked } : it) : null);
+                      }}
+                      className="w-4 h-4 rounded mt-3 accent-purple-600 cursor-pointer flex-shrink-0"
+                    />
+
+                    {/* Cropped Image Thumbnail */}
+                    <div
+                      onClick={() => {
+                        if (item.croppedImageUrl) {
+                          setPreviewImageUrl({ url: item.croppedImageUrl, title: item.name });
+                        }
+                      }}
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-gray-100 dark:bg-zinc-800 border-2 border-purple-500/30 flex-shrink-0 cursor-pointer relative group/thumb shadow-sm"
+                    >
+                      {item.croppedImageUrl ? (
+                        <img
+                          src={item.croppedImageUrl}
+                          alt={item.name}
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover/thumb:scale-110"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-2xl">
+                          💊
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/thumb:opacity-100 transition flex items-center justify-center text-white">
+                        <Eye className="w-4 h-4" />
+                      </div>
+                    </div>
+
+                    {/* Item Fields */}
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      {/* Name Input */}
+                      <div>
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setScannedReviewItems(prev => prev ? prev.map((it, i) => i === idx ? { ...it, name: val } : it) : null);
+                          }}
+                          placeholder="اسم الدواء أو المنتج"
+                          className="w-full font-black text-xs sm:text-sm text-gray-900 dark:text-white bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-purple-500 outline-none pb-0.5"
+                        />
+                      </div>
+
+                      {/* Dosage / Specs Input */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold flex-shrink-0">✨ الجرعة/المواصفة:</span>
+                        <input
+                          type="text"
+                          value={item.dosageOrSpecs || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setScannedReviewItems(prev => prev ? prev.map((it, i) => i === idx ? { ...it, dosageOrSpecs: val } : it) : null);
+                          }}
+                          placeholder="مثال: 500 ملغم"
+                          className="flex-1 text-[11px] font-bold text-gray-700 dark:text-gray-300 bg-purple-50/60 dark:bg-purple-950/30 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800/50 outline-none"
+                        />
+                      </div>
+
+                      {/* Category, Quantity & Stepper */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={item.category}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setScannedReviewItems(prev => prev ? prev.map((it, i) => i === idx ? { ...it, category: val } : it) : null);
+                            }}
+                            className="text-[10px] font-black bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-lg border-none outline-none cursor-pointer"
+                          >
+                            <option value="أدوية وصيدلية">💊 أدوية وصيدلية</option>
+                            <option value="سوبر ماركت">🛒 سوبر ماركت</option>
+                            <option value="منظفات">🧼 منظفات</option>
+                            <option value="عناية شخصية">🧴 عناية شخصية</option>
+                            <option value="مستلزمات منزلية">📦 مستلزمات منزلية</option>
+                            <option value="أغذية ومسواك">🍎 أغذية ومسواك</option>
+                            <option value="سيارة">🚗 سيارة</option>
+                            <option value="أخرى">📌 أخرى</option>
+                          </select>
+                        </div>
+
+                        {/* Quantity Stepper */}
+                        <div className="flex items-center bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 border border-gray-200 dark:border-zinc-700">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setScannedReviewItems(prev => prev ? prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(1, (it.quantity || 1) - 1) } : it) : null);
+                            }}
+                            className="w-5 h-5 rounded bg-white dark:bg-zinc-700 text-gray-700 dark:text-white font-bold flex items-center justify-center hover:bg-red-500 hover:text-white transition text-xs cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="w-6 text-center font-black text-[11px] text-gray-800 dark:text-gray-200">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setScannedReviewItems(prev => prev ? prev.map((it, i) => i === idx ? { ...it, quantity: (it.quantity || 1) + 1 } : it) : null);
+                            }}
+                            className="w-5 h-5 rounded bg-white dark:bg-zinc-700 text-gray-700 dark:text-white font-bold flex items-center justify-center hover:bg-emerald-500 hover:text-white transition text-xs cursor-pointer"
+                          >
+                            +
+                          </button>
+                          <span className="text-[10px] text-gray-500 px-1 font-bold">
+                            {item.unit || "علبة"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Remove item button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScannedReviewItems(prev => prev ? prev.filter((_, i) => i !== idx) : null);
+                      }}
+                      className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition cursor-pointer flex-shrink-0 mt-1"
+                      title="حذف هذه المادة"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-3 sm:p-4 bg-gray-50 dark:bg-zinc-800/60 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  disabled={isSavingScannedBatch || scannedReviewItems.filter(i => i.selected).length === 0}
+                  onClick={() => handleConfirmScannedItems(scannedReviewItems.filter(i => i.selected))}
+                  className="flex-1 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm py-3 px-4 rounded-xl shadow-lg active:scale-[0.98] transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingScannedBatch ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4" />
+                  )}
+                  <span>
+                    إضافة المواد المحددة إلى النواقص ({scannedReviewItems.filter(i => i.selected).length})
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setScannedReviewItems(null)}
+                  className="px-4 py-3 bg-gray-200 dark:bg-zinc-700 hover:bg-gray-300 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* NEEDS MODAL */}
         {showNeedModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -7086,9 +7344,10 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
                             setScanNeedStatus("جارٍ فحص صورة الدواء/المنتج بالذكاء الاصطناعي...");
                             try {
                               const res = await scanNeedItemWithGemini(needImagePreview, (msg) => setScanNeedStatus(msg));
-                              if (res.name) setNeedNameInput(res.name);
-                              toast.success(`تم استخراج: ${res.name}`, {
-                                description: res.dosageOrSpecs ? `الجرعة/المواصفة: ${res.dosageOrSpecs}` : undefined
+                              const firstItem = Array.isArray(res) ? res[0] : res;
+                              if (firstItem?.name) setNeedNameInput(firstItem.name);
+                              toast.success(`تم استخراج: ${firstItem?.name || "البيانات"}`, {
+                                description: firstItem?.dosageOrSpecs ? `الجرعة/المواصفة: ${firstItem.dosageOrSpecs}` : undefined
                               });
                             } catch (e: any) {
                               toast.error("تعذر استخراج البيانات من الصورة");
