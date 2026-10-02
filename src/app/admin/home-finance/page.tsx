@@ -490,11 +490,6 @@ export default function HomeFinanceDashboard() {
   const [receiptItemFilter, setReceiptItemFilter] = useState("");
   const receiptCameraInputRef = useRef<HTMLInputElement | null>(null);
   const receiptGalleryInputRef = useRef<HTMLInputElement | null>(null);
-  const expenseManualCameraRef = useRef<HTMLInputElement | null>(null);
-  const expenseManualGalleryRef = useRef<HTMLInputElement | null>(null);
-  const [expenseReceiptImages, setExpenseReceiptImages] = useState<string[]>([]);
-  const expenseReceiptImage = expenseReceiptImages[0] || null;
-  const setExpenseReceiptImage = (val: string | null) => setExpenseReceiptImages(val ? [val] : []);
 
   const [showProductSearchModal, setShowProductSearchModal] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState("");
@@ -604,16 +599,11 @@ export default function HomeFinanceDashboard() {
       setExpCategoryInput("سوبر ماركت");
       setExpDateInput(today());
       setExpenseItems([]);
-      setExpenseReceiptImages([]);
     } else if (showExpenseModal && editExpense) {
       setExpNameInput(editExpense.name || "");
       setExpCategoryInput(editExpense.category || "سوبر ماركت");
       setExpDateInput(editExpense.date || today());
       setExpenseItems(editExpense.items || []);
-      const exImgs = editExpense.receiptImages && editExpense.receiptImages.length > 0
-        ? editExpense.receiptImages
-        : (editExpense.imageUrl || editExpense.receiptUrl ? [editExpense.imageUrl || editExpense.receiptUrl!] : []);
-      setExpenseReceiptImages(exImgs);
     }
   }, [showExpenseModal, editExpense]);
 
@@ -1496,15 +1486,12 @@ setEditFuturePlan(null);
 
     try {
       setIsScanningReceipt(true);
-      setScanStatusText(files.length > 1 ? `جاري فحص وتجهيز ${files.length} صور للفاتورة 📸...` : "جاري فحص وتجهيز صورة الفاتورة 📸...");
+      setScanStatusText(files.length > 1 ? `جاري قراءة واستخراج البيانات من ${files.length} صور بالذكاء الاصطناعي 🧠...` : "جاري قراءة واستخراج بيانات الفاتورة بالذكاء الاصطناعي 🧠...");
 
-      // Compress all images fast (<100ms each)
+      // Compress images fast (<100ms each) for AI analysis
       const dataUrls = await Promise.all(files.map(f => compressImageFast(f, 1200, 0.8)));
 
-      // Append to attached receipt images
-      setExpenseReceiptImages(prev => [...prev, ...dataUrls]);
-
-      // Pass all images to Gemini for unified extraction
+      // Pass images to Gemini for data extraction (does not store attached photos)
       const data = await scanReceiptWithGemini(dataUrls, (status) => setScanStatusText(status));
 
       if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
@@ -1541,8 +1528,8 @@ setEditFuturePlan(null);
         setExpenseItems(data.items);
       }
 
-      toast.success(`تم استخراج ${data.items.length} مادة وإرفاق ${dataUrls.length} صور للفاتورة بنجاح! 📸✨`, {
-        duration: 5000
+      toast.success(`تم استخراج ${data.items.length} مادة وتعبئة بيانات الفاتورة بنجاح! ⚡✨`, {
+        duration: 4000
       });
     } catch (err: any) {
       console.error("Receipt scan failed:", err);
@@ -1550,20 +1537,6 @@ setEditFuturePlan(null);
     } finally {
       setIsScanningReceipt(false);
       setScanStatusText("");
-      if (e.target) e.target.value = "";
-    }
-  };
-
-  const handleAttachReceiptImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files ? Array.from(e.target.files) : [];
-    if (files.length === 0) return;
-    try {
-      const dataUrls = await Promise.all(files.map(f => compressImageFast(f, 1200, 0.8)));
-      setExpenseReceiptImages(prev => [...prev, ...dataUrls]);
-      toast.success(files.length > 1 ? `تم إرفاق ${files.length} صور للفاتورة بنجاح 📸` : "تم إرفاق صورة الفاتورة بنجاح 📸");
-    } catch (err) {
-      toast.error("فشل إرفاق الصور");
-    } finally {
       if (e.target) e.target.value = "";
     }
   };
@@ -1665,32 +1638,6 @@ setEditFuturePlan(null);
     if (validItems.length > 0) {
       item.items = validItems;
     }
-    // Multi-photo support for receipt
-    const finalReceiptImages = [...expenseReceiptImages];
-    if (finalReceiptImages.length > 0) {
-      item.receiptImages = finalReceiptImages;
-      item.imageUrl = finalReceiptImages[0];
-      item.receiptUrl = finalReceiptImages[0];
-    } else if (isEdit && editExpense?.receiptImages && editExpense.receiptImages.length > 0) {
-      item.receiptImages = editExpense.receiptImages;
-      item.imageUrl = editExpense.receiptImages[0];
-      item.receiptUrl = editExpense.receiptImages[0];
-    } else if (isEdit && editExpense?.imageUrl) {
-      item.receiptImages = [editExpense.imageUrl];
-      item.imageUrl = editExpense.imageUrl;
-      item.receiptUrl = editExpense.receiptUrl;
-    }
-
-    // Immediately optimize any base64 images to tiny thumbnails so Firestore document limit (1MB) is NEVER exceeded
-    if (item.receiptImages && item.receiptImages.some(img => img.startsWith("data:image"))) {
-      const tinyThumbs = await Promise.all(
-        item.receiptImages.map(img => img.startsWith("data:image") ? compressToTinyThumbnail(img, 360, 0.7) : Promise.resolve(img))
-      );
-      item.receiptImages = tinyThumbs;
-      item.imageUrl = tinyThumbs[0];
-      item.receiptUrl = tinyThumbs[0];
-    }
-
     let updatedList = expenses;
     if (isEdit) {
       updatedList = expenses.map(x => x.id === item.id ? item : x);
@@ -1702,36 +1649,6 @@ setEditFuturePlan(null);
       setExpenses(updatedList);
       syncToFirebase("expenses", updatedList);
       toast.success("تم تسجيل المصروف");
-
-    // Resilient background upload of full-res photos to Firebase Storage & local IndexedDB
-    if (finalReceiptImages.some(img => img.startsWith("data:image"))) {
-      const expId = item.id;
-      (async () => {
-        try {
-          const uploadedUrls = await Promise.all(
-            finalReceiptImages.map((img, idx) =>
-              uploadImageResiliently("receipts", `${expId}_${idx}`, img)
-            )
-          );
-          setExpenses(prev => prev.map(e => e.id === expId ? {
-            ...e,
-            receiptImages: uploadedUrls,
-            imageUrl: uploadedUrls[0],
-            receiptUrl: uploadedUrls[0]
-          } : e));
-          const curExp = getCachedHF("expenses", []);
-          const updatedWithUrls = curExp.map((e: any) => e.id === expId ? {
-            ...e,
-            receiptImages: uploadedUrls,
-            imageUrl: uploadedUrls[0],
-            receiptUrl: uploadedUrls[0]
-          } : e);
-          syncToFirebase("expenses", updatedWithUrls);
-        } catch (uploadErr) {
-          console.warn("Resilient receipt upload warning:", uploadErr);
-        }
-      })();
-    }
 
       // Auto-switch to cycle containing the expense date if currently in another cycle
       const matchingCycle = cycles.find(c => {
@@ -4142,26 +4059,7 @@ setEditTrip(null);
                           </button>
                         )}
 
-                        {/* Attached receipt photos preview button */}
-                        {(() => {
-                          const allR = exp.receiptImages && exp.receiptImages.length > 0
-                            ? exp.receiptImages
-                            : (exp.imageUrl || exp.receiptUrl ? [exp.imageUrl || exp.receiptUrl!] : []);
-                          if (allR.length === 0 || (exp.items && exp.items.length > 0)) return null;
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => setPreviewImageUrl({ url: allR[0], title: `فاتورة: ${exp.name}`, allUrls: allR })}
-                              className="w-full mt-1.5 py-1 px-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-xl text-[10px] font-black flex items-center justify-between border border-rose-100 dark:border-rose-800/40 transition active:scale-[0.98]"
-                            >
-                              <span className="flex items-center gap-1.5">
-                                <Camera className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                                <span>{allR.length > 1 ? `صور الفاتورة (${allR.length}) 📸` : "صورة الفاتورة المرفقة 📸"}</span>
-                              </span>
-                              <Eye className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                            </button>
-                          );
-                        })()}
+
                       </div>
                     );
                   })}
@@ -6354,22 +6252,7 @@ setEditTrip(null);
         className="hidden"
         onChange={handleScanReceipt}
       />
-      <input
-        type="file"
-        ref={expenseManualCameraRef}
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleAttachReceiptImage}
-      />
-      <input
-        type="file"
-        ref={expenseManualGalleryRef}
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={handleAttachReceiptImage}
-      />
+
 
       {/* ─── Expense Modal (Modernized & Super Fast) ─── */}
       {(showExpenseModal || !!editExpense) && (
@@ -6844,70 +6727,6 @@ setEditTrip(null);
                 )}
               </div>
 
-              {/* Receipt Image Attachment Section (Multi-Image Supported) */}
-              <div className="bg-gray-50/70 dark:bg-zinc-900/40 rounded-2xl p-3 border border-gray-200 dark:border-zinc-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                    <Receipt className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>صور الفاتورة أو الوصل المرفقة ({expenseReceiptImages.length})</span>
-                  </span>
-                  {expenseReceiptImages.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setExpenseReceiptImages([])}
-                      className="text-[10px] text-red-500 hover:text-red-700 font-bold cursor-pointer"
-                    >
-                      إزالة الكل ✕
-                    </button>
-                  )}
-                </div>
-
-                {expenseReceiptImages.length > 0 && (
-                  <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-2 custom-scrollbar">
-                    {expenseReceiptImages.map((imgUrl, idx) => (
-                      <div key={idx} className="relative group/thumb flex-shrink-0">
-                        <div
-                          onClick={() => setPreviewImageUrl({ url: imgUrl, title: `${expNameInput || "الفاتورة"} - صورة ${idx + 1}`, allUrls: expenseReceiptImages })}
-                          className="w-16 h-16 rounded-xl overflow-hidden border border-gray-200 dark:border-zinc-700 cursor-pointer shadow-xs relative bg-white dark:bg-zinc-800"
-                        >
-                          <img src={imgUrl} alt={`Receipt ${idx + 1}`} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/thumb:opacity-100 transition flex items-center justify-center text-white">
-                            <Eye className="w-3.5 h-3.5" />
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setExpenseReceiptImages(prev => prev.filter((_, i) => i !== idx))}
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow cursor-pointer hover:bg-red-600 transition"
-                          title="حذف هذه الصورة"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => expenseManualCameraRef.current?.click()}
-                    className="flex-1 py-2 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
-                  >
-                    <Camera className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>{expenseReceiptImages.length > 0 ? "تصوير أخرى 📸" : "تصوير بالكاميرا"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => expenseManualGalleryRef.current?.click()}
-                    className="flex-1 py-2 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
-                  >
-                    <ImageIcon className="w-3.5 h-3.5 text-purple-500" />
-                    <span>{expenseReceiptImages.length > 0 ? "إضافة من الاستوديو 🖼️" : "اختيار من الاستوديو (متعدد)"}</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Submit Button */}
               <button 
                 type="submit" 
@@ -7009,43 +6828,6 @@ setEditTrip(null);
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
-
-            {/* Attached Receipt Photo Banner (Multi-Image Supported) */}
-            {(() => {
-              const allReceipts = viewingReceiptExpense.receiptImages && viewingReceiptExpense.receiptImages.length > 0
-                ? viewingReceiptExpense.receiptImages
-                : (viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl ? [viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl!] : []);
-              if (allReceipts.length === 0) return null;
-
-              return (
-                <div className="mb-4 p-3 bg-indigo-50/60 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-800/40">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
-                      <Receipt className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>{allReceipts.length > 1 ? `صور الفاتورة المرفقة (${allReceipts.length} صور) 📸` : "صورة الفاتورة المرفقة 📸"}</span>
-                    </span>
-                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">
-                      انقر للمعاينة والتكبير
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
-                    {allReceipts.map((url, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => setPreviewImageUrl({ url, title: `${viewingReceiptExpense.name} - صورة ${idx + 1}`, allUrls: allReceipts })}
-                        className="w-14 h-14 rounded-xl overflow-hidden border border-indigo-200 dark:border-indigo-700 cursor-pointer flex-shrink-0 relative group/img shadow-xs bg-white dark:bg-zinc-800"
-                      >
-                        <img src={url} alt={`Receipt ${idx + 1}`} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-white">
-                          <Eye className="w-3.5 h-3.5" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
 
             {/* Search inside receipt */}
             <div className="relative mb-3">
