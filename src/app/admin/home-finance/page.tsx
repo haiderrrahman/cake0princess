@@ -21,6 +21,7 @@ import LottoTracker from "./LottoTracker";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
+import { uploadImageResiliently, compressToTinyThumbnail } from "@/lib/hfImageStore";
 import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
 import { scanNeedItemWithGemini, cropItemFromImage, ScannedNeedItem } from "@/lib/scanNeedItemClient";
 
@@ -73,6 +74,7 @@ interface Expense {
   items?: ExpenseItem[];
   imageUrl?: string;
   receiptUrl?: string;
+  receiptImages?: string[];
 }
 
 interface Income {
@@ -95,6 +97,7 @@ interface InventoryItem {
   category: string;
   notes?: string;
   imageUrl?: string;
+  images?: string[];
   tripDestination?: string;
   createdAt: string;
   _source?: "inventory" | "car" | "travel";
@@ -110,6 +113,7 @@ interface Need {
   unit?: string;
   category?: string;
   imageUrl?: string;
+  images?: string[];
   notes?: string;
   dosageOrSpecs?: string;
   sourceType?: "manual" | "photo" | "inventory" | "car" | "travel" | "family";
@@ -488,7 +492,9 @@ export default function HomeFinanceDashboard() {
   const receiptGalleryInputRef = useRef<HTMLInputElement | null>(null);
   const expenseManualCameraRef = useRef<HTMLInputElement | null>(null);
   const expenseManualGalleryRef = useRef<HTMLInputElement | null>(null);
-  const [expenseReceiptImage, setExpenseReceiptImage] = useState<string | null>(null);
+  const [expenseReceiptImages, setExpenseReceiptImages] = useState<string[]>([]);
+  const expenseReceiptImage = expenseReceiptImages[0] || null;
+  const setExpenseReceiptImage = (val: string | null) => setExpenseReceiptImages(val ? [val] : []);
 
   const [showProductSearchModal, setShowProductSearchModal] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState("");
@@ -519,8 +525,10 @@ export default function HomeFinanceDashboard() {
   const [isScanningNeed, setIsScanningNeed] = useState(false);
   const [scanNeedStatus, setScanNeedStatus] = useState("");
   const [needImageFile, setNeedImageFile] = useState<File | null>(null);
-  const [needImagePreview, setNeedImagePreview] = useState<string | null>(null);
-  const [previewImageUrl, setPreviewImageUrl] = useState<{ url: string; title: string } | null>(null);
+  const [needImages, setNeedImages] = useState<string[]>([]);
+  const needImagePreview = needImages[0] || null;
+  const setNeedImagePreview = (val: string | null) => setNeedImages(val ? [val] : []);
+  const [previewImageUrl, setPreviewImageUrl] = useState<{ url: string; title: string; allUrls?: string[] } | null>(null);
   const needCameraInputRef = useRef<HTMLInputElement>(null);
   const needGalleryInputRef = useRef<HTMLInputElement>(null);
   const needModalCameraInputRef = useRef<HTMLInputElement>(null);
@@ -596,13 +604,16 @@ export default function HomeFinanceDashboard() {
       setExpCategoryInput("سوبر ماركت");
       setExpDateInput(today());
       setExpenseItems([]);
-      setExpenseReceiptImage(null);
+      setExpenseReceiptImages([]);
     } else if (showExpenseModal && editExpense) {
       setExpNameInput(editExpense.name || "");
       setExpCategoryInput(editExpense.category || "سوبر ماركت");
       setExpDateInput(editExpense.date || today());
       setExpenseItems(editExpense.items || []);
-      setExpenseReceiptImage(editExpense.imageUrl || editExpense.receiptUrl || null);
+      const exImgs = editExpense.receiptImages && editExpense.receiptImages.length > 0
+        ? editExpense.receiptImages
+        : (editExpense.imageUrl || editExpense.receiptUrl ? [editExpense.imageUrl || editExpense.receiptUrl!] : []);
+      setExpenseReceiptImages(exImgs);
     }
   }, [showExpenseModal, editExpense]);
 
@@ -611,7 +622,15 @@ export default function HomeFinanceDashboard() {
   }, [showInventoryModal, editInventory]);
 
   useEffect(() => {
-    if (showNeedModal && !editNeed) setNeedNameInput("");
+    if (showNeedModal && !editNeed) {
+      setNeedNameInput("");
+      setNeedImages([]);
+    } else if (showNeedModal && editNeed) {
+      const nImgs = editNeed.images && editNeed.images.length > 0
+        ? editNeed.images
+        : (editNeed.imageUrl ? [editNeed.imageUrl] : []);
+      setNeedImages(nImgs);
+    }
   }, [showNeedModal, editNeed]);
 
   useEffect(() => {
@@ -928,6 +947,7 @@ export default function HomeFinanceDashboard() {
     unit: string;
     estimatedPrice: number;
     imageUrl?: string;
+    images?: string[];
     notes?: string;
     dosageOrSpecs?: string;
     member?: string;
@@ -952,6 +972,7 @@ export default function HomeFinanceDashboard() {
         unit: n.unit || (isMed ? "علبة" : "قطعة"),
         estimatedPrice: n.estimatedPrice || 0,
         imageUrl: n.imageUrl,
+        images: n.images && n.images.length > 0 ? n.images : (n.imageUrl ? [n.imageUrl] : []),
         notes: n.notes,
         dosageOrSpecs: n.dosageOrSpecs,
         isMedicine: isMed,
@@ -972,6 +993,7 @@ export default function HomeFinanceDashboard() {
         unit: i.unit || "قطعة",
         estimatedPrice: i.estimatedPrice || 0,
         imageUrl: i.imageUrl,
+        images: (i as any).images && (i as any).images.length > 0 ? (i as any).images : (i.imageUrl ? [i.imageUrl] : []),
         notes: i.notes,
         isMedicine: isMed,
         originalItem: i,
@@ -1469,20 +1491,21 @@ setEditFuturePlan(null);
   // EXPENSE HANDLERS & SMART AI SCANNER
   // ──────────────────────────────────────────
   const handleScanReceipt = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
 
     try {
       setIsScanningReceipt(true);
-      setScanStatusText("جاري فحص وتجهيز صورة الفاتورة 📸...");
+      setScanStatusText(files.length > 1 ? `جاري فحص وتجهيز ${files.length} صور للفاتورة 📸...` : "جاري فحص وتجهيز صورة الفاتورة 📸...");
 
-      // Compress fast via compressImageFast
-      const dataUrl = await compressImageFast(file, 1200, 0.8);
+      // Compress all images fast (<100ms each)
+      const dataUrls = await Promise.all(files.map(f => compressImageFast(f, 1200, 0.8)));
 
-      // Automatically attach the scanned receipt image to the expense
-      setExpenseReceiptImage(dataUrl);
+      // Append to attached receipt images
+      setExpenseReceiptImages(prev => [...prev, ...dataUrls]);
 
-      const data = await scanReceiptWithGemini(dataUrl, (status) => setScanStatusText(status));
+      // Pass all images to Gemini for unified extraction
+      const data = await scanReceiptWithGemini(dataUrls, (status) => setScanStatusText(status));
 
       if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
         setExpNameInput(data.storeName);
@@ -1518,7 +1541,7 @@ setEditFuturePlan(null);
         setExpenseItems(data.items);
       }
 
-      toast.success(`تم استخراج ${data.items.length} مادة وإرفاق صورة الفاتورة بنجاح! 📸✨`, {
+      toast.success(`تم استخراج ${data.items.length} مادة وإرفاق ${dataUrls.length} صور للفاتورة بنجاح! 📸✨`, {
         duration: 5000
       });
     } catch (err: any) {
@@ -1532,14 +1555,14 @@ setEditFuturePlan(null);
   };
 
   const handleAttachReceiptImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
     try {
-      const dataUrl = await compressImageFast(file, 1200, 0.8);
-      setExpenseReceiptImage(dataUrl);
-      toast.success("تم إرفاق صورة الفاتورة بنجاح 📸");
+      const dataUrls = await Promise.all(files.map(f => compressImageFast(f, 1200, 0.8)));
+      setExpenseReceiptImages(prev => [...prev, ...dataUrls]);
+      toast.success(files.length > 1 ? `تم إرفاق ${files.length} صور للفاتورة بنجاح 📸` : "تم إرفاق صورة الفاتورة بنجاح 📸");
     } catch (err) {
-      toast.error("فشل إرفاق الصورة");
+      toast.error("فشل إرفاق الصور");
     } finally {
       if (e.target) e.target.value = "";
     }
@@ -1642,13 +1665,32 @@ setEditFuturePlan(null);
     if (validItems.length > 0) {
       item.items = validItems;
     }
-    if (expenseReceiptImage) {
-      item.imageUrl = expenseReceiptImage;
-      item.receiptUrl = expenseReceiptImage;
+    // Multi-photo support for receipt
+    const finalReceiptImages = [...expenseReceiptImages];
+    if (finalReceiptImages.length > 0) {
+      item.receiptImages = finalReceiptImages;
+      item.imageUrl = finalReceiptImages[0];
+      item.receiptUrl = finalReceiptImages[0];
+    } else if (isEdit && editExpense?.receiptImages && editExpense.receiptImages.length > 0) {
+      item.receiptImages = editExpense.receiptImages;
+      item.imageUrl = editExpense.receiptImages[0];
+      item.receiptUrl = editExpense.receiptImages[0];
     } else if (isEdit && editExpense?.imageUrl) {
+      item.receiptImages = [editExpense.imageUrl];
       item.imageUrl = editExpense.imageUrl;
       item.receiptUrl = editExpense.receiptUrl;
     }
+
+    // Immediately optimize any base64 images to tiny thumbnails so Firestore document limit (1MB) is NEVER exceeded
+    if (item.receiptImages && item.receiptImages.some(img => img.startsWith("data:image"))) {
+      const tinyThumbs = await Promise.all(
+        item.receiptImages.map(img => img.startsWith("data:image") ? compressToTinyThumbnail(img, 360, 0.7) : Promise.resolve(img))
+      );
+      item.receiptImages = tinyThumbs;
+      item.imageUrl = tinyThumbs[0];
+      item.receiptUrl = tinyThumbs[0];
+    }
+
     let updatedList = expenses;
     if (isEdit) {
       updatedList = expenses.map(x => x.id === item.id ? item : x);
@@ -1659,27 +1701,37 @@ setEditFuturePlan(null);
       updatedList = [item, ...expenses];
       setExpenses(updatedList);
       syncToFirebase("expenses", updatedList);
-
-      // Background upload of attached receipt image to Firebase Storage
-      if (item.imageUrl && item.imageUrl.startsWith("data:image")) {
-        const expId = item.id;
-        const base64Data = item.imageUrl;
-        (async () => {
-          try {
-            const storageRef = ref(storage, `home_finance/receipts/${expId}_${Date.now()}.jpg`);
-            const res = await fetch(base64Data);
-            const blob = await res.blob();
-            await uploadBytes(storageRef, blob);
-            const downloadUrl = await getDownloadURL(storageRef);
-            setExpenses(prev => prev.map(e => e.id === expId ? { ...e, imageUrl: downloadUrl, receiptUrl: downloadUrl } : e));
-            syncToFirebase("expenses", updatedList.map(e => e.id === expId ? { ...e, imageUrl: downloadUrl, receiptUrl: downloadUrl } : e));
-          } catch (uploadErr) {
-            console.warn("Background receipt upload failed", uploadErr);
-          }
-        })();
-      }
-
       toast.success("تم تسجيل المصروف");
+
+    // Resilient background upload of full-res photos to Firebase Storage & local IndexedDB
+    if (finalReceiptImages.some(img => img.startsWith("data:image"))) {
+      const expId = item.id;
+      (async () => {
+        try {
+          const uploadedUrls = await Promise.all(
+            finalReceiptImages.map((img, idx) =>
+              uploadImageResiliently("receipts", `${expId}_${idx}`, img)
+            )
+          );
+          setExpenses(prev => prev.map(e => e.id === expId ? {
+            ...e,
+            receiptImages: uploadedUrls,
+            imageUrl: uploadedUrls[0],
+            receiptUrl: uploadedUrls[0]
+          } : e));
+          const curExp = getCachedHF("expenses", []);
+          const updatedWithUrls = curExp.map((e: any) => e.id === expId ? {
+            ...e,
+            receiptImages: uploadedUrls,
+            imageUrl: uploadedUrls[0],
+            receiptUrl: uploadedUrls[0]
+          } : e);
+          syncToFirebase("expenses", updatedWithUrls);
+        } catch (uploadErr) {
+          console.warn("Resilient receipt upload warning:", uploadErr);
+        }
+      })();
+    }
 
       // Auto-switch to cycle containing the expense date if currently in another cycle
       const matchingCycle = cycles.find(c => {
@@ -1978,57 +2030,56 @@ setEditInventory(null);
   };
 
   const handleScanNeedPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
 
     setIsScanningNeed(true);
-    setScanNeedStatus("جارٍ تجهيز وضغط الصورة 📸...");
+    setScanNeedStatus(files.length > 1 ? `جارٍ تجهيز وضغط ${files.length} صور 📸...` : "جارٍ تجهيز وضغط الصورة 📸...");
 
     try {
-      // 1. Ultra-fast local canvas compression (<100ms)
-      const base64Data = await compressImageFast(file, 900, 0.75);
+      const allCroppedItems: ScannedNeedItem[] = [];
 
-      // 2. Scan photo with Gemini AI (detects all medicines/products & bounding boxes)
-      setScanNeedStatus("جارٍ فحص واكتشاف الأدوية والمنتجات بالذكاء الاصطناعي 🧠...");
-      const detectedItems = await scanNeedItemWithGemini(base64Data, (status) => {
-        setScanNeedStatus(status);
-      });
+      for (let fIdx = 0; fIdx < files.length; fIdx++) {
+        const file = files[fIdx];
+        setScanNeedStatus(files.length > 1 ? `جارٍ فحص صورة ${fIdx + 1} من ${files.length} بالذكاء الاصطناعي 🧠...` : "جارٍ فحص واكتشاف الأدوية والمنتجات بالذكاء الاصطناعي 🧠...");
+        const base64Data = await compressImageFast(file, 900, 0.75);
 
-      // 3. Crop each medicine/product individually from the original photo!
-      setScanNeedStatus(`جارٍ استخراج وتوليد صورة مقصوصة لكل مادة (${detectedItems.length} مواد) ✂️📸...`);
-      const croppedItems: ScannedNeedItem[] = await Promise.all(
-        detectedItems.map(async (item, idx) => {
-          let cropUrl = base64Data;
-          if (item.box_2d) {
-            try {
-              cropUrl = await cropItemFromImage(base64Data, item.box_2d);
-            } catch (cropErr) {
-              console.warn("Crop failed for item", item.name, cropErr);
+        const detectedItems = await scanNeedItemWithGemini(base64Data, (status) => {
+          setScanNeedStatus(files.length > 1 ? `[صورة ${fIdx + 1}/${files.length}] ${status}` : status);
+        });
+
+        setScanNeedStatus(files.length > 1 ? `جارٍ قص صور المواد في صورة ${fIdx + 1} (${detectedItems.length} مواد) ✂️📸...` : `جارٍ استخراج وتوليد صورة مقصوصة لكل مادة (${detectedItems.length} مواد) ✂️📸...`);
+        const croppedItems: ScannedNeedItem[] = await Promise.all(
+          detectedItems.map(async (item, idx) => {
+            let cropUrl = base64Data;
+            if (item.box_2d) {
+              try {
+                cropUrl = await cropItemFromImage(base64Data, item.box_2d);
+              } catch (cropErr) {
+                console.warn("Crop failed for item", item.name, cropErr);
+              }
             }
-          }
-          return {
-            ...item,
-            id: `scan_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
-            croppedImageUrl: cropUrl,
-            selected: true
-          };
-        })
-      );
+            return {
+              ...item,
+              id: `scan_${Date.now()}_${fIdx}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+              croppedImageUrl: cropUrl,
+              selected: true
+            };
+          })
+        );
 
-      // 4. Open the Scanned Items Review Modal for the user!
-      setScannedReviewItems(croppedItems);
+        allCroppedItems.push(...croppedItems);
+      }
+
+      setScannedReviewItems(allCroppedItems);
     } catch (err: any) {
       console.error("Scan need error:", err);
       toast.error("فشل قراءة الصورة، يرجى التأكد من وضوح علب الأدوية أو كتابة النقص يدوياً");
     } finally {
       setIsScanningNeed(false);
       setScanNeedStatus("");
-      if (needCameraInputRef.current) {
-        needCameraInputRef.current.value = "";
-      }
-      if (needGalleryInputRef.current) {
-        needGalleryInputRef.current.value = "";
-      }
+      if (needCameraInputRef.current) needCameraInputRef.current.value = "";
+      if (needGalleryInputRef.current) needGalleryInputRef.current.value = "";
     }
   };
 
@@ -2040,47 +2091,64 @@ setEditInventory(null);
 
     setIsSavingScannedBatch(true);
     try {
-      const newNeeds: Need[] = itemsToAdd.map((item, idx) => {
-        const needId = Date.now().toString() + "_" + idx + "_" + Math.random().toString(36).substring(2, 6);
-        return {
-          id: needId,
-          name: item.name || "دواء/منتج غير محدد",
-          category: item.category || "أدوية وصيدلية",
-          quantity: item.quantity || 1,
-          unit: item.unit || (item.category === "أدوية وصيدلية" ? "علبة" : "قطعة"),
-          estimatedPrice: item.estimatedPrice || 0,
-          notes: item.notes || "",
-          dosageOrSpecs: item.dosageOrSpecs || "",
-          imageUrl: item.croppedImageUrl || "",
-          sourceType: "photo",
-          isBought: false,
-          createdAt: new Date().toISOString()
-        };
-      });
+      // 1. Immediately create needs with tiny thumbnails so Firestore document limit (1MB) is NEVER exceeded
+      const newNeeds: Need[] = await Promise.all(
+        itemsToAdd.map(async (item, idx) => {
+          const needId = Date.now().toString() + "_" + idx + "_" + Math.random().toString(36).substring(2, 6);
+          let cropUrl = item.croppedImageUrl || "";
+          let tinyUrl = cropUrl;
+          if (cropUrl && cropUrl.startsWith("data:image")) {
+            tinyUrl = await compressToTinyThumbnail(cropUrl, 300, 0.7);
+          }
+          return {
+            id: needId,
+            name: item.name || "دواء/منتج غير محدد",
+            category: item.category || "أدوية وصيدلية",
+            quantity: item.quantity || 1,
+            unit: item.unit || (item.category === "أدوية وصيدلية" ? "علبة" : "قطعة"),
+            estimatedPrice: item.estimatedPrice || 0,
+            notes: item.notes || "",
+            dosageOrSpecs: item.dosageOrSpecs || "",
+            imageUrl: tinyUrl,
+            images: tinyUrl ? [tinyUrl] : [],
+            sourceType: "photo",
+            isBought: false,
+            createdAt: new Date().toISOString()
+          };
+        })
+      );
 
       const updated = [...newNeeds, ...needs];
       setNeeds(updated);
       syncToFirebase("needs", updated);
 
-      // Background upload of cropped images to Firebase Storage
-      newNeeds.forEach(async (need) => {
-        if (need.imageUrl && need.imageUrl.startsWith("data:image")) {
+      // 2. Resilient background upload of high-res cropped images to Firebase Storage & local IndexedDB
+      itemsToAdd.forEach(async (item, idx) => {
+        const correspondingNeed = newNeeds[idx];
+        const rawCrop = item.croppedImageUrl;
+        if (correspondingNeed && rawCrop && rawCrop.startsWith("data:image")) {
           try {
-            const storageRef = ref(storage, `home_finance/needs/${need.id}_${Date.now()}.jpg`);
-            const res = await fetch(need.imageUrl);
-            const blob = await res.blob();
-            await uploadBytes(storageRef, blob);
-            const downloadUrl = await getDownloadURL(storageRef);
-            setNeeds(prev => prev.map(n => n.id === need.id ? { ...n, imageUrl: downloadUrl } : n));
-            syncToFirebase("needs", updated.map(n => n.id === need.id ? { ...n, imageUrl: downloadUrl } : n));
+            const uploadedUrl = await uploadImageResiliently("needs", correspondingNeed.id, rawCrop);
+            setNeeds(prev => prev.map(n => n.id === correspondingNeed.id ? {
+              ...n,
+              imageUrl: uploadedUrl,
+              images: [uploadedUrl]
+            } : n));
+            const curNeeds = getCachedHF("needs", []);
+            const updatedWithUrl = curNeeds.map((n: any) => n.id === correspondingNeed.id ? {
+              ...n,
+              imageUrl: uploadedUrl,
+              images: [uploadedUrl]
+            } : n);
+            syncToFirebase("needs", updatedWithUrl);
           } catch (uploadErr) {
-            console.warn("Background storage upload failed for need item", need.id);
+            console.warn("Background upload error for need", correspondingNeed.id, uploadErr);
           }
         }
       });
 
       setScannedReviewItems(null);
-      toast.success(`تمت إضافة ${newNeeds.length} مواد بنجاح إلى سجل النواقص 🛒!`, {
+      toast.success(`تمت إضافة ${newNeeds.length} مواد بنجاح مع صورها إلى سجل النواقص 🛒!`, {
         description: newNeeds.map(n => n.name).slice(0, 3).join("، ") + (newNeeds.length > 3 ? "..." : "")
       });
     } catch (err) {
@@ -2105,30 +2173,25 @@ setEditInventory(null);
     const dosageOrSpecs = (fd.get("dosageOrSpecs") as string) || "";
     const notes = (fd.get("notes") as string) || "";
     
-    let uploadedUrl = editNeed?.imageUrl || needImagePreview || "";
-
-    if (needImageFile) {
-      setIsUploading(true);
-      try {
-        const imageCompression = (await import('browser-image-compression')).default;
-        const compressed = await imageCompression(needImageFile, { maxSizeMB: 0.25, maxWidthOrHeight: 900, useWebWorker: false });
-        const needId = isEdit ? editNeed!.id : Date.now().toString();
-        const storageRef = ref(storage, `home_finance/needs/${needId}_${Date.now()}.jpg`);
-        await uploadBytes(storageRef, compressed);
-        uploadedUrl = await getDownloadURL(storageRef);
-      } catch (err) {
-        console.error("Image upload failed", err);
-      } finally {
-        setIsUploading(false);
-      }
+    let currentNeedImages = [...needImages];
+    if (currentNeedImages.length === 0 && editNeed?.images && editNeed.images.length > 0) {
+      currentNeedImages = editNeed.images;
+    } else if (currentNeedImages.length === 0 && editNeed?.imageUrl) {
+      currentNeedImages = [editNeed.imageUrl];
     }
+
+    // Convert any base64 to tiny thumbnails immediately to keep Firestore document well below 1MB
+    const lightImages = await Promise.all(
+      currentNeedImages.map(img => img.startsWith("data:image") ? compressToTinyThumbnail(img, 320, 0.7) : Promise.resolve(img))
+    );
+    let uploadedUrl = lightImages[0] || editNeed?.imageUrl || "";
 
     const source = editNeed?._source || editNeed?.sourceType || (activeTab === "car" ? "car" : activeTab === "travel" ? "travel" : activeTab === "inventory" ? "inventory" : "need");
 
     if (source === "car") {
       let updated = [...carInventory];
       if (isEdit) {
-        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes, imageUrl: uploadedUrl || x.imageUrl } : x);
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes, imageUrl: uploadedUrl || x.imageUrl, images: lightImages.length > 0 ? lightImages : (x as any).images } : x);
         toast.success("تم التعديل");
       } else {
         const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
@@ -2138,7 +2201,7 @@ setEditInventory(null);
           if (uploadedUrl) existing.imageUrl = uploadedUrl;
           toast.success("تم التحديث");
         } else {
-          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, imageUrl: uploadedUrl, createdAt: new Date().toISOString() });
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, imageUrl: uploadedUrl, images: lightImages, createdAt: new Date().toISOString() });
           toast.success("تم إضافة الاحتياج");
         }
       }
@@ -2147,7 +2210,7 @@ setEditInventory(null);
     } else if (source === "travel") {
       let updated = [...travelInventory];
       if (isEdit) {
-        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes, imageUrl: uploadedUrl || x.imageUrl } : x);
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes, imageUrl: uploadedUrl || x.imageUrl, images: lightImages.length > 0 ? lightImages : (x as any).images } : x);
         toast.success("تم التعديل");
       } else {
         const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
@@ -2157,7 +2220,7 @@ setEditInventory(null);
           if (uploadedUrl) existing.imageUrl = uploadedUrl;
           toast.success("تم التحديث");
         } else {
-          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, imageUrl: uploadedUrl, createdAt: new Date().toISOString() });
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, imageUrl: uploadedUrl, images: lightImages, createdAt: new Date().toISOString() });
           toast.success("تم إضافة الاحتياج");
         }
       }
@@ -2166,7 +2229,7 @@ setEditInventory(null);
     } else if (source === "inventory") {
       let updated = [...inventory];
       if (isEdit) {
-        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes, imageUrl: uploadedUrl || x.imageUrl } : x);
+        updated = updated.map(x => x.id === editNeed!.id ? { ...x, name: needName, neededQuantity: neededQty, estimatedPrice: estPrice, unit, category, notes, imageUrl: uploadedUrl || x.imageUrl, images: lightImages.length > 0 ? lightImages : (x as any).images } : x);
         toast.success("تم التعديل");
       } else {
         const existing = updated.find(i => i.name.trim().toLowerCase() === needName.trim().toLowerCase());
@@ -2176,7 +2239,7 @@ setEditInventory(null);
           if (uploadedUrl) existing.imageUrl = uploadedUrl;
           toast.success("تم التحديث في النواقص");
         } else {
-          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, imageUrl: uploadedUrl, createdAt: new Date().toISOString() });
+          updated.push({ id: Date.now().toString(), name: needName, quantity: 0, neededQuantity: neededQty, threshold: 1, unit, estimatedPrice: estPrice, category, notes, imageUrl: uploadedUrl, images: lightImages, createdAt: new Date().toISOString() });
           toast.success("تم إضافة الاحتياج");
         }
       }
@@ -2209,6 +2272,7 @@ setEditInventory(null);
           dosageOrSpecs,
           notes,
           imageUrl: uploadedUrl,
+          images: lightImages,
           sourceType: uploadedUrl ? "photo" : "manual",
           isBought: false,
           createdAt: new Date().toISOString()
@@ -2220,12 +2284,31 @@ setEditInventory(null);
       syncToFirebase("needs", updated);
     }
     
+    // Background upload of full-res images to Firebase Storage & IndexedDB
+    if (currentNeedImages.some(img => img.startsWith("data:image"))) {
+      const targetId = isEdit ? editNeed!.id : needName;
+      (async () => {
+        try {
+          const uploadedUrls = await Promise.all(
+            currentNeedImages.map((img, idx) => uploadImageResiliently("needs", `${targetId}_${idx}`, img))
+          );
+          if (source === "need") {
+            setNeeds(prev => prev.map(n => n.id === targetId || (isEdit && n.id === editNeed!.id) ? { ...n, imageUrl: uploadedUrls[0], images: uploadedUrls } : n));
+            const curNeeds = getCachedHF("needs", []);
+            syncToFirebase("needs", curNeeds.map((n: any) => n.id === targetId || (isEdit && n.id === editNeed!.id) ? { ...n, imageUrl: uploadedUrls[0], images: uploadedUrls } : n));
+          }
+        } catch (err) {
+          console.warn("Background need upload warning:", err);
+        }
+      })();
+    }
+
     e.currentTarget.reset();
     setShowNeedModal(false);
     setEditNeed(null);
     setNeedNameInput("");
+    setNeedImages([]);
     setNeedImageFile(null);
-    setNeedImagePreview(null);
   };
 
   const handleDeleteUnifiedDeficit = async (item: UnifiedDeficit) => {
@@ -4059,20 +4142,26 @@ setEditTrip(null);
                           </button>
                         )}
 
-                        {/* Attached receipt photo preview button */}
-                        {(exp.imageUrl || exp.receiptUrl) && (!exp.items || exp.items.length === 0) && (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewImageUrl({ url: (exp.imageUrl || exp.receiptUrl)!, title: `فاتورة: ${exp.name}` })}
-                            className="w-full mt-1.5 py-1 px-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-xl text-[10px] font-black flex items-center justify-between border border-rose-100 dark:border-rose-800/40 transition active:scale-[0.98]"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <Camera className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                              <span>صورة الفاتورة المرفقة</span>
-                            </span>
-                            <Eye className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                          </button>
-                        )}
+                        {/* Attached receipt photos preview button */}
+                        {(() => {
+                          const allR = exp.receiptImages && exp.receiptImages.length > 0
+                            ? exp.receiptImages
+                            : (exp.imageUrl || exp.receiptUrl ? [exp.imageUrl || exp.receiptUrl!] : []);
+                          if (allR.length === 0 || (exp.items && exp.items.length > 0)) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImageUrl({ url: allR[0], title: `فاتورة: ${exp.name}`, allUrls: allR })}
+                              className="w-full mt-1.5 py-1 px-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-xl text-[10px] font-black flex items-center justify-between border border-rose-100 dark:border-rose-800/40 transition active:scale-[0.98]"
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <Camera className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                <span>{allR.length > 1 ? `صور الفاتورة (${allR.length}) 📸` : "صورة الفاتورة المرفقة 📸"}</span>
+                              </span>
+                              <Eye className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                            </button>
+                          );
+                        })()}
                       </div>
                     );
                   })}
@@ -4590,7 +4679,10 @@ setEditTrip(null);
                         <div className="flex flex-col items-center text-center gap-1 my-1">
                           {item.imageUrl ? (
                             <div
-                              onClick={() => setPreviewImageUrl({ url: item.imageUrl!, title: item.name })}
+                              onClick={() => {
+                                const allImgs = item.images && item.images.length > 0 ? item.images : [item.imageUrl!];
+                                setPreviewImageUrl({ url: item.imageUrl!, title: item.name, allUrls: allImgs });
+                              }}
                               className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 cursor-pointer group/img relative shadow-xs"
                             >
                               <img
@@ -4598,6 +4690,12 @@ setEditTrip(null);
                                 alt={item.name}
                                 className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-110"
                               />
+                              {item.images && item.images.length > 1 && (
+                                <span className="absolute bottom-1 right-1 bg-black/75 backdrop-blur-xs text-white text-[8px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-sm">
+                                  <Camera className="w-2.5 h-2.5 text-rose-400" />
+                                  {item.images.length}
+                                </span>
+                              )}
                               <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-white">
                                 <Eye className="w-3.5 h-3.5" />
                               </div>
@@ -6252,6 +6350,7 @@ setEditTrip(null);
         type="file"
         ref={receiptGalleryInputRef}
         accept="image/*"
+        multiple
         className="hidden"
         onChange={handleScanReceipt}
       />
@@ -6267,6 +6366,7 @@ setEditTrip(null);
         type="file"
         ref={expenseManualGalleryRef}
         accept="image/*"
+        multiple
         className="hidden"
         onChange={handleAttachReceiptImage}
       />
@@ -6744,64 +6844,68 @@ setEditTrip(null);
                 )}
               </div>
 
-              {/* Receipt Image Attachment Section */}
+              {/* Receipt Image Attachment Section (Multi-Image Supported) */}
               <div className="bg-gray-50/70 dark:bg-zinc-900/40 rounded-2xl p-3 border border-gray-200 dark:border-zinc-800">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
                     <Receipt className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>صورة الفاتورة أو الوصل المرفقة (اختياري)</span>
+                    <span>صور الفاتورة أو الوصل المرفقة ({expenseReceiptImages.length})</span>
                   </span>
-                  {expenseReceiptImage && (
+                  {expenseReceiptImages.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => setExpenseReceiptImage(null)}
+                      onClick={() => setExpenseReceiptImages([])}
                       className="text-[10px] text-red-500 hover:text-red-700 font-bold cursor-pointer"
                     >
-                      إزالة الصورة ✕
+                      إزالة الكل ✕
                     </button>
                   )}
                 </div>
 
-                {expenseReceiptImage ? (
-                  <div className="flex items-center gap-3 p-2 bg-white dark:bg-zinc-800 rounded-xl border border-gray-100 dark:border-zinc-700">
-                    <div
-                      onClick={() => setPreviewImageUrl({ url: expenseReceiptImage, title: expNameInput || "صورة الفاتورة" })}
-                      className="w-14 h-14 rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-700 cursor-pointer relative group/img flex-shrink-0 shadow-xs"
-                    >
-                      <img src={expenseReceiptImage} alt="Receipt" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-white">
-                        <Eye className="w-3.5 h-3.5" />
+                {expenseReceiptImages.length > 0 && (
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-2 custom-scrollbar">
+                    {expenseReceiptImages.map((imgUrl, idx) => (
+                      <div key={idx} className="relative group/thumb flex-shrink-0">
+                        <div
+                          onClick={() => setPreviewImageUrl({ url: imgUrl, title: `${expNameInput || "الفاتورة"} - صورة ${idx + 1}`, allUrls: expenseReceiptImages })}
+                          className="w-16 h-16 rounded-xl overflow-hidden border border-gray-200 dark:border-zinc-700 cursor-pointer shadow-xs relative bg-white dark:bg-zinc-800"
+                        >
+                          <img src={imgUrl} alt={`Receipt ${idx + 1}`} className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/thumb:opacity-100 transition flex items-center justify-center text-white">
+                            <Eye className="w-3.5 h-3.5" />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setExpenseReceiptImages(prev => prev.filter((_, i) => i !== idx))}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow cursor-pointer hover:bg-red-600 transition"
+                          title="حذف هذه الصورة"
+                        >
+                          ✕
+                        </button>
                       </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs font-black text-gray-800 dark:text-gray-200 block truncate">
-                        تم إرفاق صورة الفاتورة بنجاح 📸
-                      </span>
-                      <span className="text-[10px] text-gray-400 block mt-0.5">
-                        انقر على الصورة لمعاينتها وتكبيرها بالكامل
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => expenseManualCameraRef.current?.click()}
-                      className="flex-1 py-2 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
-                    >
-                      <Camera className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>تصوير بالكاميرا</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => expenseManualGalleryRef.current?.click()}
-                      className="flex-1 py-2 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
-                    >
-                      <ImageIcon className="w-3.5 h-3.5 text-purple-500" />
-                      <span>اختيار من الاستوديو</span>
-                    </button>
+                    ))}
                   </div>
                 )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => expenseManualCameraRef.current?.click()}
+                    className="flex-1 py-2 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>{expenseReceiptImages.length > 0 ? "تصوير أخرى 📸" : "تصوير بالكاميرا"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => expenseManualGalleryRef.current?.click()}
+                    className="flex-1 py-2 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 text-purple-500" />
+                    <span>{expenseReceiptImages.length > 0 ? "إضافة من الاستوديو 🖼️" : "اختيار من الاستوديو (متعدد)"}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Submit Button */}
@@ -6906,38 +7010,42 @@ setEditTrip(null);
               </button>
             </div>
 
-            {/* Attached Receipt Photo Banner */}
-            {(viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl) && (
-              <div className="mb-4 p-3 bg-indigo-50/60 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-800/40 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div
-                    onClick={() => setPreviewImageUrl({ url: (viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl)!, title: viewingReceiptExpense.name })}
-                    className="w-12 h-12 rounded-xl overflow-hidden border border-indigo-200 dark:border-indigo-700 cursor-pointer flex-shrink-0 relative group/img shadow-xs"
-                  >
-                    <img src={viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl} alt="Receipt" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-white">
-                      <Eye className="w-3 h-3" />
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-xs font-black text-indigo-950 dark:text-indigo-200 block">
-                      صورة الفاتورة الأصلية مرفقة 📸
+            {/* Attached Receipt Photo Banner (Multi-Image Supported) */}
+            {(() => {
+              const allReceipts = viewingReceiptExpense.receiptImages && viewingReceiptExpense.receiptImages.length > 0
+                ? viewingReceiptExpense.receiptImages
+                : (viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl ? [viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl!] : []);
+              if (allReceipts.length === 0) return null;
+
+              return (
+                <div className="mb-4 p-3 bg-indigo-50/60 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-800/40">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                      <Receipt className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>{allReceipts.length > 1 ? `صور الفاتورة المرفقة (${allReceipts.length} صور) 📸` : "صورة الفاتورة المرفقة 📸"}</span>
                     </span>
                     <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">
-                      انقر للمعاينة وتكبير الفاتورة
+                      انقر للمعاينة والتكبير
                     </span>
                   </div>
+
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                    {allReceipts.map((url, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => setPreviewImageUrl({ url, title: `${viewingReceiptExpense.name} - صورة ${idx + 1}`, allUrls: allReceipts })}
+                        className="w-14 h-14 rounded-xl overflow-hidden border border-indigo-200 dark:border-indigo-700 cursor-pointer flex-shrink-0 relative group/img shadow-xs bg-white dark:bg-zinc-800"
+                      >
+                        <img src={url} alt={`Receipt ${idx + 1}`} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-white">
+                          <Eye className="w-3.5 h-3.5" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setPreviewImageUrl({ url: (viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl)!, title: viewingReceiptExpense.name })}
-                  className="px-3 py-1.5 bg-white dark:bg-zinc-800 hover:bg-indigo-100 dark:hover:bg-zinc-700 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-black border border-indigo-200 dark:border-indigo-700/50 shadow-xs transition flex items-center gap-1 cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>معاينة</span>
-                </button>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Search inside receipt */}
             <div className="relative mb-3">
@@ -7536,23 +7644,38 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
               </div>
 
               <form onSubmit={handleSaveNeed} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
-                {/* Photo attachment zone */}
+                {/* Photo attachment zone (Multi-Image Supported) */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1.5">
-                    صورة الدواء أو المنتج (اختياري)
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-gray-500">
+                      صور الدواء أو المنتج (اختياري - {needImages.length} صور)
+                    </label>
+                    {needImages.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setNeedImages([])}
+                        className="text-[10px] text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                      >
+                        إزالة الكل ✕
+                      </button>
+                    )}
+                  </div>
                   <input
                     ref={needModalCameraInputRef}
                     type="file"
                     accept="image/*"
                     capture="environment"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      setNeedImageFile(file);
-                      const reader = new FileReader();
-                      reader.onload = () => setNeedImagePreview(reader.result as string);
-                      reader.readAsDataURL(file);
+                      try {
+                        const url = await compressImageFast(file, 900, 0.75);
+                        setNeedImages(prev => [...prev, url]);
+                      } catch (err) {
+                        toast.error("فشل معالجة الصورة");
+                      } finally {
+                        if (e.target) e.target.value = "";
+                      }
                     }}
                     className="hidden"
                   />
@@ -7560,37 +7683,58 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
                     ref={needModalGalleryInputRef}
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setNeedImageFile(file);
-                      const reader = new FileReader();
-                      reader.onload = () => setNeedImagePreview(reader.result as string);
-                      reader.readAsDataURL(file);
+                    multiple
+                    onChange={async (e) => {
+                      const files = e.target.files ? Array.from(e.target.files) : [];
+                      if (files.length === 0) return;
+                      try {
+                        const urls = await Promise.all(files.map(f => compressImageFast(f, 900, 0.75)));
+                        setNeedImages(prev => [...prev, ...urls]);
+                      } catch (err) {
+                        toast.error("فشل معالجة الصور");
+                      } finally {
+                        if (e.target) e.target.value = "";
+                      }
                     }}
                     className="hidden"
                   />
 
-                  {needImagePreview ? (
-                    <div className="relative rounded-2xl overflow-hidden border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 p-2 flex items-center gap-3">
-                      <img
-                        src={needImagePreview}
-                        alt="Preview"
-                        className="w-16 h-16 rounded-xl object-cover border"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300 block line-clamp-1">
-                          تم إرفاق الصورة بنجاح
-                        </span>
+                  {needImages.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                        {needImages.map((imgUrl, idx) => (
+                          <div key={idx} className="relative group/thumb flex-shrink-0">
+                            <div
+                              onClick={() => setPreviewImageUrl({ url: imgUrl, title: `صورة ${idx + 1}: ${needNameInput || "المنتج"}`, allUrls: needImages })}
+                              className="w-16 h-16 rounded-xl overflow-hidden border border-gray-200 dark:border-zinc-700 cursor-pointer shadow-xs relative bg-white dark:bg-zinc-800"
+                            >
+                              <img src={imgUrl} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/thumb:opacity-100 transition flex items-center justify-center text-white">
+                                <Eye className="w-3.5 h-3.5" />
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setNeedImages(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow cursor-pointer hover:bg-red-600 transition"
+                              title="حذف هذه الصورة"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
                           disabled={isScanningNeed}
                           onClick={async () => {
-                            if (!needImagePreview) return;
+                            if (needImages.length === 0) return;
                             setIsScanningNeed(true);
-                            setScanNeedStatus("جارٍ فحص صورة الدواء/المنتج بالذكاء الاصطناعي...");
+                            setScanNeedStatus("جارٍ فحص صور الدواء/المنتج بالذكاء الاصطناعي...");
                             try {
-                              const res = await scanNeedItemWithGemini(needImagePreview, (msg) => setScanNeedStatus(msg));
+                              const res = await scanNeedItemWithGemini(needImages[0], (msg) => setScanNeedStatus(msg));
                               const firstItem = Array.isArray(res) ? res[0] : res;
                               if (firstItem?.name) setNeedNameInput(firstItem.name);
                               toast.success(`تم استخراج: ${firstItem?.name || "البيانات"}`, {
@@ -7603,22 +7747,28 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
                               setScanNeedStatus("");
                             }
                           }}
-                          className="mt-1 text-[11px] font-black text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 cursor-pointer"
+                          className="flex-1 py-2 px-3 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 rounded-xl text-xs font-black border border-purple-200 dark:border-purple-800/40 flex items-center justify-center gap-1.5 transition cursor-pointer"
                         >
-                          {isScanningNeed ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                          استخراج الاسم والبيانات بالذكاء الاصطناعي
+                          {isScanningNeed ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                          <span>استخراج الاسم والبيانات بالذكاء الاصطناعي</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => needModalCameraInputRef.current?.click()}
+                          className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-xl text-gray-700 dark:text-gray-300 transition cursor-pointer"
+                          title="تصوير أخرى بالكاميرا"
+                        >
+                          <Camera className="w-4 h-4 text-rose-500" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => needModalGalleryInputRef.current?.click()}
+                          className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-xl text-gray-700 dark:text-gray-300 transition cursor-pointer"
+                          title="إضافة من الاستوديو"
+                        >
+                          <ImageIcon className="w-4 h-4 text-purple-500" />
                         </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNeedImageFile(null);
-                          setNeedImagePreview(null);
-                        }}
-                        className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -7636,7 +7786,7 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
                         className="flex-1 py-2.5 px-3 bg-gray-50 dark:bg-zinc-800/80 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 flex items-center justify-center gap-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition cursor-pointer"
                       >
                         <ImageIcon className="w-4 h-4 text-purple-500" />
-                        <span>من الاستوديو 🖼️</span>
+                        <span>من الاستوديو (متعدد) 🖼️</span>
                       </button>
                     </div>
                   )}
@@ -7778,7 +7928,7 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
           </div>
         )}
 
-        {/* IMAGE PREVIEW MODAL */}
+        {/* IMAGE PREVIEW MODAL (Multi-Image Navigation Supported) */}
         {previewImageUrl && (
           <div
             className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
@@ -7800,15 +7950,32 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="relative w-full max-h-[70vh] rounded-2xl overflow-hidden bg-black/50 flex items-center justify-center">
+              <div className="relative w-full max-h-[68vh] rounded-2xl overflow-hidden bg-black/50 flex items-center justify-center">
                 <img
                   src={previewImageUrl.url}
                   alt={previewImageUrl.title}
-                  className="max-h-[68vh] w-auto max-w-full object-contain rounded-xl"
+                  className="max-h-[66vh] w-auto max-w-full object-contain rounded-xl"
                 />
               </div>
+
+              {/* Multi-Photo Switcher Bar */}
+              {previewImageUrl.allUrls && previewImageUrl.allUrls.length > 1 && (
+                <div className="w-full flex items-center justify-center gap-2 overflow-x-auto py-1 px-2 custom-scrollbar">
+                  {previewImageUrl.allUrls.map((u, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setPreviewImageUrl({ ...previewImageUrl, url: u })}
+                      className={`w-11 h-11 rounded-xl overflow-hidden border-2 transition flex-shrink-0 cursor-pointer ${u === previewImageUrl.url ? "border-purple-500 scale-105 shadow-md" : "border-white/20 opacity-60 hover:opacity-100"}`}
+                    >
+                      <img src={u} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="w-full flex justify-between items-center text-xs text-gray-400 px-2">
-                <span>صورة علبة الدواء / المنتج للنواقص</span>
+                <span>{previewImageUrl.allUrls && previewImageUrl.allUrls.length > 1 ? `${previewImageUrl.allUrls.length} صور مرفقة` : "صورة مرفقة"}</span>
                 <button
                   onClick={() => window.open(previewImageUrl.url, "_blank")}
                   className="text-purple-400 hover:text-purple-300 font-bold flex items-center gap-1 text-[11px] cursor-pointer"

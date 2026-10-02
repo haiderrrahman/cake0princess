@@ -53,5 +53,10 @@ service cloud.firestore {
     match /familyCompetitionEntries/{entryId} {
       allow read, write: if isAdmin();
     }
+
+    // Home Finance documents (expenses, needs, inventory, etc.)
+    match /home_finance/{docId} {
+      allow read, write: if true;
+    }
   }
 }

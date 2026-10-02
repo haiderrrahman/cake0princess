@@ -34,7 +34,7 @@ export interface ScannedReceiptData {
 }
 
 export async function scanReceiptWithGemini(
-  base64DataUrl: string,
+  base64DataUrls: string | string[],
   onProgress?: (status: string) => void
 ): Promise<ScannedReceiptData> {
   const apiKey =
@@ -45,24 +45,37 @@ export async function scanReceiptWithGemini(
     throw new Error("مفتاح الذكاء الاصطناعي (NEXT_PUBLIC_GEMINI_API_KEY) غير مهيأ في متغيرات البيئة");
   }
 
-  onProgress?.("جاري تجهيز الصورة...");
-
-  let mimeType = "image/jpeg";
-  let base64 = base64DataUrl;
-
-  if (base64DataUrl.includes(";base64,")) {
-    const parts = base64DataUrl.split(";base64,");
-    const mimeMatch = parts[0].match(/data:(.*?)$/);
-    if (mimeMatch) mimeType = mimeMatch[1];
-    base64 = parts[1];
+  const urls = Array.isArray(base64DataUrls) ? base64DataUrls : [base64DataUrls];
+  if (urls.length === 0) {
+    throw new Error("لم يتم تمرير أي صورة للفاتورة");
   }
 
-  // If MIME is HEIC or HEIF, declare as image/jpeg since Gemini accepts JPEG/PNG/WEBP/HEIC
-  if (mimeType.toLowerCase().includes("heic") || mimeType.toLowerCase().includes("heif")) {
-    mimeType = "image/jpeg";
-  }
+  onProgress?.(`جاري تجهيز ${urls.length > 1 ? `${urls.length} صور للفاتورة` : "صورة الفاتورة"}...`);
 
-  onProgress?.("جاري قراءة بنود الفاتورة بالذكاء الاصطناعي ⚡...");
+  const imageParts = urls.map((url) => {
+    let mimeType = "image/jpeg";
+    let base64 = url;
+
+    if (url.includes(";base64,")) {
+      const parts = url.split(";base64,");
+      const mimeMatch = parts[0].match(/data:(.*?)$/);
+      if (mimeMatch) mimeType = mimeMatch[1];
+      base64 = parts[1];
+    }
+
+    if (mimeType.toLowerCase().includes("heic") || mimeType.toLowerCase().includes("heif")) {
+      mimeType = "image/jpeg";
+    }
+
+    return {
+      inline_data: {
+        mime_type: mimeType,
+        data: base64
+      }
+    };
+  });
+
+  onProgress?.(urls.length > 1 ? "جاري قراءة بنود الفواتير المرفقة بالذكاء الاصطناعي ⚡..." : "جاري قراءة بنود الفاتورة بالذكاء الاصطناعي ⚡...");
 
   const systemPrompt = `أنت مساعد خبير متخصص في قراءة وتحليل فواتير الشراء والإيصالات باللغة العربية والعراقية بدقة 100%.
 قم باستخراج بيانات الفاتورة المرفقة وتحويلها إلى كائن JSON بالهيكل التالي:
@@ -96,12 +109,7 @@ export async function scanReceiptWithGemini(
           {
             parts: [
               { text: systemPrompt },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64
-                }
-              }
+              ...imageParts
             ]
           }
         ],

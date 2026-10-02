@@ -8,6 +8,10 @@ service firebase.storage {
       return request.auth != null && request.auth.token.admin == true;
     }
 
+    match /home_finance/{allPaths=**} {
+      allow read, write: if true;
+    }
+
     match /products/{imageId} {
       allow read: if true;
       allow write: if isAdmin();
