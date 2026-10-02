@@ -1889,45 +1889,82 @@ setEditInventory(null);
   };
 
   // ──────────────────────────────────────────
-  // NEEDS & UNIFIED DEFICITS HANDLERS
+  // NEEDS & UNIFIED DEFICITS HANDLERS (FAST & NON-BLOCKING)
   // ──────────────────────────────────────────
+  const compressImageFast = (file: File, maxDim = 800, quality = 0.7): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            resolve(e.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleScanNeedPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsScanningNeed(true);
-    setScanNeedStatus("جارٍ تجهيز وضغط الصورة...");
+    setScanNeedStatus("جارٍ فحص وتحليل الصورة بالذكاء الاصطناعي 🧠...");
 
     try {
-      // 1. Read file as base64 for Gemini Vision
-      const imageCompression = (await import('browser-image-compression')).default;
-      const compressed = await imageCompression(file, { maxSizeMB: 0.25, maxWidthOrHeight: 900, useWebWorker: false });
+      // 1. Ultra-fast canvas compression (<100ms)
+      const base64Data = await compressImageFast(file, 800, 0.7);
 
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-      });
-      reader.readAsDataURL(compressed);
-      const base64Data = await base64Promise;
-
-      // 2. Upload image to Firebase Storage (with base64 fallback)
-      setScanNeedStatus("جارٍ حفظ الصورة في السحابة...");
       const needId = Date.now().toString() + Math.random().toString(36).substring(2, 7);
-      let uploadedImageUrl = base64Data;
-      try {
-        const storageRef = ref(storage, `home_finance/needs/${needId}_${Date.now()}.jpg`);
-        await uploadBytes(storageRef, compressed);
-        uploadedImageUrl = await getDownloadURL(storageRef);
-      } catch (uploadErr) {
-        console.warn("Storage upload failed, fallback to base64 data url", uploadErr);
-      }
 
-      // 3. Analyze image using Gemini AI
-      setScanNeedStatus("جارٍ تحليل علبة الدواء أو المنتج بالذكاء الاصطناعي...");
-      const aiResult = await scanNeedItemWithGemini(base64Data, (status) => {
+      // 2. Start Gemini AI analysis immediately
+      const aiPromise = scanNeedItemWithGemini(base64Data, (status) => {
         setScanNeedStatus(status);
       });
+
+      // 3. Concurrently upload to Firebase Storage with a 3.5s timeout (never blocks AI)
+      const uploadPromise = (async () => {
+        try {
+          const storageRef = ref(storage, `home_finance/needs/${needId}_${Date.now()}.jpg`);
+          const res = await fetch(base64Data);
+          const blob = await res.blob();
+          await uploadBytes(storageRef, blob);
+          return await getDownloadURL(storageRef);
+        } catch (uploadErr) {
+          console.warn("Storage upload fallback to base64", uploadErr);
+          return base64Data;
+        }
+      })();
+
+      const fastUploadPromise = Promise.race([
+        uploadPromise,
+        new Promise<string>((resolve) => setTimeout(() => resolve(base64Data), 3500))
+      ]);
+
+      const [aiResult, uploadedImageUrl] = await Promise.all([aiPromise, fastUploadPromise]);
 
       // 4. Create new Need item
       const newNeed: Need = {
@@ -1949,8 +1986,16 @@ setEditInventory(null);
       setNeeds(updated);
       syncToFirebase("needs", updated);
 
+      // If storage upload finishes later in background and returned a permanent URL, update it silently
+      uploadPromise.then((finalUrl) => {
+        if (finalUrl && finalUrl !== base64Data) {
+          setNeeds(prev => prev.map(n => n.id === needId ? { ...n, imageUrl: finalUrl } : n));
+          syncToFirebase("needs", updated.map(n => n.id === needId ? { ...n, imageUrl: finalUrl } : n));
+        }
+      }).catch(() => {});
+
       toast.success(`تم إضافة النقص: ${newNeed.name}`, {
-        description: newNeed.dosageOrSpecs ? `المواصفات/الجرعة: ${newNeed.dosageOrSpecs}` : undefined
+        description: newNeed.dosageOrSpecs ? `الجرعة/المواصفات: ${newNeed.dosageOrSpecs}` : undefined
       });
     } catch (err: any) {
       console.error("Scan need error:", err);
@@ -1964,7 +2009,7 @@ setEditInventory(null);
     }
   };
 
-  const handleSaveNeed = async (e: React.FormEvent<HTMLFormElement>) => {
+    const handleSaveNeed = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isUploading) return;
     const fd = new FormData(e.currentTarget);
@@ -4147,27 +4192,27 @@ setEditTrip(null);
 
         {/* ═══════════════ NEEDS TAB ═══════════════ */}
         {activeTab === "needs" && (
-          <div className="space-y-4">
+          <div className="space-y-3 pt-4 sm:pt-2">
             {/* Header with AI Camera & Add */}
-            <div className="bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 rounded-3xl p-5 md:p-6 text-white shadow-xl relative overflow-hidden">
+            <div className="bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 rounded-3xl p-4 sm:p-5 text-white shadow-lg relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none transform -translate-y-1/2 translate-x-1/4" />
-              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="p-2 bg-white/20 backdrop-blur-md rounded-2xl shadow-inner">
-                      <ShoppingCart className="w-6 h-6 text-white" />
+                    <span className="p-1.5 bg-white/20 backdrop-blur-md rounded-xl shadow-inner">
+                      <ShoppingCart className="w-5 h-5 text-white" />
                     </span>
-                    <h2 className="font-black text-xl md:text-2xl text-white">سجل النواقص والاحتياجات</h2>
-                    <span className="px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-xs font-black text-white">
-                      {unifiedDeficits.length} ناقص
+                    <h2 className="font-black text-lg md:text-xl text-white">سجل النواقص والاحتياجات</h2>
+                    <span className="px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-xs font-black text-white">
+                      {unifiedDeficits.length} مادة
                     </span>
                   </div>
-                  <p className="text-xs md:text-sm text-white/85">
-                    تزامن تلقائي شامل للنواقص من (البيت، العائلة، السيارة، والسفر) + فحص صور الأدوية والمنتجات بالذكاء الاصطناعي 🧠📸
+                  <p className="text-[11px] md:text-xs text-white/90">
+                    تزامن تلقائي لكل النواقص (البيت، العائلة، السيارة، والسفر) + فحص صور الأدوية والمنتجات 🧠📸
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2">
                   <input
                     ref={needFileInputRef}
                     type="file"
@@ -4179,14 +4224,14 @@ setEditTrip(null);
                   <button
                     onClick={() => needFileInputRef.current?.click()}
                     disabled={isScanningNeed}
-                    className="flex-1 sm:flex-initial bg-white text-rose-600 hover:bg-rose-50 text-xs font-black px-4 py-3 rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition cursor-pointer"
+                    className="flex-1 sm:flex-initial bg-white text-rose-600 hover:bg-rose-50 text-xs font-black px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow active:scale-95 transition cursor-pointer"
                   >
                     {isScanningNeed ? (
                       <Loader2 className="w-4 h-4 animate-spin text-rose-600" />
                     ) : (
                       <Camera className="w-4 h-4 text-rose-600" />
                     )}
-                    <span>تصوير / رفع دواء أو منتج 📸</span>
+                    <span>تصوير دواء أو منتج 📸</span>
                   </button>
 
                   <button
@@ -4197,7 +4242,7 @@ setEditTrip(null);
                       setNeedNameInput("");
                       setShowNeedModal(true);
                     }}
-                    className="bg-black/25 hover:bg-black/35 text-white border border-white/20 text-xs font-black px-4 py-3 rounded-2xl flex items-center justify-center gap-2 shadow active:scale-95 transition cursor-pointer"
+                    className="bg-black/25 hover:bg-black/35 text-white border border-white/20 text-xs font-black px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow active:scale-95 transition cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>إضافة يدوي</span>
@@ -4208,39 +4253,55 @@ setEditTrip(null);
 
             {/* AI Scanning Status Banner */}
             {isScanningNeed && (
-              <div className="bg-gradient-to-r from-purple-700 via-indigo-600 to-purple-600 text-white rounded-2xl p-4 shadow-xl flex items-center gap-3 animate-pulse border border-purple-400/30">
-                <Loader2 className="w-6 h-6 animate-spin flex-shrink-0 text-white" />
+              <div className="bg-gradient-to-r from-purple-700 via-indigo-600 to-purple-600 text-white rounded-2xl p-3 shadow-lg flex items-center gap-2.5 animate-pulse border border-purple-400/30">
+                <Loader2 className="w-5 h-5 animate-spin flex-shrink-0 text-white" />
                 <div className="flex-1">
-                  <div className="font-black text-sm">جارٍ مسح وتحليل الصورة بالذكاء الاصطناعي...</div>
-                  <div className="text-xs text-purple-200 mt-0.5">{scanNeedStatus || "يتم استخراج اسم الدواء أو المنتج والجرعة..."}</div>
+                  <div className="font-black text-xs">جارٍ فحص وتحليل الصورة بالذكاء الاصطناعي...</div>
+                  <div className="text-[10px] text-purple-200 mt-0.5">{scanNeedStatus || "يتم استخراج اسم الدواء أو المنتج والجرعة..."}</div>
                 </div>
               </div>
             )}
 
-            {/* Needs Summary Stats */}
+            {/* Needs Summary Stats (Clean, No Overlap, Well-Organized Cards) */}
             {needsSummaryStats.length > 0 && (
-              <div className="flex flex-wrap gap-2.5">
-                {needsSummaryStats.map((stat) => (
-                  <div
-                    key={stat.id}
-                    className={`flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl border shadow-sm ${stat.colorClass} min-w-[130px] flex-1`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{stat.icon}</span>
-                      <span className="font-black text-xs">{stat.name}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                {needsSummaryStats.map((stat, idx) => {
+                  const isLastOdd = needsSummaryStats.length % 2 !== 0 && idx === needsSummaryStats.length - 1;
+                  return (
+                    <div
+                      key={stat.id}
+                      onClick={() => setNeedFilterTab(stat.id === "home" ? "inventory" : stat.id as any)}
+                      className={`p-2.5 rounded-2xl border shadow-xs transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${stat.colorClass} flex flex-col justify-between ${
+                        isLastOdd ? "col-span-2 sm:col-span-1" : ""
+                      }`}
+                    >
+                      {/* Line 1: Icon + Name + Count Badge */}
+                      <div className="flex items-center justify-between gap-1.5 mb-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-base flex-shrink-0">{stat.icon}</span>
+                          <span className="font-black text-xs truncate">{stat.name}</span>
+                        </div>
+                        <span className="px-2 py-0.5 bg-white/70 dark:bg-black/40 rounded-lg text-xs font-black shadow-2xs flex-shrink-0">
+                          {stat.count} مادة
+                        </span>
+                      </div>
+
+                      {/* Line 2: Estimated Cost (clearly labeled & separated) */}
+                      <div className="flex items-center justify-between gap-1 text-[11px] font-black border-t border-black/5 dark:border-white/5 pt-1.5 mt-auto">
+                        <span className="text-gray-500 dark:text-gray-400 text-[10px] font-bold">الكلفة:</span>
+                        <span className={`font-black ${stat.price > 0 ? "text-rose-600 dark:text-rose-400" : "text-gray-400"}`}>
+                          {stat.price > 0 ? `${fmt(stat.price)} د.ع` : "غير مسعر"}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs font-black">
-                      <span className="px-2 py-0.5 bg-white/40 dark:bg-black/30 rounded-lg">{stat.count}</span>
-                      {stat.price > 0 && <span className="opacity-90">{fmt(stat.price)} د.ع</span>}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
             {/* Filter Tabs & Search Bar */}
-            <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-3 shadow-sm space-y-3">
-              <div className="flex flex-wrap gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-2.5 shadow-sm space-y-2.5">
+              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none" dir="rtl">
                 {[
                   { id: "all", label: "الكل", icon: "🛒", count: unifiedDeficits.length },
                   { id: "medicine", label: "أدوية وصيدلية", icon: "💊", count: unifiedDeficits.filter(i => i.isMedicine).length },
@@ -4257,13 +4318,13 @@ setEditTrip(null);
                       onClick={() => setNeedFilterTab(tab.id as any)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 flex-shrink-0 cursor-pointer ${
                         isActive
-                          ? "bg-red-500 text-white shadow-md shadow-red-500/25"
-                          : "bg-gray-100 dark:bg-zinc-800/80 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700"
+                          ? "bg-red-500 text-white shadow-sm"
+                          : "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700"
                       }`}
                     >
                       <span>{tab.icon}</span>
                       <span>{tab.label}</span>
-                      <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${isActive ? "bg-white/30 text-white" : "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300"}`}>
+                      <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${isActive ? "bg-white/30 text-white" : "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300"}`}>
                         {tab.count}
                       </span>
                     </button>
@@ -4273,18 +4334,18 @@ setEditTrip(null);
 
               {/* Search Bar */}
               <div className="relative">
-                <Search className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="ابحث عن دواء، مسواك، منتج، أو فرد من العائلة..."
                   value={needSearchQuery}
                   onChange={(e) => setNeedSearchQuery(e.target.value)}
-                  className="w-full pr-10 pl-9 py-2.5 bg-gray-50 dark:bg-zinc-800 border-none rounded-xl text-xs font-bold text-gray-800 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-red-500/30 outline-none transition"
+                  className="w-full pr-9 pl-8 py-2 bg-gray-50 dark:bg-zinc-800 border-none rounded-xl text-xs font-bold text-gray-800 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-red-500/30 outline-none transition"
                 />
                 {needSearchQuery && (
                   <button
                     onClick={() => setNeedSearchQuery("")}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 cursor-pointer"
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -4292,10 +4353,9 @@ setEditTrip(null);
               </div>
             </div>
 
-            {/* Filtered Deficits Grid */}
+            {/* Compact Square Cards Grid (2 columns on mobile, 3-4 on larger screens) */}
             {(() => {
               const filtered = unifiedDeficits.filter((item) => {
-                // Tab filter
                 if (needFilterTab === "medicine" && !item.isMedicine) return false;
                 if (needFilterTab === "photo" && !(item.sourceType === "need" || !!item.imageUrl)) return false;
                 if (needFilterTab === "inventory" && item.sourceType !== "inventory") return false;
@@ -4303,7 +4363,6 @@ setEditTrip(null);
                 if (needFilterTab === "car" && item.sourceType !== "car") return false;
                 if (needFilterTab === "travel" && item.sourceType !== "travel") return false;
 
-                // Search query
                 if (needSearchQuery.trim()) {
                   const q = needSearchQuery.trim().toLowerCase();
                   const inName = item.name.toLowerCase().includes(q);
@@ -4319,17 +4378,17 @@ setEditTrip(null);
 
               if (filtered.length === 0) {
                 return (
-                  <div className="bg-white dark:bg-zinc-900 rounded-3xl p-10 text-center border border-gray-100 dark:border-zinc-800 shadow-sm space-y-3">
-                    <span className="text-6xl block mb-2">🎉</span>
-                    <h3 className="font-black text-gray-800 dark:text-white text-base">
+                  <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800 shadow-sm space-y-2.5">
+                    <span className="text-5xl block mb-1">🎉</span>
+                    <h3 className="font-black text-gray-800 dark:text-white text-sm">
                       {needSearchQuery ? "لا توجد نتائج تطابق بحثك" : "لا توجد نواقص في هذا القسم"}
                     </h3>
-                    <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                      كل احتياجات البيت ومستلزمات العائلة والسيارة متوفرة حالياً. يمكنك التقاط صورة دواء أو إضافة أي نقص في أي وقت!
+                    <p className="text-[11px] text-gray-400 max-w-xs mx-auto">
+                      كل احتياجات البيت ومستلزمات العائلة والسيارة متوفرة حالياً.
                     </p>
                     <button
                       onClick={() => needFileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl text-xs font-black hover:bg-red-100 transition cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl text-xs font-black hover:bg-red-100 transition cursor-pointer"
                     >
                       <Camera className="w-3.5 h-3.5" />
                       تصوير علبة دواء أو منتج
@@ -4339,44 +4398,38 @@ setEditTrip(null);
               }
 
               return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
                   {filtered.map((item) => {
                     const estTotal = (item.quantity || 1) * (item.estimatedPrice || 0);
 
-                    // Badge colors by source
                     const sourceBadge =
                       item.isMedicine || item.category === "أدوية وصيدلية"
-                        ? { text: "💊 دواء / صيدلية", style: "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border-rose-200 dark:border-rose-800" }
+                        ? { text: "💊 صيدلية", style: "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border-rose-200 dark:border-rose-800" }
                         : item.sourceType === "family"
-                        ? { text: `👨‍👩‍👧‍👦 ${item.member || "عائلة"}`, style: "bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-300 border-pink-200 dark:border-pink-800" }
+                        ? { text: `👤 ${item.member || "عائلة"}`, style: "bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-300 border-pink-200 dark:border-pink-800" }
                         : item.sourceType === "car"
-                        ? { text: "🚗 السيارة", style: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800" }
+                        ? { text: "🚗 سيارة", style: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800" }
                         : item.sourceType === "travel"
-                        ? { text: "✈️ السفر", style: "bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300 border-teal-200 dark:border-teal-800" }
+                        ? { text: "✈️ سفر", style: "bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300 border-teal-200 dark:border-teal-800" }
                         : item.imageUrl
-                        ? { text: "📸 صورة نقص", style: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800" }
+                        ? { text: "📸 مصور", style: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800" }
                         : { text: "📦 البيت", style: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800" };
 
                     return (
                       <div
                         key={item.key}
-                        className="bg-white dark:bg-zinc-900 rounded-3xl p-4 border border-gray-100 dark:border-zinc-800/80 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between relative group overflow-hidden"
+                        className="bg-white dark:bg-zinc-900 rounded-2xl p-2.5 border border-gray-100 dark:border-zinc-800 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between relative group overflow-hidden"
                       >
                         {/* Top decorative gradient line */}
                         <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-red-500 via-rose-500 to-amber-500 opacity-60" />
 
                         {/* Top Meta Bar */}
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg border ${sourceBadge.style}`}>
-                              {sourceBadge.text}
-                            </span>
-                            <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-lg">
-                              {item.category}
-                            </span>
-                          </div>
+                        <div className="flex items-center justify-between gap-1 mb-1.5 pt-0.5">
+                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border whitespace-nowrap ${sourceBadge.style}`}>
+                            {sourceBadge.text}
+                          </span>
 
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
                             {item.sourceType === "need" && (
                               <button
                                 onClick={() => {
@@ -4385,107 +4438,86 @@ setEditTrip(null);
                                   setNeedImagePreview(item.imageUrl || null);
                                   setShowNeedModal(true);
                                 }}
-                                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition cursor-pointer"
+                                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded transition cursor-pointer"
                                 title="تعديل"
                               >
-                                <Edit2 className="w-3.5 h-3.5" />
+                                <Edit2 className="w-3 h-3" />
                               </button>
                             )}
                             <button
                               onClick={() => handleDeleteUnifiedDeficit(item)}
-                              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition cursor-pointer"
+                              className="p-1 text-gray-400 hover:text-red-500 rounded transition cursor-pointer"
                               title="حذف من النواقص"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
                         </div>
 
-                        {/* Card Center: Thumbnail + Title + Specs */}
-                        <div className="flex items-start gap-3 mb-3">
-                          {/* Photo or Icon */}
-                          <div className="relative flex-shrink-0">
-                            {item.imageUrl ? (
-                              <div
-                                onClick={() => setPreviewImageUrl({ url: item.imageUrl!, title: item.name })}
-                                className="w-16 h-16 rounded-2xl overflow-hidden bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 cursor-pointer group/img relative shadow-sm"
-                              >
-                                <img
-                                  src={item.imageUrl}
-                                  alt={item.name}
-                                  className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-110"
-                                />
-                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-white">
-                                  <Eye className="w-4 h-4" />
-                                </div>
+                        {/* Card Center: Square Thumbnail or Icon + Product Name */}
+                        <div className="flex flex-col items-center text-center gap-1 my-1">
+                          {item.imageUrl ? (
+                            <div
+                              onClick={() => setPreviewImageUrl({ url: item.imageUrl!, title: item.name })}
+                              className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 cursor-pointer group/img relative shadow-xs"
+                            >
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-110"
+                              />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-white">
+                                <Eye className="w-3.5 h-3.5" />
                               </div>
-                            ) : (
-                              <div className="w-16 h-16 rounded-2xl bg-gray-50 dark:bg-zinc-800/80 border border-gray-100 dark:border-zinc-700/60 flex items-center justify-center text-2xl flex-shrink-0">
-                                {item.isMedicine ? "💊" : item.sourceType === "car" ? "🚗" : item.sourceType === "travel" ? "✈️" : item.sourceType === "family" ? "👤" : "📦"}
-                              </div>
-                            )}
-                          </div>
+                            </div>
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-gray-50 dark:bg-zinc-800/80 border border-gray-100 dark:border-zinc-700/60 flex items-center justify-center text-2xl shadow-2xs">
+                              {item.isMedicine ? "💊" : item.sourceType === "car" ? "🚗" : item.sourceType === "travel" ? "✈️" : item.sourceType === "family" ? "👤" : "📦"}
+                            </div>
+                          )}
 
-                          {/* Details */}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-black text-sm text-gray-900 dark:text-white line-clamp-2 leading-snug">
-                              {item.name}
-                            </h4>
+                          <h4 className="font-black text-xs text-gray-900 dark:text-white line-clamp-2 leading-tight px-0.5 min-h-[28px] flex items-center justify-center">
+                            {item.name}
+                          </h4>
 
-                            {item.dosageOrSpecs && (
-                              <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 text-purple-700 dark:text-purple-300 rounded-lg text-[10px] font-black">
-                                <Sparkles className="w-2.5 h-2.5" />
-                                <span>{item.dosageOrSpecs}</span>
-                              </div>
-                            )}
-
-                            {item.notes && (
-                              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
-                                {item.notes}
-                              </p>
-                            )}
-
-                            {item.tripDestination && (
-                              <div className="text-[10px] text-teal-600 dark:text-teal-400 font-bold mt-1">
-                                وجهة: {item.tripDestination}
-                              </div>
-                            )}
-                          </div>
+                          {item.dosageOrSpecs ? (
+                            <div className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 text-purple-700 dark:text-purple-300 rounded text-[9px] font-black max-w-[130px] truncate">
+                              <Sparkles className="w-2 h-2 flex-shrink-0" />
+                              <span className="truncate">{item.dosageOrSpecs}</span>
+                            </div>
+                          ) : (
+                            <span className="text-[9px] text-gray-400 font-bold truncate max-w-[120px]">
+                              {item.category}
+                            </span>
+                          )}
                         </div>
 
-                        {/* Price & Quantity Stats */}
-                        <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-2xl p-2.5 mb-3 flex items-center justify-between border border-gray-100 dark:border-zinc-800 text-xs">
-                          <div>
-                            <span className="text-[10px] text-gray-400 block font-bold">الكمية المطلوبة</span>
-                            <span className="font-black text-gray-800 dark:text-gray-200">
-                              {item.quantity} {item.unit}
-                            </span>
-                          </div>
-
-                          <div className="text-left">
-                            <span className="text-[10px] text-gray-400 block font-bold">السعر التقديري</span>
-                            <span className="font-black text-rose-600 dark:text-rose-400">
-                              {estTotal > 0 ? `${fmt(estTotal)} د.ع` : "غير محدد"}
-                            </span>
-                          </div>
+                        {/* Quantity & Estimated Price */}
+                        <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-xl px-2 py-1 mb-2 flex items-center justify-between text-[10px] border border-gray-100 dark:border-zinc-800">
+                          <span className="font-bold text-gray-700 dark:text-gray-300">
+                            {item.quantity} {item.unit}
+                          </span>
+                          <span className="font-black text-rose-600 dark:text-rose-400">
+                            {estTotal > 0 ? `${fmt(estTotal)} د.ع` : "غير مسعر"}
+                          </span>
                         </div>
 
                         {/* Card Footer: Quantity Adjuster + Fulfill Button */}
-                        <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-zinc-800/80">
+                        <div className="flex items-center gap-1.5">
                           {/* +/- Counter */}
-                          <div className="flex items-center bg-gray-100 dark:bg-zinc-800 rounded-xl px-1 py-0.5 border border-gray-200 dark:border-zinc-700">
+                          <div className="flex items-center bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 border border-gray-200 dark:border-zinc-700">
                             <button
                               onClick={() => handleUpdateDeficitQty(item, 1)}
-                              className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-700 text-gray-700 dark:text-white font-bold flex items-center justify-center hover:bg-red-500 hover:text-white transition shadow-xs text-xs cursor-pointer"
+                              className="w-5 h-5 rounded bg-white dark:bg-zinc-700 text-gray-700 dark:text-white font-bold flex items-center justify-center hover:bg-emerald-500 hover:text-white transition text-xs cursor-pointer"
                             >
                               +
                             </button>
-                            <span className="w-7 text-center font-black text-xs text-gray-800 dark:text-gray-200">
+                            <span className="w-5 text-center font-black text-[11px] text-gray-800 dark:text-gray-200">
                               {item.quantity}
                             </span>
                             <button
                               onClick={() => handleUpdateDeficitQty(item, -1)}
-                              className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-700 text-gray-700 dark:text-white font-bold flex items-center justify-center hover:bg-red-500 hover:text-white transition shadow-xs text-xs cursor-pointer"
+                              className="w-5 h-5 rounded bg-white dark:bg-zinc-700 text-gray-700 dark:text-white font-bold flex items-center justify-center hover:bg-red-500 hover:text-white transition text-xs cursor-pointer"
                             >
                               -
                             </button>
@@ -4494,10 +4526,10 @@ setEditTrip(null);
                           {/* Fulfill / Buy button */}
                           <button
                             onClick={() => handleFulfillUnifiedDeficit(item)}
-                            className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-black py-2 px-3 rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                            className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-[10px] font-black py-1.5 px-2 rounded-lg shadow-xs active:scale-95 transition flex items-center justify-center gap-1 cursor-pointer"
                           >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>تم الشراء / التوفير</span>
+                            <Check className="w-3 h-3" />
+                            <span>تم الشراء</span>
                           </button>
                         </div>
                       </div>

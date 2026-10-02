@@ -1,10 +1,9 @@
 // Client-side AI Scanner for Medicines and Home Needs using Google Gemini Vision
 
 const CANDIDATE_MODELS = [
-  "gemini-3.6-flash",
-  "gemini-3.7-flash",
-  "gemini-3.5-flash",
-  "gemini-3.1-flash-lite"
+  "gemini-3.1-flash-lite", // Fastest ~1.3s response
+  "gemini-3.5-flash",      // ~2.1s response
+  "gemini-3.6-flash"       // Fallback ~2.5s response
 ];
 
 export interface ScannedNeedItem {
@@ -94,7 +93,8 @@ export async function scanNeedItemWithGemini(
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(10000)
         }
       );
 
