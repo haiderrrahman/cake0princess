@@ -71,6 +71,8 @@ interface Expense {
   date: string;
   createdAt: string;
   items?: ExpenseItem[];
+  imageUrl?: string;
+  receiptUrl?: string;
 }
 
 interface Income {
@@ -482,7 +484,11 @@ export default function HomeFinanceDashboard() {
   const [quickPasteText, setQuickPasteText] = useState("");
   const [viewingReceiptExpense, setViewingReceiptExpense] = useState<Expense | null>(null);
   const [receiptItemFilter, setReceiptItemFilter] = useState("");
-  const receiptFileInputRef = useRef<HTMLInputElement | null>(null);
+  const receiptCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const receiptGalleryInputRef = useRef<HTMLInputElement | null>(null);
+  const expenseManualCameraRef = useRef<HTMLInputElement | null>(null);
+  const expenseManualGalleryRef = useRef<HTMLInputElement | null>(null);
+  const [expenseReceiptImage, setExpenseReceiptImage] = useState<string | null>(null);
 
   const [showProductSearchModal, setShowProductSearchModal] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState("");
@@ -515,8 +521,10 @@ export default function HomeFinanceDashboard() {
   const [needImageFile, setNeedImageFile] = useState<File | null>(null);
   const [needImagePreview, setNeedImagePreview] = useState<string | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<{ url: string; title: string } | null>(null);
-  const needFileInputRef = useRef<HTMLInputElement>(null);
-  const needModalFileInputRef = useRef<HTMLInputElement>(null);
+  const needCameraInputRef = useRef<HTMLInputElement>(null);
+  const needGalleryInputRef = useRef<HTMLInputElement>(null);
+  const needModalCameraInputRef = useRef<HTMLInputElement>(null);
+  const needModalGalleryInputRef = useRef<HTMLInputElement>(null);
   const [scannedReviewItems, setScannedReviewItems] = useState<ScannedNeedItem[] | null>(null);
   const [isSavingScannedBatch, setIsSavingScannedBatch] = useState(false);
   const [fulfillModal, setFulfillModal] = useState<{
@@ -588,11 +596,13 @@ export default function HomeFinanceDashboard() {
       setExpCategoryInput("سوبر ماركت");
       setExpDateInput(today());
       setExpenseItems([]);
+      setExpenseReceiptImage(null);
     } else if (showExpenseModal && editExpense) {
       setExpNameInput(editExpense.name || "");
       setExpCategoryInput(editExpense.category || "سوبر ماركت");
       setExpDateInput(editExpense.date || today());
       setExpenseItems(editExpense.items || []);
+      setExpenseReceiptImage(editExpense.imageUrl || editExpense.receiptUrl || null);
     }
   }, [showExpenseModal, editExpense]);
 
@@ -1464,15 +1474,13 @@ setEditFuturePlan(null);
 
     try {
       setIsScanningReceipt(true);
-      setScanStatusText("جاري فحص وتجهيز صورة الفاتورة...");
+      setScanStatusText("جاري فحص وتجهيز صورة الفاتورة 📸...");
 
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-      });
-      reader.readAsDataURL(file);
-      const dataUrl = await base64Promise;
+      // Compress fast via compressImageFast
+      const dataUrl = await compressImageFast(file, 1200, 0.8);
+
+      // Automatically attach the scanned receipt image to the expense
+      setExpenseReceiptImage(dataUrl);
 
       const data = await scanReceiptWithGemini(dataUrl, (status) => setScanStatusText(status));
 
@@ -1490,7 +1498,6 @@ setEditFuturePlan(null);
       const currentYear = new Date().getFullYear().toString();
       let extractedDate = data.date;
 
-      // Normalize scanned date: prevent old cash register dates (e.g. 2024)
       if (extractedDate) {
         const parts = extractedDate.split("-");
         if (parts.length === 3) {
@@ -1511,7 +1518,7 @@ setEditFuturePlan(null);
         setExpenseItems(data.items);
       }
 
-      toast.success(`تم استخراج ${data.items.length} مادة بقيمة ${fmt(data.totalAmount)} د.ع بنجاح! ✨`, {
+      toast.success(`تم استخراج ${data.items.length} مادة وإرفاق صورة الفاتورة بنجاح! 📸✨`, {
         duration: 5000
       });
     } catch (err: any) {
@@ -1524,7 +1531,21 @@ setEditFuturePlan(null);
     }
   };
 
-  const handleQuickPasteSubmit = () => {
+  const handleAttachReceiptImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await compressImageFast(file, 1200, 0.8);
+      setExpenseReceiptImage(dataUrl);
+      toast.success("تم إرفاق صورة الفاتورة بنجاح 📸");
+    } catch (err) {
+      toast.error("فشل إرفاق الصورة");
+    } finally {
+      if (e.target) e.target.value = "";
+    }
+  };
+
+    const handleQuickPasteSubmit = () => {
     if (!quickPasteText.trim()) return;
 
     const lines = quickPasteText.split("\n").map(l => l.trim()).filter(Boolean);
@@ -1621,6 +1642,13 @@ setEditFuturePlan(null);
     if (validItems.length > 0) {
       item.items = validItems;
     }
+    if (expenseReceiptImage) {
+      item.imageUrl = expenseReceiptImage;
+      item.receiptUrl = expenseReceiptImage;
+    } else if (isEdit && editExpense?.imageUrl) {
+      item.imageUrl = editExpense.imageUrl;
+      item.receiptUrl = editExpense.receiptUrl;
+    }
     let updatedList = expenses;
     if (isEdit) {
       updatedList = expenses.map(x => x.id === item.id ? item : x);
@@ -1631,6 +1659,26 @@ setEditFuturePlan(null);
       updatedList = [item, ...expenses];
       setExpenses(updatedList);
       syncToFirebase("expenses", updatedList);
+
+      // Background upload of attached receipt image to Firebase Storage
+      if (item.imageUrl && item.imageUrl.startsWith("data:image")) {
+        const expId = item.id;
+        const base64Data = item.imageUrl;
+        (async () => {
+          try {
+            const storageRef = ref(storage, `home_finance/receipts/${expId}_${Date.now()}.jpg`);
+            const res = await fetch(base64Data);
+            const blob = await res.blob();
+            await uploadBytes(storageRef, blob);
+            const downloadUrl = await getDownloadURL(storageRef);
+            setExpenses(prev => prev.map(e => e.id === expId ? { ...e, imageUrl: downloadUrl, receiptUrl: downloadUrl } : e));
+            syncToFirebase("expenses", updatedList.map(e => e.id === expId ? { ...e, imageUrl: downloadUrl, receiptUrl: downloadUrl } : e));
+          } catch (uploadErr) {
+            console.warn("Background receipt upload failed", uploadErr);
+          }
+        })();
+      }
+
       toast.success("تم تسجيل المصروف");
 
       // Auto-switch to cycle containing the expense date if currently in another cycle
@@ -1975,8 +2023,11 @@ setEditInventory(null);
     } finally {
       setIsScanningNeed(false);
       setScanNeedStatus("");
-      if (needFileInputRef.current) {
-        needFileInputRef.current.value = "";
+      if (needCameraInputRef.current) {
+        needCameraInputRef.current.value = "";
+      }
+      if (needGalleryInputRef.current) {
+        needGalleryInputRef.current.value = "";
       }
     }
   };
@@ -4007,6 +4058,21 @@ setEditTrip(null);
                             <ChevronLeft className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                           </button>
                         )}
+
+                        {/* Attached receipt photo preview button */}
+                        {(exp.imageUrl || exp.receiptUrl) && (!exp.items || exp.items.length === 0) && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewImageUrl({ url: (exp.imageUrl || exp.receiptUrl)!, title: `فاتورة: ${exp.name}` })}
+                            className="w-full mt-1.5 py-1 px-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-xl text-[10px] font-black flex items-center justify-between border border-rose-100 dark:border-rose-800/40 transition active:scale-[0.98]"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <Camera className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                              <span>صورة الفاتورة المرفقة</span>
+                            </span>
+                            <Eye className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -4243,29 +4309,55 @@ setEditTrip(null);
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Hidden inputs: Camera vs Gallery */}
                   <input
-                    ref={needFileInputRef}
+                    ref={needCameraInputRef}
                     type="file"
                     accept="image/*"
                     capture="environment"
                     onChange={handleScanNeedPhoto}
                     className="hidden"
                   />
+                  <input
+                    ref={needGalleryInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleScanNeedPhoto}
+                    className="hidden"
+                  />
+
+                  {/* Camera Button */}
                   <button
-                    onClick={() => needFileInputRef.current?.click()}
+                    type="button"
+                    onClick={() => needCameraInputRef.current?.click()}
                     disabled={isScanningNeed}
                     className="flex-1 sm:flex-initial bg-white text-rose-600 hover:bg-rose-50 text-xs font-black px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow active:scale-95 transition cursor-pointer"
+                    title="التقاط صورة مباشرة بالكاميرا"
                   >
                     {isScanningNeed ? (
                       <Loader2 className="w-4 h-4 animate-spin text-rose-600" />
                     ) : (
                       <Camera className="w-4 h-4 text-rose-600" />
                     )}
-                    <span>تصوير دواء أو منتج 📸</span>
+                    <span>تصوير كاميرا 📸</span>
                   </button>
 
+                  {/* Gallery / Studio Button */}
                   <button
+                    type="button"
+                    onClick={() => needGalleryInputRef.current?.click()}
+                    disabled={isScanningNeed}
+                    className="flex-1 sm:flex-initial bg-white/95 text-purple-700 hover:bg-white text-xs font-black px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow active:scale-95 transition cursor-pointer"
+                    title="اختيار صورة من استوديو الصور أو المعرض"
+                  >
+                    <ImageIcon className="w-4 h-4 text-purple-600" />
+                    <span>من الاستوديو 🖼️</span>
+                  </button>
+
+                  {/* Manual Add Button */}
+                  <button
+                    type="button"
                     onClick={() => {
                       setEditNeed(null);
                       setNeedImageFile(null);
@@ -4417,13 +4509,22 @@ setEditTrip(null);
                     <p className="text-[11px] text-gray-400 max-w-xs mx-auto">
                       كل احتياجات البيت ومستلزمات العائلة والسيارة متوفرة حالياً.
                     </p>
-                    <button
-                      onClick={() => needFileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl text-xs font-black hover:bg-red-100 transition cursor-pointer"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                      تصوير علبة دواء أو منتج
-                    </button>
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => needCameraInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl text-xs font-black hover:bg-red-100 transition cursor-pointer"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>تصوير كاميرا 📸</span>
+                      </button>
+                      <button
+                        onClick={() => needGalleryInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 rounded-xl text-xs font-black hover:bg-purple-100 transition cursor-pointer"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        <span>من الاستوديو 🖼️</span>
+                      </button>
+                    </div>
                   </div>
                 );
               }
@@ -6138,14 +6239,36 @@ setEditTrip(null);
         </div>
       )}
 
-      {/* ─── Hidden File Input for Receipt Scanner ─── */}
+      {/* ─── Hidden File Inputs for Receipt Scanner & Attachment ─── */}
       <input
         type="file"
-        ref={receiptFileInputRef}
+        ref={receiptCameraInputRef}
         accept="image/*"
         capture="environment"
         className="hidden"
         onChange={handleScanReceipt}
+      />
+      <input
+        type="file"
+        ref={receiptGalleryInputRef}
+        accept="image/*"
+        className="hidden"
+        onChange={handleScanReceipt}
+      />
+      <input
+        type="file"
+        ref={expenseManualCameraRef}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleAttachReceiptImage}
+      />
+      <input
+        type="file"
+        ref={expenseManualGalleryRef}
+        accept="image/*"
+        className="hidden"
+        onChange={handleAttachReceiptImage}
       />
 
       {/* ─── Expense Modal (Modernized & Super Fast) ─── */}
@@ -6200,24 +6323,34 @@ setEditTrip(null);
             </div>
 
             {/* Smart Action Buttons (AI Scan & Quick Paste) */}
-            <div className="grid grid-cols-2 gap-2.5 mb-4">
+            <div className="grid grid-cols-3 gap-2 mb-4">
               <button
                 type="button"
-                onClick={() => receiptFileInputRef.current?.click()}
-                className="flex items-center justify-center gap-2 p-2.5 rounded-2xl font-black text-xs bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white shadow-md shadow-indigo-500/20 hover:opacity-95 active:scale-[0.98] transition border border-white/20"
+                onClick={() => receiptCameraInputRef.current?.click()}
+                className="flex items-center justify-center gap-1.5 p-2.5 rounded-2xl font-black text-xs bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm hover:opacity-95 active:scale-[0.98] transition cursor-pointer"
+                title="تصوير الفاتورة مباشرة بالكاميرا"
               >
-                <Camera className="w-4 h-4" />
-                <span>مسح فاتورة ذكي (AI)</span>
-                <span className="text-[9px] bg-white/25 px-1.5 py-0.5 rounded-full font-black">جديد ✨</span>
+                <Camera className="w-3.5 h-3.5" />
+                <span>مسح كاميرا 📸</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => receiptGalleryInputRef.current?.click()}
+                className="flex items-center justify-center gap-1.5 p-2.5 rounded-2xl font-black text-xs bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm hover:opacity-95 active:scale-[0.98] transition cursor-pointer"
+                title="رفع وقراءة صورة الفاتورة من الاستوديو"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span>من الاستوديو 🖼️</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowQuickPasteModal(true)}
-                className="flex items-center justify-center gap-2 p-2.5 rounded-2xl font-black text-xs bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30 transition active:scale-[0.98]"
+                className="flex items-center justify-center gap-1.5 p-2.5 rounded-2xl font-black text-xs bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30 transition active:scale-[0.98] cursor-pointer"
               >
-                <Zap className="w-4 h-4 text-amber-500" />
-                <span>لصق قائمة سريعة</span>
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                <span>لصق سريعة ⚡</span>
               </button>
             </div>
 
@@ -6580,10 +6713,17 @@ setEditTrip(null);
                     <div className="flex flex-wrap justify-center gap-2">
                       <button
                         type="button"
-                        onClick={() => receiptFileInputRef.current?.click()}
-                        className="text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-xl border border-indigo-200/50 hover:bg-indigo-100 transition flex items-center gap-1.5"
+                        onClick={() => receiptCameraInputRef.current?.click()}
+                        className="text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-xl border border-indigo-200/50 hover:bg-indigo-100 transition flex items-center gap-1.5 cursor-pointer"
                       >
-                        <Camera className="w-3.5 h-3.5" /> امسح الفاتورة
+                        <Camera className="w-3.5 h-3.5" /> كاميرا
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => receiptGalleryInputRef.current?.click()}
+                        className="text-xs font-black text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10 px-3 py-1.5 rounded-xl border border-purple-200/50 hover:bg-purple-100 transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5" /> استوديو
                       </button>
                       <button
                         type="button"
@@ -6600,6 +6740,66 @@ setEditTrip(null);
                         <Plus className="w-3.5 h-3.5" /> أضف يدوياً
                       </button>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Receipt Image Attachment Section */}
+              <div className="bg-gray-50/70 dark:bg-zinc-900/40 rounded-2xl p-3 border border-gray-200 dark:border-zinc-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                    <Receipt className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>صورة الفاتورة أو الوصل المرفقة (اختياري)</span>
+                  </span>
+                  {expenseReceiptImage && (
+                    <button
+                      type="button"
+                      onClick={() => setExpenseReceiptImage(null)}
+                      className="text-[10px] text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                    >
+                      إزالة الصورة ✕
+                    </button>
+                  )}
+                </div>
+
+                {expenseReceiptImage ? (
+                  <div className="flex items-center gap-3 p-2 bg-white dark:bg-zinc-800 rounded-xl border border-gray-100 dark:border-zinc-700">
+                    <div
+                      onClick={() => setPreviewImageUrl({ url: expenseReceiptImage, title: expNameInput || "صورة الفاتورة" })}
+                      className="w-14 h-14 rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-700 cursor-pointer relative group/img flex-shrink-0 shadow-xs"
+                    >
+                      <img src={expenseReceiptImage} alt="Receipt" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-white">
+                        <Eye className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-black text-gray-800 dark:text-gray-200 block truncate">
+                        تم إرفاق صورة الفاتورة بنجاح 📸
+                      </span>
+                      <span className="text-[10px] text-gray-400 block mt-0.5">
+                        انقر على الصورة لمعاينتها وتكبيرها بالكامل
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => expenseManualCameraRef.current?.click()}
+                      className="flex-1 py-2 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>تصوير بالكاميرا</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => expenseManualGalleryRef.current?.click()}
+                      className="flex-1 py-2 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5 text-purple-500" />
+                      <span>اختيار من الاستوديو</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -6705,6 +6905,39 @@ setEditTrip(null);
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
+
+            {/* Attached Receipt Photo Banner */}
+            {(viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl) && (
+              <div className="mb-4 p-3 bg-indigo-50/60 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-800/40 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    onClick={() => setPreviewImageUrl({ url: (viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl)!, title: viewingReceiptExpense.name })}
+                    className="w-12 h-12 rounded-xl overflow-hidden border border-indigo-200 dark:border-indigo-700 cursor-pointer flex-shrink-0 relative group/img shadow-xs"
+                  >
+                    <img src={viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl} alt="Receipt" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-white">
+                      <Eye className="w-3 h-3" />
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs font-black text-indigo-950 dark:text-indigo-200 block">
+                      صورة الفاتورة الأصلية مرفقة 📸
+                    </span>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">
+                      انقر للمعاينة وتكبير الفاتورة
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewImageUrl({ url: (viewingReceiptExpense.imageUrl || viewingReceiptExpense.receiptUrl)!, title: viewingReceiptExpense.name })}
+                  className="px-3 py-1.5 bg-white dark:bg-zinc-800 hover:bg-indigo-100 dark:hover:bg-zinc-700 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-black border border-indigo-200 dark:border-indigo-700/50 shadow-xs transition flex items-center gap-1 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>معاينة</span>
+                </button>
+              </div>
+            )}
 
             {/* Search inside receipt */}
             <div className="relative mb-3">
@@ -7309,10 +7542,24 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
                     صورة الدواء أو المنتج (اختياري)
                   </label>
                   <input
-                    ref={needModalFileInputRef}
+                    ref={needModalCameraInputRef}
                     type="file"
                     accept="image/*"
                     capture="environment"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setNeedImageFile(file);
+                      const reader = new FileReader();
+                      reader.onload = () => setNeedImagePreview(reader.result as string);
+                      reader.readAsDataURL(file);
+                    }}
+                    className="hidden"
+                  />
+                  <input
+                    ref={needModalGalleryInputRef}
+                    type="file"
+                    accept="image/*"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
@@ -7374,14 +7621,24 @@ setEditInventory(null); }} className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-f
                       </button>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => needModalFileInputRef.current?.click()}
-                      className="w-full py-3 px-4 border-2 border-dashed border-gray-200 dark:border-zinc-700 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold text-gray-500 hover:border-red-400 hover:text-red-500 transition bg-gray-50/50 dark:bg-zinc-800/30 cursor-pointer"
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span>التقط صورة علبة الدواء أو اختر من المعرض</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => needModalCameraInputRef.current?.click()}
+                        className="flex-1 py-2.5 px-3 bg-gray-50 dark:bg-zinc-800/80 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 flex items-center justify-center gap-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition cursor-pointer"
+                      >
+                        <Camera className="w-4 h-4 text-rose-500" />
+                        <span>تصوير كاميرا 📸</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => needModalGalleryInputRef.current?.click()}
+                        className="flex-1 py-2.5 px-3 bg-gray-50 dark:bg-zinc-800/80 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 flex items-center justify-center gap-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition cursor-pointer"
+                      >
+                        <ImageIcon className="w-4 h-4 text-purple-500" />
+                        <span>من الاستوديو 🖼️</span>
+                      </button>
+                    </div>
                   )}
                 </div>
 
