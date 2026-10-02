@@ -101,8 +101,10 @@ export default function ExternalOrdersAdmin() {
       try {
         const cleanExt = fetchedOrders.slice(0, 50).map(o => {
           const clean = { ...o };
-          if (clean.imageUrl) {
-            delete clean.tempImageUrl;
+          delete clean.tempImageUrl;
+          // Strip base64 data URIs from cache to protect 5MB localStorage quota
+          if (typeof clean.imageUrl === "string" && clean.imageUrl.startsWith("data:")) {
+            delete clean.imageUrl;
           }
           return clean;
         });
@@ -110,9 +112,10 @@ export default function ExternalOrdersAdmin() {
         try {
           localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
         } catch (e) {
-          console.warn("Cache too large, stripping temp images...");
+          console.warn("Cache too large, stripping images entirely for cache...");
           const cleanExtFallback = cleanExt.map(o => {
             const clean = { ...o };
+            delete clean.imageUrl;
             delete clean.tempImageUrl;
             return clean;
           });
@@ -130,6 +133,17 @@ export default function ExternalOrdersAdmin() {
         fetchedOrders = fetchedOrders.slice(0, 150);
         setOrders(fetchedOrders);
         setLoading(false);
+        try {
+          const cleanExt = fetchedOrders.slice(0, 50).map(o => {
+            const clean = { ...o };
+            delete clean.tempImageUrl;
+            if (typeof clean.imageUrl === "string" && clean.imageUrl.startsWith("data:")) {
+              delete clean.imageUrl;
+            }
+            return clean;
+          });
+          localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
+        } catch (e) {}
       }).catch(e => {
         console.error("Fallback error:", e);
         setLoading(false);

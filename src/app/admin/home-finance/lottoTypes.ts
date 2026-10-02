@@ -55,6 +55,7 @@ export const INITIAL_SUPER_KEY_DRAWS: LottoDraw[] = [
 ];
 
 export const INITIAL_IRAQ_LOTTO_DRAWS: LottoDraw[] = [
+  { id: "il-416", game: "iraq_lotto", drawNumber: 416, date: "2026-10-01", numbers: [13, 14, 18, 19, 20, 25] },
   { id: "il-415", game: "iraq_lotto", drawNumber: 415, date: "2026-09-28", numbers: [6, 12, 14, 18, 24, 26] },
   { id: "il-414", game: "iraq_lotto", drawNumber: 414, date: "2026-09-24", numbers: [2, 5, 13, 19, 24, 27] },
   { id: "il-413", game: "iraq_lotto", drawNumber: 413, date: "2026-09-21", numbers: [13, 16, 17, 21, 24, 25] },

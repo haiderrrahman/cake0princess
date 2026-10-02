@@ -245,22 +245,37 @@ const FAMILY_MEMBERS = ["حيدر", "إيمان", "رقية", "قنوت", "إي�
 
 
 
-  const syncToFirebase = async (key: string, data: any) => {
+const getCachedHF = (key: string, defaultValue: any) => {
+  if (typeof window !== "undefined") {
     try {
-      const syncPromise = setDoc(doc(db, "home_finance", key), { data });
-      
-      await Promise.race([
-        syncPromise,
-        new Promise(resolve => setTimeout(resolve, 1500))
-      ]);
-      
-      if (!navigator.onLine) {
-        toast.success("تم الحفظ محلياً (قيد المزامنة)");
-      }
-    } catch (error) {
-      console.error(`Error saving ${key} to firebase:`, error);
+      const cached = localStorage.getItem(`cache_hf_${key}`);
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+  }
+  return defaultValue;
+};
+
+const syncToFirebase = async (key: string, data: any) => {
+  try {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`cache_hf_${key}`, JSON.stringify(data));
+      } catch (e) {}
     }
-  };
+    const syncPromise = setDoc(doc(db, "home_finance", key), { data });
+    
+    await Promise.race([
+      syncPromise,
+      new Promise(resolve => setTimeout(resolve, 1500))
+    ]);
+    
+    if (!navigator.onLine) {
+      toast.success("تم الحفظ محلياً (قيد المزامنة)");
+    }
+  } catch (error) {
+    console.error(`Error saving ${key} to firebase:`, error);
+  }
+};
 
 // ══════════════════════════════════════════════
 // MAIN COMPONENT
@@ -308,19 +323,19 @@ export default function HomeFinanceDashboard() {
   const [cakeSalaryDebt, setCakeSalaryDebt] = useState<number>(0);
   const [cakeDebtExpenses, setCakeDebtExpenses] = useState<Expense[]>([]);
   const [cakeDebtIncomes, setCakeDebtIncomes] = useState<Income[]>([]);
-  const [installments, setInstallments] = useState<Installment[]>([]);
-  const [bills, setBills] = useState<Bill[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [incomes, setIncomes] = useState<Income[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [carInventory, setCarInventory] = useState<InventoryItem[]>([]);
-  const [travelInventory, setTravelInventory] = useState<InventoryItem[]>([]);
-  const [needs, setNeeds] = useState<Need[]>([]);
-  const [debts, setDebts] = useState<Debt[]>([]);
-  const [familyNeeds, setFamilyNeeds] = useState<FamilyMemberNeed[]>([]);
-  const [travelTrips, setTravelTrips] = useState<TravelTrip[]>([]);
-  const [travelExpenses, setTravelExpenses] = useState<TravelExpense[]>([]);
-  const [futurePlans, setFuturePlans] = useState<FuturePlan[]>([]);
+  const [installments, setInstallments] = useState<Installment[]>(() => getCachedHF("installments", []));
+  const [bills, setBills] = useState<Bill[]>(() => getCachedHF("bills", []));
+  const [expenses, setExpenses] = useState<Expense[]>(() => getCachedHF("expenses", []));
+  const [incomes, setIncomes] = useState<Income[]>(() => getCachedHF("incomes", []));
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => getCachedHF("inventory", []));
+  const [carInventory, setCarInventory] = useState<InventoryItem[]>(() => getCachedHF("carInventory", []));
+  const [travelInventory, setTravelInventory] = useState<InventoryItem[]>(() => getCachedHF("travelInventory", []));
+  const [needs, setNeeds] = useState<Need[]>(() => getCachedHF("needs", []));
+  const [debts, setDebts] = useState<Debt[]>(() => getCachedHF("debts", []));
+  const [familyNeeds, setFamilyNeeds] = useState<FamilyMemberNeed[]>(() => getCachedHF("familyNeeds", []));
+  const [travelTrips, setTravelTrips] = useState<TravelTrip[]>(() => getCachedHF("travelTrips", []));
+  const [travelExpenses, setTravelExpenses] = useState<TravelExpense[]>(() => getCachedHF("travelExpenses", []));
+  const [futurePlans, setFuturePlans] = useState<FuturePlan[]>(() => getCachedHF("futurePlans", []));
   const [showFuturePlanModal, setShowFuturePlanModal] = useState(false);
   const [editFuturePlan, setEditFuturePlan] = useState<FuturePlan | null>(null);
   const [futurePlanSteps, setFuturePlanSteps] = useState<{id: string; text: string; isCompleted: boolean; date?: string}[]>([]);
@@ -343,7 +358,7 @@ export default function HomeFinanceDashboard() {
   const [settings, setSettings] = useState<{ 
     manualCycleStarts?: string[],
     budgetLimits?: Record<string, number>
-  }>({ 
+  }>(() => getCachedHF("settings", { 
     manualCycleStarts: [],
     budgetLimits: {
       "سوبر ماركت": 450000,
@@ -352,12 +367,18 @@ export default function HomeFinanceDashboard() {
       "العائلة": 100000,
       "الفواتير": 130000,
     }
-  });
+  }));
   const [showBudgetSettingsModal, setShowBudgetSettingsModal] = useState(false);
 
 
   const [mounted, setMounted] = useState(false);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(() => {
+    if (typeof window !== "undefined") {
+      const exp = localStorage.getItem("cache_hf_expenses");
+      if (exp) return false;
+    }
+    return true;
+  });
 
   // Smart Modals
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -589,20 +610,18 @@ export default function HomeFinanceDashboard() {
     const unsubscribers = keys.map(k => {
       return onSnapshot(doc(db, "home_finance", k), (snap) => {
         if (snap.exists() && snap.data().data) {
-          setters[k](snap.data().data);
+          const val = snap.data().data;
+          setters[k](val);
+          try {
+            localStorage.setItem(`cache_hf_${k}`, JSON.stringify(val));
+          } catch (e) {}
         } else {
           setters[k]([]);
         }
-        loadedCount++;
-        if (loadedCount >= keys.length) {
-          setDataLoading(false);
-        }
+        setDataLoading(false);
       }, (error) => {
         console.error(`Snapshot error for ${k}:`, error);
-        loadedCount++;
-        if (loadedCount >= keys.length) {
-          setDataLoading(false);
-        }
+        setDataLoading(false);
       });
     });
 

@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   X, Sparkles, Trophy, Calendar, Ticket, Plus, CheckCircle2,
   AlertCircle, Copy, Check, BarChart2, Flame, Snowflake, RotateCcw,
   Clock, Hash, DollarSign, ExternalLink, Search, Volume2, VolumeX,
-  PartyPopper, Trash2
+  PartyPopper, Trash2, Camera, Loader2
 } from "lucide-react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { toast } from "sonner";
+import { scanLottoWithGemini } from "@/lib/scanLottoClient";
 import {
   LottoGameType, LottoDraw, LottoTicket,
   GAME_DETAILS, INITIAL_SUPER_KEY_DRAWS, INITIAL_IRAQ_LOTTO_DRAWS,
@@ -118,8 +119,16 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   // Firebase state
   const [superKeyDraws, setSuperKeyDraws] = useState<LottoDraw[]>(INITIAL_SUPER_KEY_DRAWS);
   const [iraqLottoDraws, setIraqLottoDraws] = useState<LottoDraw[]>(INITIAL_IRAQ_LOTTO_DRAWS);
-  const [tickets, setTickets] = useState<LottoTicket[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tickets, setTickets] = useState<LottoTicket[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = localStorage.getItem("cache_lotto_tickets");
+        if (c) return JSON.parse(c);
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState(false);
 
   // Archive search filter
   const [archiveSearchQuery, setArchiveSearchQuery] = useState("");
@@ -158,6 +167,65 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   const [drawDateInput, setDrawDateInput] = useState<string>(new Date().toISOString().split("T")[0]);
   const [drawNumbersInput, setDrawNumbersInput] = useState<number[]>([]);
   const [drawLuckyInput, setDrawLuckyInput] = useState<number | undefined>();
+
+  // Scanner state
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanStatus, setScanStatus] = useState("");
+  const ticketFileInputRef = useRef<HTMLInputElement>(null);
+  const drawFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleScanFile = async (e: React.ChangeEvent<HTMLInputElement>, target: "ticket" | "draw") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsScanning(true);
+    setScanStatus("جاري معالجة وقراءة الصورة...");
+
+    try {
+      const reader = new FileReader();
+      const base64DataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const result = await scanLottoWithGemini(base64DataUrl, target, setScanStatus);
+
+      if (target === "ticket") {
+        if (result.purchasedTickets && result.purchasedTickets.length > 0) {
+          const t = result.purchasedTickets[0];
+          setNewTicketNumbers(t.numbers);
+          if (t.luckyNumber !== undefined && selectedGame === "super_key") {
+            setNewTicketLucky(t.luckyNumber);
+          }
+          if (t.cost) setNewTicketCost(t.cost);
+          if (result.drawNumber) setNewTicketDrawNum(String(result.drawNumber));
+          if (result.drawDate) setNewTicketDate(result.drawDate);
+          toast.success(`تم قراءة بطاقة اللوتو المشتراة بنجاح: ${t.numbers.join(" - ")} 🎫`);
+        } else {
+          toast.error("لم نتمكن من العثور على 6 أرقام واضحة في البطاقة. يرجى التأكد من وضوح الصورة.");
+        }
+      } else {
+        if (result.winningNumbers && result.winningNumbers.length === 6) {
+          setDrawNumbersInput(result.winningNumbers);
+          if (result.luckyNumber !== undefined && selectedGame === "super_key") {
+            setDrawLuckyInput(result.luckyNumber);
+          }
+          if (result.drawNumber) setDrawNumInput(result.drawNumber);
+          if (result.drawDate) setDrawDateInput(result.drawDate);
+          toast.success(`تم قراءة الأرقام الفائزة بنجاح: ${result.winningNumbers.join(" - ")} 🏆`);
+        } else {
+          toast.error("لم نتمكن من تحديد 6 أرقام فائزة في الصورة.");
+        }
+      }
+    } catch (err: any) {
+      console.error("Scan error:", err);
+      toast.error(err.message || "حدث خطأ أثناء مسح الصورة بالذكاء الاصطناعي");
+    } finally {
+      setIsScanning(false);
+      setScanStatus("");
+      if (e.target) e.target.value = "";
+    }
+  };
 
   // 1. Subscribe to Firestore
   useEffect(() => {
@@ -322,6 +390,9 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
 
     const updatedTickets = [newTicket, ...tickets];
     setTickets(updatedTickets);
+    try {
+      localStorage.setItem("cache_lotto_tickets", JSON.stringify(updatedTickets));
+    } catch (e) {}
 
     // Close modal & reset fields IMMEDIATELY so the interface is never stuck
     setShowAddTicketModal(false);
@@ -370,6 +441,9 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   const handleDeleteTicket = async (ticketId: string) => {
     const updatedTickets = tickets.filter(t => t.id !== ticketId);
     setTickets(updatedTickets);
+    try {
+      localStorage.setItem("cache_lotto_tickets", JSON.stringify(updatedTickets));
+    } catch (e) {}
     try {
       const sanitized = JSON.parse(JSON.stringify(updatedTickets));
       await setDoc(doc(db, "home_finance", "lotto_hub"), {
@@ -1169,6 +1243,36 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                 </button>
               </div>
 
+              {/* AI Camera Scan Action */}
+              <div className="mb-3">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  ref={ticketFileInputRef}
+                  onChange={e => handleScanFile(e, "ticket")}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  disabled={isScanning}
+                  onClick={() => ticketFileInputRef.current?.click()}
+                  className="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 hover:opacity-95 active:scale-98 transition disabled:opacity-50"
+                >
+                  {isScanning ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{scanStatus || "جاري مسح البطاقة..."}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="w-4 h-4" />
+                      <span>تصوير البطاقة المشتراة بالذكاء الاصطناعي 📸</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
               {/* Number Selector Grid */}
               <div className="space-y-4">
                 <div>
@@ -1308,6 +1412,36 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                   className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-500"
                 >
                   <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* AI Camera Scan Action for Winning Numbers */}
+              <div className="mb-3">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  ref={drawFileInputRef}
+                  onChange={e => handleScanFile(e, "draw")}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  disabled={isScanning}
+                  onClick={() => drawFileInputRef.current?.click()}
+                  className="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 hover:opacity-95 active:scale-98 transition disabled:opacity-50"
+                >
+                  {isScanning ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{scanStatus || "جاري مسح شاشة السحب..."}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="w-4 h-4" />
+                      <span>تصوير شاشة السحب / الأرقام الفائزة بالذكاء الاصطناعي 📸</span>
+                    </>
+                  )}
                 </button>
               </div>
 
