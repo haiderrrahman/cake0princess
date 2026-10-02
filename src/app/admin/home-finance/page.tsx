@@ -220,6 +220,7 @@ const EXPENSE_CATEGORIES = [
   { label: "مواد سفري", icon: "🥡", color: "from-orange-500 to-amber-600" },
   { label: "منزلية", icon: "🏡", color: "from-cyan-600 to-blue-600" },
   { label: "كهربائية", icon: "🔌", color: "from-amber-400 to-yellow-500" },
+  { label: "طلعات وجولات", icon: "🎡", color: "from-emerald-500 via-teal-500 to-cyan-600" },
 ];
 
 const BILL_CATEGORIES = ["كهرباء", "ماء", "إنترنت", "إيجار", "هاتف", "تنظيف", "غاز"];
@@ -5601,6 +5602,67 @@ setEditTrip(null);
                   >
                     فتح المركز ↗
                   </button>
+                </div>
+              )}
+
+              {expCategoryInput === "طلعات وجولات" && (
+                <div className="p-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border border-teal-200 dark:border-teal-500/30 rounded-2xl space-y-2 animate-in fade-in duration-200 text-right" dir="rtl">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🎡</span>
+                    <span className="font-black text-xs text-teal-800 dark:text-teal-300">
+                      طلعات وجولات (بغداد والمحافظات) - اقتراحات سريعة للوجهة والنشاط:
+                    </span>
+                  </div>
+                  
+                  {/* Destination shortcuts */}
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    <span className="text-[10px] font-bold text-gray-400">الوجهة:</span>
+                    {[
+                      "جولة بغداد", "المتنبي والرشيد", "كورنيش وجادرية", "المنصور والكرادة", 
+                      "متنزه الزوراء", "كربلاء المقدسة", "النجف الأشرف", "بابل والآثار", 
+                      "السليمانية", "أربيل", "شط العرب والبصرة"
+                    ].map((loc) => (
+                      <button
+                        key={loc}
+                        type="button"
+                        onClick={() => {
+                          if (!expNameInput || expNameInput === "غير محدد") {
+                            setExpNameInput(loc);
+                          } else if (!expNameInput.includes(loc)) {
+                            setExpNameInput(prev => `${prev} - ${loc}`);
+                          }
+                        }}
+                        className="px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-teal-200 dark:border-teal-700/50 text-teal-800 dark:text-teal-200 text-[11px] font-bold hover:bg-teal-50 dark:hover:bg-zinc-700 transition active:scale-95"
+                      >
+                        + {loc}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Activity / Expense type shortcuts */}
+                  <div className="flex flex-wrap gap-1.5 items-center pt-1 border-t border-teal-100 dark:border-zinc-800">
+                    <span className="text-[10px] font-bold text-gray-400">نوع الصرف:</span>
+                    {[
+                      "مطعم وكافيه", "بنزين وكروة تكسي", "تذاكر وألعاب", "عصائر ومرطبات", "مسواك وتسوق جولة"
+                    ].map((act) => (
+                      <button
+                        key={act}
+                        type="button"
+                        onClick={() => {
+                          const existingIndex = expenseItems.findIndex(it => it.name === act);
+                          if (existingIndex === -1) {
+                            setExpenseItems(prev => [...prev, { id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, name: act, price: 0, quantity: 1, isChecked: true }]);
+                          }
+                          if (!expNameInput) {
+                            setExpNameInput(`جولة - ${act}`);
+                          }
+                        }}
+                        className="px-2 py-0.5 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 text-[10px] font-bold hover:bg-teal-100 transition active:scale-95"
+                      >
+                        + {act}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
