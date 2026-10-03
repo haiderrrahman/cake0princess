@@ -556,3 +556,13 @@ img {
 .label-sm {
   @apply block text-[13px] font-black text-gray-700 dark:text-gray-300 mb-2 px-1;
 }
+
+/* Custom Notification Toast Transparency Override */
+[data-sonner-toast]:has([data-custom-notification]) {
+  background: transparent !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+

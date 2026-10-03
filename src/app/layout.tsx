@@ -88,20 +88,7 @@ export default function RootLayout({
                 <Toaster 
                   position="top-center" 
                   toastOptions={{
-                    duration: 2000,
-                    style: {
-                      background: '#18181b', // dark gray
-                      color: '#fff',
-                      borderRadius: '16px',
-                      padding: '12px 24px',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-                      border: 'none',
-                    },
-                    classNames: {
-                      toast: 'group toast group-[.toaster]:bg-[#18181b] group-[.toaster]:text-white group-[.toaster]:border-none group-[.toaster]:shadow-lg',
-                    }
+                    duration: 2500,
                   }}
                 />
                 <InstallPrompt />

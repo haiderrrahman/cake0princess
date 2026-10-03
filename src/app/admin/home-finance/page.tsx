@@ -3385,7 +3385,6 @@ setEditTrip(null);
                 { label: "دين", icon: Banknote, color: "from-cyan-500 to-blue-500", action: () => setShowDebtModal(true) },
                 { label: "خطة مستقبلية", icon: Target, color: "from-fuchsia-500 to-pink-500", action: () => setShowFuturePlanModal(true) },
                 { label: "رحلة ومصاريف", icon: Plane, color: "from-sky-500 to-blue-500", action: () => setShowTravelShortcutModal(true) },
-                { label: "مركز اللوتو 🎰", icon: Sparkles, color: "from-purple-600 via-pink-600 to-amber-500", action: () => setShowLottoTrackerModal(true) },
               ].map(q => {
                 const Icon = q.icon;
                 return (

@@ -46,33 +46,58 @@ export default function GlobalActions() {
     if (newUnread.length > 0) {
       newUnread.forEach(n => {
         toast.custom((t) => (
-          <div className={`animate-in slide-in-from-top-5 max-w-sm w-full bg-white dark:bg-zinc-900 shadow-xl rounded-2xl pointer-events-auto flex ring-1 ring-black/5 dark:ring-white/10 overflow-hidden cursor-pointer`}
-               onClick={() => { 
-                 toast.dismiss(t as string | number); 
-                 if (n.link) {
-                   router.push(n.link);
-                 } else {
-                   setIsOpen(true); 
-                 }
-               }}>
+          <div
+            data-custom-notification="true"
+            className="animate-in slide-in-from-top-4 max-w-sm w-full bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl pointer-events-auto flex items-center justify-between ring-1 ring-black/10 dark:ring-white/10 overflow-hidden cursor-pointer border border-gray-100 dark:border-zinc-800 transition hover:shadow-3xl"
+            onClick={() => { 
+              toast.dismiss(t as string | number); 
+              if (n.link) {
+                router.push(n.link);
+              } else {
+                setIsOpen(true); 
+              }
+            }}
+          >
             <div className="flex-1 w-0 p-3">
-              <div className="flex items-start gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-[#e8456b]/10 text-[#e8456b]`}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-[#e8456b]/10 text-[#e8456b]">
                   {n.imageUrl ? <img src={n.imageUrl} alt="" className="w-full h-full object-cover rounded-full" /> : <Bell className="w-5 h-5" />}
                 </div>
-                <div className="ml-3 flex-1 text-right mt-1">
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">إشعار جديد</p>
-                  <p className="mt-0.5 text-xs text-gray-500 line-clamp-1">{n.title}</p>
+                <div className="flex-1 text-right min-w-0">
+                  <p className="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1.5 justify-end">
+                    <span>إشعار جديد</span>
+                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-300 font-bold truncate">{n.title}</p>
                 </div>
               </div>
             </div>
-            <div className="flex border-r border-gray-100 dark:border-zinc-800">
-              <button onClick={(e) => { e.stopPropagation(); toast.dismiss(t as string | number); }} className="w-full p-4 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition">
+            <div className="flex border-r border-gray-100 dark:border-zinc-800 self-stretch">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toast.dismiss(t as string | number); }}
+                className="w-11 h-full flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
-        ), { duration: 4000, position: 'top-center' });
+        ), {
+          duration: 4000,
+          position: 'top-center',
+          unstyled: true,
+          className: '!bg-transparent !p-0 !border-0 !shadow-none !ring-0 !w-full !max-w-sm flex justify-center mx-auto',
+          style: {
+            background: 'transparent',
+            backgroundColor: 'transparent',
+            padding: 0,
+            border: 'none',
+            boxShadow: 'none',
+            outline: 'none',
+            width: '100%',
+            maxWidth: '24rem',
+          }
+        });
       });
       setNotifiedIds(prev => [...prev, ...newUnread.map(n => n.id)]);
     }

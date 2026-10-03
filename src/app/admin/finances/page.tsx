@@ -391,34 +391,44 @@ export default function FinancesAdmin() {
       <div className="bg-gradient-to-l from-purple-900 to-indigo-900 pt-16 pb-8 px-5 rounded-b-[40px] shadow-lg relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
         
-        <div className="relative z-10 flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Link href="/admin" className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 hover:bg-white/20 transition">
-              <ArrowRight className="w-5 h-5 text-white" />
-            </Link>
-            <div>
-              <h1 className="text-xl font-black text-white mb-1">المالية والمصروفات</h1>
-              <p className="text-xs text-purple-200 font-bold">تحليل الأرباح وإدارة النفقات</p>
+        <div className="relative z-10 mb-6 space-y-3">
+          {/* Top Row: Back Navigation, Title & Primary Action */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Link href="/admin" className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 hover:bg-white/20 transition shrink-0">
+                <ArrowRight className="w-5 h-5 text-white" />
+              </Link>
+              <div>
+                <h1 className="text-xl font-black text-white leading-tight">المالية والمصروفات</h1>
+                <p className="text-xs text-purple-200 font-bold">تحليل الأرباح وإدارة النفقات</p>
+              </div>
             </div>
+
+            <button 
+              onClick={openAddModal} 
+              className="bg-white text-purple-900 rounded-xl px-3.5 py-2.5 flex items-center gap-1.5 text-xs font-black shadow-md hover:bg-purple-50 transition active:scale-95 shrink-0"
+            >
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>إضافة مصروف</span>
+            </button>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+
+          {/* Second Row: Secondary Actions in a clean 2-column grid */}
+          <div className="grid grid-cols-2 gap-2.5 pt-1">
             <button
               onClick={() => setIsScanCakeInvoiceOpen(true)}
-              className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 rounded-xl px-3 py-2 flex items-center gap-1.5 text-xs font-black shadow-sm active:scale-95 transition"
+              className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 rounded-xl py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-black shadow-sm active:scale-95 transition border border-amber-300/40"
             >
-              <Sparkles className="w-4 h-4 text-amber-950" />
-              <span>📸 تصوير فاتورة كيك (AI)</span>
+              <Sparkles className="w-4 h-4 text-amber-950 shrink-0" />
+              <span className="truncate">📸 تصوير فاتورة كيك (AI)</span>
             </button>
             <Link
               href="/admin/hub?tab=inventory"
-              className="bg-white/10 hover:bg-white/20 text-white rounded-xl px-3 py-2 flex items-center gap-1.5 text-xs font-black backdrop-blur-md transition"
+              className="bg-white/10 hover:bg-white/20 text-white rounded-xl py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-black backdrop-blur-md border border-white/10 transition active:scale-95"
             >
-              <Clock className="w-4 h-4" />
-              <span>المخزن ودورة النفاد</span>
+              <Clock className="w-4 h-4 shrink-0 text-purple-200" />
+              <span className="truncate">المخزن ودورة النفاد</span>
             </Link>
-            <button onClick={openAddModal} className="bg-white text-purple-900 rounded-xl px-3.5 py-2 flex items-center gap-1.5 text-xs font-black shadow-sm hover:bg-gray-100 transition active:scale-95">
-              <Plus className="w-4 h-4" /> إضافة مصروف
-            </button>
           </div>
         </div>
 
