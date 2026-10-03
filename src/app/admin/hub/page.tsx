@@ -7,7 +7,7 @@ import {
   DollarSign, AlertTriangle, TrendingUp, Smartphone, Receipt,
   BarChart3, RefreshCw, ChevronRight, User, Phone, MapPin,
   Calendar, ArrowRight, Search, Filter, Edit, ChevronDown, GraduationCap, PlayCircle, Image as ImageIcon, Check, MessageCircle, Sparkles, PackageCheck, Banknote,
-  Trash2, ExternalLink, ShoppingCart
+  Trash2, ExternalLink, ShoppingCart, Store, ChevronUp, Layers, Copy, ChevronLeft, X
 } from "lucide-react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, query, orderBy, limit, onSnapshot, increment, where } from "firebase/firestore";
 import { toast } from "sonner";
@@ -152,6 +152,17 @@ function AdminHubContent() {
   const [cycleFilterStatus, setCycleFilterStatus] = useState<'all' | 'critical' | 'warning' | 'safe'>('all');
   const [purchaseInvoiceFilter, setPurchaseInvoiceFilter] = useState<'all' | 'invoiced' | 'non_invoiced'>('all');
   const [purchaseSearchQuery, setPurchaseSearchQuery] = useState("");
+  const [purchaseViewMode, setPurchaseViewMode] = useState<'invoices' | 'items'>('invoices');
+  const [expandedInvoiceIds, setExpandedInvoiceIds] = useState<Record<string, boolean>>({});
+  const [viewingInvoice, setViewingInvoice] = useState<any | null>(null);
+  const [invoiceItemFilter, setInvoiceItemFilter] = useState("");
+
+  const toggleExpandInvoice = (invId: string) => {
+    setExpandedInvoiceIds(prev => ({
+      ...prev,
+      [invId]: !prev[invId]
+    }));
+  };
 
   const [stats, setStats] = useState<any>(() => {
     if (typeof window !== 'undefined') {
@@ -909,11 +920,92 @@ function AdminHubContent() {
         const matchesName = (p.itemName || "").toLowerCase().includes(s);
         const matchesStore = (p.storeName || "").toLowerCase().includes(s);
         const matchesCat = (p.category || "").toLowerCase().includes(s);
-        if (!matchesName && !matchesStore && !matchesCat) return false;
+        const matchesInvNum = (p.invoiceNumber || "").toLowerCase().includes(s);
+        if (!matchesName && !matchesStore && !matchesCat && !matchesInvNum) return false;
       }
       return true;
     });
   }, [purchases, purchaseInvoiceFilter, purchaseSearchQuery]);
+
+  const groupedInvoices = useMemo(() => {
+    const groups: Record<string, {
+      id: string;
+      invoiceId?: string;
+      storeName: string;
+      invoiceNumber: string;
+      date: string;
+      hasInvoice: boolean;
+      paymentSource: "none" | "cake" | "salary" | "split";
+      splitDebtAmount?: number;
+      totalAmount: number;
+      items: CakeMaterialPurchase[];
+    }> = {};
+
+    filteredPurchases.forEach((p) => {
+      let key = p.invoiceId;
+      if (!key) {
+        if (p.hasInvoice && (p.invoiceNumber || p.storeName)) {
+          key = `inv_${p.purchaseDate}_${p.storeName || 'store'}_${p.invoiceNumber || 'no_num'}`;
+        } else {
+          key = `cash_${p.purchaseDate}_${p.storeName || 'direct'}_${p.id}`;
+        }
+      }
+
+      if (!groups[key]) {
+        groups[key] = {
+          id: key,
+          invoiceId: p.invoiceId,
+          storeName: p.storeName || (p.hasInvoice ? "معرض مستلزمات الكيك" : "مشتريات نقدية مباشرة"),
+          invoiceNumber: p.invoiceNumber || "",
+          date: p.purchaseDate || "",
+          hasInvoice: p.hasInvoice,
+          paymentSource: p.paymentSource || "cake",
+          splitDebtAmount: p.splitDebtAmount || 0,
+          totalAmount: 0,
+          items: []
+        };
+      }
+
+      groups[key].items.push(p);
+      groups[key].totalAmount += Number(p.totalPrice || 0);
+      if (!groups[key].storeName && p.storeName) groups[key].storeName = p.storeName;
+      if (!groups[key].invoiceNumber && p.invoiceNumber) groups[key].invoiceNumber = p.invoiceNumber;
+    });
+
+    return Object.values(groups).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  }, [filteredPurchases]);
+
+  const handleDeleteWholeInvoice = async (inv: {
+    id: string;
+    invoiceId?: string;
+    storeName: string;
+    items: CakeMaterialPurchase[];
+    totalAmount: number;
+  }) => {
+    const confirmed = await customConfirm(
+      `هل أنت متأكد من حذف فاتورة "${inv.storeName}" (${inv.items.length} مواد) بإجمالي ${inv.totalAmount.toLocaleString()} د.ع نهائياً؟`
+    );
+    if (!confirmed) return;
+
+    try {
+      for (const item of inv.items) {
+        if (item.id) {
+          await deleteDoc(doc(db, "cake_material_purchases", item.id));
+        }
+      }
+      if (inv.invoiceId) {
+        try {
+          await deleteDoc(doc(db, "cake_invoices", inv.invoiceId));
+        } catch (e) {
+          console.warn("Could not delete from cake_invoices:", e);
+        }
+      }
+      toast.success("تم حذف الفاتورة وجميع موادها بنجاح");
+    } catch (e) {
+      console.error(e);
+      toast.error("حدث خطأ أثناء حذف الفاتورة");
+    }
+  };
 
   const handleDeletePurchase = async (purchaseId: string) => {
     if (!(await customConfirm("هل أنت متأكد من حذف هذا السجل نهائياً؟"))) return;
@@ -2250,18 +2342,47 @@ function AdminHubContent() {
                 {inventorySubTab === "purchases" && (
                   <div className="space-y-4">
                     {/* Search & Toggle Filters */}
-                    <div className="bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm space-y-2.5">
+                    <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm space-y-3">
                       <div className="relative">
                         <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
                           type="text"
-                          placeholder="ابحث باسم المادة أو المتجر..."
+                          placeholder="ابحث باسم المادة، المتجر، أو رقم الفاتورة..."
                           value={purchaseSearchQuery}
                           onChange={(e) => setPurchaseSearchQuery(e.target.value)}
                           className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-xs font-bold rounded-xl py-2.5 pr-9 pl-3 focus:outline-none focus:border-blue-500"
                         />
                       </div>
 
+                      {/* View Mode Toggle: Invoices Grouped vs Individual Items */}
+                      <div className="flex gap-1 bg-blue-50/80 dark:bg-zinc-800/80 p-1 rounded-xl border border-blue-100 dark:border-zinc-700/60">
+                        <button
+                          type="button"
+                          onClick={() => setPurchaseViewMode("invoices")}
+                          className={`flex-1 py-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 ${
+                            purchaseViewMode === "invoices"
+                              ? "bg-white dark:bg-zinc-700 text-blue-900 dark:text-blue-100 shadow-sm"
+                              : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                          }`}
+                        >
+                          <Store className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                          <span>📑 فواتير مجمعة ({groupedInvoices.length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPurchaseViewMode("items")}
+                          className={`flex-1 py-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 ${
+                            purchaseViewMode === "items"
+                              ? "bg-white dark:bg-zinc-700 text-blue-900 dark:text-blue-100 shadow-sm"
+                              : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                          }`}
+                        >
+                          <Layers className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                          <span>📦 كل المواد المفردة ({filteredPurchases.length})</span>
+                        </button>
+                      </div>
+
+                      {/* Filter by Invoice Status */}
                       <div className="flex gap-1 bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl">
                         <button
                           type="button"
@@ -2299,95 +2420,241 @@ function AdminHubContent() {
                       </div>
                     </div>
 
-                    {/* Square Purchases Grid (2 columns on mobile!) */}
-                    {filteredPurchases.length === 0 ? (
-                      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800 space-y-3">
-                        <Receipt className="w-10 h-10 text-gray-300 mx-auto" />
-                        <h4 className="font-black text-gray-700 dark:text-gray-300 text-sm">لا توجد مشتريات مسجلة بعد</h4>
-                        <p className="text-xs text-gray-500">يمكنك تصوير فاتورة بالـ AI أو تسجيل شراء مباشر لحساب تواريخ الاستهلاك</p>
-                        <div className="flex justify-center gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => setIsScanCakeInvoiceOpen(true)}
-                            className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl transition"
-                          >
-                            📸 تصوير فاتورة
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setManualPurchaseInitialItem(null);
-                              setIsManualCakePurchaseOpen(true);
-                            }}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-3.5 py-2 rounded-xl transition"
-                          >
-                            🛒 تسجيل شراء
-                          </button>
+                    {/* Content View: Invoices vs Items */}
+                    {purchaseViewMode === "invoices" ? (
+                      /* ── GROUPED INVOICES VIEW ── */
+                      groupedInvoices.length === 0 ? (
+                        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800 space-y-3">
+                          <Receipt className="w-10 h-10 text-gray-300 mx-auto" />
+                          <h4 className="font-black text-gray-700 dark:text-gray-300 text-sm">لا توجد فواتير مطابقة للبحث</h4>
+                          <p className="text-xs text-gray-500">يمكنك تصوير فاتورة بالـ AI لتسجيل جميع موادها دفعة واحدة</p>
+                          <div className="flex justify-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsScanCakeInvoiceOpen(true)}
+                              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl transition"
+                            >
+                              📸 تصوير فاتورة
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {filteredPurchases.map(p => (
-                          <div
-                            key={p.id}
-                            className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm p-3 flex flex-col justify-between relative hover:shadow-md transition"
-                          >
-                            <div>
-                              <div className="flex items-center justify-between gap-1 mb-1.5">
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate max-w-[60%] ${CAT_COLORS[p.category] || "bg-gray-100 text-gray-600"}`}>
-                                  {p.category || "أخرى"}
-                                </span>
-                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${p.hasInvoice ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"}`}>
-                                  {p.hasInvoice ? "🧾 بفاتورة" : "🛒 كاش"}
-                                </span>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                          {groupedInvoices.map((inv) => (
+                            <div
+                              key={inv.id}
+                              className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-sm hover:shadow-md transition p-4 flex flex-col justify-between space-y-3 relative"
+                            >
+                              {/* Header: Store Name, Invoice # & Delete */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                                    <Store className="w-4 h-4" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className="font-black text-sm text-gray-900 dark:text-white truncate">
+                                      {inv.storeName}
+                                    </h4>
+                                    <p className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
+                                      <Calendar className="w-3 h-3" /> {inv.date || "بدون تاريخ"}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {inv.invoiceNumber && (
+                                    <span className="bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-lg text-xs font-mono font-black border border-slate-200 dark:border-zinc-700">
+                                      #{inv.invoiceNumber}
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteWholeInvoice(inv)}
+                                    className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-zinc-800 transition"
+                                    title="حذف الفاتورة كاملة"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </div>
 
-                              <h4 className="font-black text-xs sm:text-sm text-gray-900 dark:text-white line-clamp-2 leading-tight mb-2">
-                                {p.itemName}
-                              </h4>
+                              {/* Badges: Has Invoice & Payment Source */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                                  inv.hasInvoice
+                                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                                    : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                }`}>
+                                  {inv.hasInvoice ? "🧾 بفاتورة" : "🛒 شراء كاش"}
+                                </span>
 
-                              <div className="bg-gray-50 dark:bg-zinc-800/80 p-2 rounded-xl text-[10px] space-y-1 mb-2">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-gray-500 font-bold">الكمية:</span>
-                                  <span className="font-black text-gray-800 dark:text-gray-200">{p.quantity} {p.unit}</span>
+                                {inv.paymentSource === "salary" ? (
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                                    💳 دين من الراتب
+                                  </span>
+                                ) : inv.paymentSource === "split" ? (
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">
+                                    🔀 مجزأ (دين: {Number(inv.splitDebtAmount || 0).toLocaleString()} د.ع)
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                                    🎂 أموال الكيك
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Summary Box */}
+                              <div className="bg-gray-50 dark:bg-zinc-800/70 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 flex justify-between items-center">
+                                <div>
+                                  <p className="text-[10px] text-gray-400 font-bold mb-0.5">إجمالي الفاتورة</p>
+                                  <p className="font-black text-base text-rose-600 dark:text-rose-400">
+                                    {inv.totalAmount.toLocaleString()} <span className="text-xs font-normal">د.ع</span>
+                                  </p>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-gray-500 font-bold">المبلغ:</span>
-                                  <span className="font-black text-purple-700 dark:text-purple-300">{Number(p.totalPrice || 0).toLocaleString()} د.ع</span>
-                                </div>
-                                <div className="flex justify-between items-center pt-0.5 border-t border-gray-200/50 dark:border-zinc-700/50 text-[9px] text-gray-500">
-                                  <span>📅 {p.purchaseDate}</span>
-                                  {p.storeName && <span className="truncate max-w-[45%]">🏪 {p.storeName}</span>}
+                                <div className="text-left">
+                                  <p className="text-[10px] text-gray-400 font-bold mb-0.5">عدد المواد</p>
+                                  <p className="font-black text-xs text-gray-800 dark:text-gray-200 bg-white dark:bg-zinc-700 px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-600">
+                                    {inv.items.length} مواد
+                                  </p>
                                 </div>
                               </div>
-                            </div>
 
-                            <div className="flex items-center justify-between gap-1 pt-1 mt-auto border-t border-gray-100 dark:border-zinc-800">
-                              {p.invoiceImageUrl ? (
-                                <button
-                                  type="button"
-                                  onClick={() => window.open(p.invoiceImageUrl, "_blank")}
-                                  className="text-[10px] text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 py-1 px-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-zinc-800 transition"
-                                >
-                                  <ExternalLink className="w-3 h-3" />
-                                  <span>الوصل</span>
-                                </button>
-                              ) : (
-                                <span className="text-[9px] text-gray-400">بدون وصل</span>
-                              )}
-                              
+                              {/* Action: Open Invoice Details Modal (Matching Home Finance) */}
                               <button
                                 type="button"
-                                onClick={() => handleDeletePurchase(p.id!)}
-                                className="text-gray-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 dark:hover:bg-zinc-800 transition"
-                                title="حذف"
+                                onClick={() => {
+                                  setViewingInvoice(inv);
+                                  setInvoiceItemFilter("");
+                                }}
+                                className="w-full py-2 px-3 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-black flex items-center justify-between border border-indigo-100 dark:border-indigo-800/40 transition active:scale-[0.98]"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <span className="flex items-center gap-1.5">
+                                  <Receipt className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                  <span>تفاصيل القائمة ({inv.items.length} مواد)</span>
+                                </span>
+                                <ChevronLeft className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                               </button>
+
+                              {/* Accordion Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => toggleExpandInvoice(inv.id)}
+                                className="w-full text-center text-[10px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center justify-center gap-1 pt-0.5"
+                              >
+                                <span>{expandedInvoiceIds[inv.id] ? "إخفاء المعاينة السريعة" : "معاينة المواد في البطاقة"}</span>
+                                {expandedInvoiceIds[inv.id] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              </button>
+
+                              {/* Inline preview if expanded */}
+                              {expandedInvoiceIds[inv.id] && (
+                                <div className="bg-gray-50/80 dark:bg-zinc-800/80 rounded-xl p-2.5 space-y-1.5 border border-gray-100 dark:border-zinc-700 max-h-40 overflow-y-auto custom-scrollbar">
+                                  {inv.items.map((it, idx) => (
+                                    <div key={it.id || idx} className="flex justify-between items-center text-xs py-1 border-b border-gray-100 dark:border-zinc-700/50 last:border-0">
+                                      <span className="font-bold text-gray-800 dark:text-gray-200 truncate max-w-[60%]">
+                                        {idx + 1}. {it.itemName} ({it.quantity} {it.unit})
+                                      </span>
+                                      <span className="font-black text-rose-600 dark:text-rose-400 text-[11px]">
+                                        {Number(it.totalPrice || 0).toLocaleString()} د.ع
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
+                          ))}
+                        </div>
+                      )
+                    ) : (
+                      /* ── INDIVIDUAL ITEMS VIEW (Square grid) ── */
+                      filteredPurchases.length === 0 ? (
+                        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800 space-y-3">
+                          <Receipt className="w-10 h-10 text-gray-300 mx-auto" />
+                          <h4 className="font-black text-gray-700 dark:text-gray-300 text-sm">لا توجد مشتريات مسجلة بعد</h4>
+                          <p className="text-xs text-gray-500">يمكنك تصوير فاتورة بالـ AI أو تسجيل شراء مباشر لحساب تواريخ الاستهلاك</p>
+                          <div className="flex justify-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsScanCakeInvoiceOpen(true)}
+                              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl transition"
+                            >
+                              📸 تصوير فاتورة
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setManualPurchaseInitialItem(null);
+                                setIsManualCakePurchaseOpen(true);
+                              }}
+                              className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-3.5 py-2 rounded-xl transition"
+                            >
+                              🛒 تسجيل شراء
+                            </button>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {filteredPurchases.map(p => (
+                            <div
+                              key={p.id}
+                              className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm p-3 flex flex-col justify-between relative hover:shadow-md transition"
+                            >
+                              <div>
+                                <div className="flex items-center justify-between gap-1 mb-1.5">
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate max-w-[60%] ${CAT_COLORS[p.category] || "bg-gray-100 text-gray-600"}`}>
+                                    {p.category || "أخرى"}
+                                  </span>
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${p.hasInvoice ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"}`}>
+                                    {p.hasInvoice ? "🧾 بفاتورة" : "🛒 كاش"}
+                                  </span>
+                                </div>
+
+                                <h4 className="font-black text-xs sm:text-sm text-gray-900 dark:text-white line-clamp-2 leading-tight mb-2">
+                                  {p.itemName}
+                                </h4>
+
+                                <div className="bg-gray-50 dark:bg-zinc-800/80 p-2 rounded-xl text-[10px] space-y-1 mb-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-gray-500 font-bold">الكمية:</span>
+                                    <span className="font-black text-gray-800 dark:text-gray-200">{p.quantity} {p.unit}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-gray-500 font-bold">المبلغ:</span>
+                                    <span className="font-black text-purple-700 dark:text-purple-300">{Number(p.totalPrice || 0).toLocaleString()} د.ع</span>
+                                  </div>
+                                  <div className="flex justify-between items-center pt-0.5 border-t border-gray-200/50 dark:border-zinc-700/50 text-[9px] text-gray-500">
+                                    <span>📅 {p.purchaseDate}</span>
+                                    {p.storeName && <span className="truncate max-w-[45%]">🏪 {p.storeName}</span>}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between gap-1 pt-1 mt-auto border-t border-gray-100 dark:border-zinc-800">
+                                {p.invoiceImageUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => window.open(p.invoiceImageUrl, "_blank")}
+                                    className="text-[10px] text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 py-1 px-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-zinc-800 transition"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                    <span>الوصل</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-[9px] text-gray-400">بدون وصل</span>
+                                )}
+                                
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeletePurchase(p.id!)}
+                                  className="text-gray-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 dark:hover:bg-zinc-800 transition"
+                                  title="حذف"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
                     )}
                   </div>
                 )}
@@ -2683,6 +2950,146 @@ function AdminHubContent() {
           customerName={customerProfile.name}
           customerPhone={customerProfile.phone}
         />
+      )}
+
+      {/* ─── INVOICE DETAILS MODAL SHEET (matching Home Finance) ─── */}
+      {viewingInvoice && (
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-2xl rounded-t-[32px] sm:rounded-[32px] px-5 sm:px-7 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[92svh] overflow-y-auto mb-[75px] sm:mb-0 custom-scrollbar">
+            
+            {/* Header */}
+            <div className="flex justify-between items-start mb-4 pb-4 border-b border-gray-100 dark:border-zinc-800">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xl">🧾</span>
+                  <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white">
+                    فاتورة: {viewingInvoice.storeName}
+                  </h3>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400">
+                  {viewingInvoice.invoiceNumber && (
+                    <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                      #{viewingInvoice.invoiceNumber}
+                    </span>
+                  )}
+                  <span>•</span>
+                  <span>{viewingInvoice.date || "بدون تاريخ"}</span>
+                  <span>•</span>
+                  <span className="text-rose-600 dark:text-rose-400 font-black">
+                    {Number(viewingInvoice.totalAmount || 0).toLocaleString()} د.ع
+                  </span>
+                  <span>•</span>
+                  <span>{(viewingInvoice.items || []).length} مواد</span>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setViewingInvoice(null)} 
+                className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition"
+              >
+                <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {/* Search inside invoice items */}
+            <div className="relative mb-3">
+              <input
+                type="text"
+                placeholder="ابحث في مواد الفاتورة (مثال: طحين، فستق، كريمة...)"
+                value={invoiceItemFilter}
+                onChange={e => setInvoiceItemFilter(e.target.value)}
+                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 pr-10 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition"
+              />
+              <Search className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+              {invoiceItemFilter && (
+                <button type="button" onClick={() => setInvoiceItemFilter("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Items Table */}
+            <div className="bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
+              <div className="grid grid-cols-12 gap-2 px-3 py-2.5 bg-gray-100/70 dark:bg-zinc-800/60 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
+                <div className="col-span-1 text-center">#</div>
+                <div className="col-span-4">اسم المادة</div>
+                <div className="col-span-3 text-center">الكمية والوحدة</div>
+                <div className="col-span-2 text-center">سعر المفرد</div>
+                <div className="col-span-2 text-left">الإجمالي (د.ع)</div>
+              </div>
+
+              <div className="divide-y divide-gray-100 dark:divide-zinc-800/80 max-h-[350px] overflow-y-auto custom-scrollbar">
+                {(() => {
+                  const filtered = (viewingInvoice.items || []).filter((item: any) => 
+                    !invoiceItemFilter || (item.itemName || "").toLowerCase().includes(invoiceItemFilter.toLowerCase())
+                  );
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-xs font-bold text-gray-400">
+                        {invoiceItemFilter ? "لا توجد مواد مطابقة للبحث" : "لا توجد مواد في هذه القائمة"}
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((item: any, idx: number) => (
+                    <div key={item.id || idx} className="grid grid-cols-12 gap-2 px-3 py-2.5 text-xs items-center hover:bg-white dark:hover:bg-zinc-800/50 transition">
+                      <div className="col-span-1 text-center font-bold text-gray-400 text-[11px]">{idx + 1}</div>
+                      <div className="col-span-4 font-bold text-gray-800 dark:text-gray-200 truncate">{item.itemName}</div>
+                      <div className="col-span-3 text-center font-black text-gray-600 dark:text-gray-300 bg-gray-200/60 dark:bg-zinc-800 px-1 py-0.5 rounded-md text-[11px]">
+                        {item.quantity} {item.unit || ""}
+                      </div>
+                      <div className="col-span-2 text-center text-gray-500 font-bold text-[11px]">
+                        {Number(item.unitPrice || 0).toLocaleString()}
+                      </div>
+                      <div className="col-span-2 text-left font-black text-rose-600 dark:text-rose-400">
+                        {Number(item.totalPrice || 0).toLocaleString()}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Total Footer */}
+              <div className="bg-gray-100/90 dark:bg-zinc-800 px-4 py-3 border-t border-gray-200 dark:border-zinc-700 flex justify-between items-center text-xs">
+                <span className="font-bold text-gray-600 dark:text-gray-300">
+                  إجمالي الفاتورة: {(viewingInvoice.items || []).length} مادة
+                </span>
+                <span className="font-black text-sm text-rose-600 dark:text-rose-400">
+                  {Number(viewingInvoice.totalAmount || 0).toLocaleString()} د.ع
+                </span>
+              </div>
+            </div>
+
+            {/* Actions Bar */}
+            <div className="flex flex-wrap gap-2.5 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  const lines = (viewingInvoice.items || []).map((it: any, i: number) => `${i + 1}. ${it.itemName} (${it.quantity} ${it.unit || ''}) - ${Number(it.totalPrice || 0).toLocaleString()} د.ع`);
+                  const text = `🧾 فاتورة: ${viewingInvoice.storeName}\n${viewingInvoice.invoiceNumber ? `رقم الفاتورة: #${viewingInvoice.invoiceNumber}\n` : ''}📅 التاريخ: ${viewingInvoice.date}\n💰 الإجمالي: ${Number(viewingInvoice.totalAmount || 0).toLocaleString()} د.ع\n\nالمواد:\n${lines.join("\n")}`;
+                  navigator.clipboard.writeText(text);
+                  toast.success("تم نسخ قائمة الفاتورة إلى الحافظة 📋");
+                }}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                <Copy className="w-4 h-4" /> نسخ القائمة
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const target = viewingInvoice;
+                  setViewingInvoice(null);
+                  await handleDeleteWholeInvoice(target);
+                }}
+                className="bg-red-50 hover:bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/40 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                <Trash2 className="w-4 h-4" /> حذف الفاتورة
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

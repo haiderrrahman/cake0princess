@@ -384,6 +384,14 @@ export async function recordCakeInvoiceBatch(data: {
     imageUrl: "", // No invoice image attached as requested
     paymentSource: paymentSource || "cake",
     splitDebtAmount: Number(splitDebtAmount) || 0,
+    items: items.map((i) => ({
+      name: i.name || "",
+      quantity: Number(i.quantity) || 0,
+      unit: i.unit || "كغم",
+      unitPrice: Number(i.unitPrice) || 0,
+      totalPrice: Number(i.totalPrice) || 0,
+      category: i.category || "أخرى"
+    })),
     createdAt: serverTimestamp()
   });
 
@@ -458,39 +466,69 @@ export async function recordCakeInvoiceBatch(data: {
     const month = !isNaN(pDate.getTime()) ? pDate.getMonth() + 1 : new Date().getMonth() + 1;
     const itemsSummary = items.map((i) => `${i.name} (${i.quantity} ${i.unit})`).slice(0, 3).join("، ") + (items.length > 3 ? "..." : "");
 
+    const mappedItems = items.map((i) => ({
+      name: i.name,
+      quantity: Number(i.quantity) || 1,
+      unit: i.unit || "كغم",
+      price: Number(i.totalPrice) || (Number(i.unitPrice || 0) * Number(i.quantity || 1)),
+      unitPrice: Number(i.unitPrice) || 0,
+      category: i.category || "أخرى"
+    }));
+
     if (paymentSource === "split") {
       const debtAmt = Number(splitDebtAmount) || 0;
       const cakeAmt = Math.max(0, totalAmount - debtAmt);
 
       if (debtAmt > 0) {
         await addDoc(collection(db, "expenses"), {
+          title: storeName ? `فاتورة: ${storeName}` : "فاتورة مواد كيك",
           amount: debtAmt,
           category: "مشتريات مخزنية",
           description: `فاتورة مواد كيك: ${storeName} [${items.length} مواد: ${itemsSummary}] (دين من الراتب)`,
           month,
+          date: invoiceDate,
           invoiceId,
+          invoiceNumber: invoiceNumber || "",
+          storeName: storeName || "",
+          itemCount: items.length,
+          items: mappedItems,
+          isInventoryExpense: true,
           createdAt: serverTimestamp(),
           isDebt: true
         });
       }
       if (cakeAmt > 0) {
         await addDoc(collection(db, "expenses"), {
+          title: storeName ? `فاتورة: ${storeName}` : "فاتورة مواد كيك",
           amount: cakeAmt,
           category: "مشتريات مخزنية",
           description: `فاتورة مواد كيك: ${storeName} [${items.length} مواد: ${itemsSummary}] (أموال الكيك)`,
           month,
+          date: invoiceDate,
           invoiceId,
+          invoiceNumber: invoiceNumber || "",
+          storeName: storeName || "",
+          itemCount: items.length,
+          items: mappedItems,
+          isInventoryExpense: true,
           createdAt: serverTimestamp(),
           isDebt: false
         });
       }
     } else {
       await addDoc(collection(db, "expenses"), {
+        title: storeName ? `فاتورة: ${storeName}` : "فاتورة مواد كيك",
         amount: totalAmount,
         category: "مشتريات مخزنية",
         description: `فاتورة مواد كيك: ${storeName} [${items.length} مواد: ${itemsSummary}]`,
         month,
+        date: invoiceDate,
         invoiceId,
+        invoiceNumber: invoiceNumber || "",
+        storeName: storeName || "",
+        itemCount: items.length,
+        items: mappedItems,
+        isInventoryExpense: true,
         createdAt: serverTimestamp(),
         isDebt: paymentSource === "salary"
       });

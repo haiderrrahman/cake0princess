@@ -3,7 +3,7 @@ import { customConfirm } from '@/lib/customConfirm';
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowRight, Receipt, Plus, Trash2, Loader2, DollarSign, BarChart3, Wallet, TrendingUp, Calendar, AlertCircle, Edit, Sparkles, Clock, Package } from "lucide-react";
+import { ArrowRight, Receipt, Plus, Trash2, Loader2, DollarSign, BarChart3, Wallet, TrendingUp, Calendar, AlertCircle, Edit, Sparkles, Clock, Package, Store, ChevronLeft, X, Copy, Tag, Search, Check } from "lucide-react";
 import { collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, query, orderBy, onSnapshot, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
@@ -21,6 +21,8 @@ const EXPENSE_CATEGORIES = [
 export default function FinancesAdmin() {
   const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [viewingReceiptExpense, setViewingReceiptExpense] = useState<any>(null);
+  const [receiptItemFilter, setReceiptItemFilter] = useState("");
   const [expenses, setExpenses] = useState<any[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('finances_expenses');
@@ -506,41 +508,120 @@ export default function FinancesAdmin() {
             <p className="text-gray-500 font-bold text-sm">لم يتم تسجيل أي مصروفات بعد.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-4">
-            {expenses.map(exp => (
-              <div key={exp.id} className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col relative">
-                <div className="flex justify-between items-start mb-4">
-                  <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${exp.isDebt ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-purple-50 text-purple-600 dark:bg-purple-900/20'}`}>
-                    {exp.category} {exp.isDebt ? '(دين)' : ''}
-                  </span>
-                  <div className="flex gap-2">
-                    <button onClick={() => openEditModal(exp)} className="text-[10px] bg-blue-50 text-blue-500 w-6 h-6 rounded-full flex items-center justify-center hover:bg-blue-100 transition">
-                      <Edit className="w-3 h-3" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pb-4">
+            {expenses.map(exp => {
+              const isInv = exp.isInventoryExpense || exp.category === "مشتريات مخزنية" || !!exp.invoiceId || (exp.items && exp.items.length > 0);
+              const itemsCount = exp.items?.length || exp.itemCount || 0;
+
+              return (
+                <div key={exp.id} className="bg-white dark:bg-zinc-900 rounded-3xl p-5 border border-gray-100 dark:border-zinc-800 shadow-sm hover:shadow-md transition flex flex-col justify-between relative space-y-3.5">
+                  {/* Top Bar - Clear, prominent status badges */}
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isInv ? (
+                        <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2.5 py-1 rounded-xl text-xs font-black border border-blue-100 dark:border-blue-800/40">
+                          <Receipt className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                          <span>فاتورة مشتريات</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2.5 py-1 rounded-xl text-xs font-black border border-purple-100 dark:border-purple-800/40">
+                          <Tag className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                          <span>{exp.category}</span>
+                        </span>
+                      )}
+
+                      {exp.isDebt ? (
+                        <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-xl text-xs font-black border border-amber-200/60 dark:border-amber-800/40">
+                          <span>💳 دين من الراتب</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-xl text-xs font-black border border-emerald-100 dark:border-emerald-800/40">
+                          <span>🎂 أموال الكيك</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex gap-1 shrink-0">
+                      <button 
+                        type="button"
+                        onClick={() => openEditModal(exp)} 
+                        className="text-gray-400 hover:text-blue-600 w-7 h-7 rounded-lg bg-gray-50 dark:bg-zinc-800 flex items-center justify-center transition"
+                        title="تعديل المصروف"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => handleDeleteExpense(exp.id)} 
+                        className="text-gray-400 hover:text-red-600 w-7 h-7 rounded-lg bg-gray-50 dark:bg-zinc-800 flex items-center justify-center transition"
+                        title="حذف المصروف"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Store Name & Invoice # Bar */}
+                  {(exp.storeName || exp.invoiceNumber) && (
+                    <div className="flex items-center justify-between bg-slate-50 dark:bg-zinc-800/70 p-2.5 rounded-2xl border border-slate-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                          <Store className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-gray-400 font-bold leading-none mb-0.5">المحل / المتجر</p>
+                          <p className="font-black text-xs text-gray-900 dark:text-white truncate">{exp.storeName || "محل مستلزمات"}</p>
+                        </div>
+                      </div>
+                      {exp.invoiceNumber && (
+                        <span className="bg-white dark:bg-zinc-900 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold border border-slate-200 dark:border-zinc-700 shrink-0">
+                          #{exp.invoiceNumber}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Title / Description */}
+                  <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white leading-snug">
+                    {exp.title && exp.storeName ? exp.title : exp.description}
+                  </h3>
+
+                  {/* Receipt Details Button (Matching Home Finance) */}
+                  {(itemsCount > 0 || (exp.items && exp.items.length > 0)) && (
+                    <button
+                      type="button"
+                      onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
+                      className="w-full py-2 px-3 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-black flex items-center justify-between border border-indigo-100 dark:border-indigo-800/40 transition active:scale-[0.98]"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Receipt className="w-4 h-4 text-indigo-500 shrink-0" />
+                        <span>تفاصيل قائمة الفاتورة ({itemsCount} مواد)</span>
+                      </span>
+                      <ChevronLeft className="w-4 h-4 text-indigo-400 shrink-0" />
                     </button>
-                    <button onClick={() => handleDeleteExpense(exp.id)} className="text-[10px] bg-red-50 text-red-500 w-6 h-6 rounded-full flex items-center justify-center hover:bg-red-100 transition">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                  )}
+
+                  {/* Amount & Date Footer */}
+                  <div className="mt-auto pt-3 border-t border-gray-100 dark:border-zinc-800 flex justify-between items-end">
+                    <div>
+                      <p className="text-[11px] text-gray-400 font-bold mb-0.5">المبلغ المسجل</p>
+                      <span className={`font-black text-xl sm:text-2xl ${exp.isDebt ? 'text-orange-500' : 'text-red-500'}`}>
+                        {Number(exp.amount).toLocaleString()} <span className="text-xs font-normal">د.ع</span>
+                      </span>
+                    </div>
+                    <div className="text-left text-[11px] text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-zinc-800/50 px-2.5 py-1.5 rounded-xl border border-gray-100 dark:border-zinc-800">
+                      <p className="font-bold flex items-center gap-1 justify-end">
+                        <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                        {exp.createdAt?.toDate ? exp.createdAt.toDate().toLocaleDateString('en-GB') : (exp.date || '')}
+                      </p>
+                      <p dir="ltr" className="text-[10px] text-gray-400 mt-0.5">
+                        {exp.createdAt?.toDate ? exp.createdAt.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </p>
+                    </div>
                   </div>
                 </div>
-                
-                <h3 className="font-black text-lg text-gray-900 dark:text-white mb-2 leading-tight">
-                  {exp.description}
-                </h3>
-                
-                <div className="mt-auto pt-4 border-t border-gray-50 dark:border-zinc-800 flex justify-between items-end">
-                  <div>
-                    <p className="text-xs text-gray-400 font-bold mb-1">المبلغ</p>
-                    <span className={`font-black text-2xl ${exp.isDebt ? 'text-orange-500' : 'text-red-500'}`}>
-                      {Number(exp.amount).toLocaleString()} <span className="text-sm">د.ع</span>
-                    </span>
-                  </div>
-                  <div className="text-left text-[10px] text-gray-400 bg-gray-50 dark:bg-zinc-800/50 px-2 py-1.5 rounded-lg">
-                    <p className="font-bold mb-0.5 flex items-center gap-1 justify-end"><Calendar className="w-3 h-3" /> {exp.createdAt?.toDate ? exp.createdAt.toDate().toLocaleDateString('en-GB') : (exp.date || '')}</p>
-                    <p dir="ltr">{exp.createdAt?.toDate ? exp.createdAt.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -653,6 +734,148 @@ export default function FinancesAdmin() {
           toast.success("تم مسح الفاتورة وتسجيل المصروف وتحديث المخزن بنجاح!");
         }}
       />
+
+      {/* ─── Receipt Items Modal (matching Home Finance) ─── */}
+      {viewingReceiptExpense && (
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-2xl rounded-t-[32px] sm:rounded-[32px] px-5 sm:px-7 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[92svh] overflow-y-auto mb-[75px] sm:mb-0 custom-scrollbar">
+            
+            {/* Header */}
+            <div className="flex justify-between items-start mb-4 pb-4 border-b border-gray-100 dark:border-zinc-800">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xl">🧾</span>
+                  <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white">
+                    {viewingReceiptExpense.storeName ? `فاتورة: ${viewingReceiptExpense.storeName}` : (viewingReceiptExpense.title || viewingReceiptExpense.description)}
+                  </h3>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400">
+                  <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full">{viewingReceiptExpense.category || "مشتريات مخزنية"}</span>
+                  {viewingReceiptExpense.invoiceNumber && (
+                    <span className="bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-mono font-bold">#{viewingReceiptExpense.invoiceNumber}</span>
+                  )}
+                  <span>•</span>
+                  <span>{viewingReceiptExpense.date || (viewingReceiptExpense.createdAt?.toDate ? viewingReceiptExpense.createdAt.toDate().toLocaleDateString('ar-IQ') : '')}</span>
+                  <span>•</span>
+                  <span className="text-rose-600 dark:text-rose-400 font-black">{Number(viewingReceiptExpense.amount).toLocaleString()} د.ع</span>
+                  <span>•</span>
+                  <span>{(viewingReceiptExpense.items || []).length || viewingReceiptExpense.itemCount || 0} مواد</span>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setViewingReceiptExpense(null)} 
+                className="p-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition"
+              >
+                <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {/* Search inside receipt */}
+            <div className="relative mb-3">
+              <input
+                type="text"
+                placeholder="ابحث في مواد الفاتورة (مثال: طحين، شوكولاتة...)"
+                value={receiptItemFilter}
+                onChange={e => setReceiptItemFilter(e.target.value)}
+                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 pr-10 text-xs font-bold outline-none focus:ring-2 focus:ring-purple-500/20 transition"
+              />
+              <Search className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+              {receiptItemFilter && (
+                <button type="button" onClick={() => setReceiptItemFilter("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Items Table */}
+            <div className="bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
+              <div className="grid grid-cols-12 gap-2 px-3 py-2.5 bg-gray-100/70 dark:bg-zinc-800/60 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
+                <div className="col-span-1 text-center">#</div>
+                <div className="col-span-5">اسم المادة</div>
+                <div className="col-span-3 text-center">الكمية والوحدة</div>
+                <div className="col-span-3 text-left">الإجمالي (د.ع)</div>
+              </div>
+
+              <div className="divide-y divide-gray-100 dark:divide-zinc-800/80 max-h-[350px] overflow-y-auto custom-scrollbar">
+                {(() => {
+                  const rawItems = viewingReceiptExpense.items || [];
+                  const filtered = rawItems.filter((item: any) => 
+                    !receiptItemFilter || (item.name || "").toLowerCase().includes(receiptItemFilter.toLowerCase())
+                  );
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-xs font-bold text-gray-400">
+                        {receiptItemFilter ? "لا توجد مواد مطابقة للبحث" : (
+                          viewingReceiptExpense.description ? (
+                            <div className="p-4 text-right">
+                              <p className="text-gray-500 text-xs mb-1 font-bold">تفاصيل المصروف المسجلة:</p>
+                              <p className="text-gray-700 dark:text-gray-300 font-bold">{viewingReceiptExpense.description}</p>
+                            </div>
+                          ) : "لا توجد مواد مفصلة في هذه القائمة"
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((item: any, idx: number) => (
+                    <div key={item.id || idx} className="grid grid-cols-12 gap-2 px-3 py-2.5 text-xs items-center hover:bg-white dark:hover:bg-zinc-800/50 transition">
+                      <div className="col-span-1 text-center font-bold text-gray-400 text-[11px]">{idx + 1}</div>
+                      <div className="col-span-5 font-bold text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
+                      <div className="col-span-3 text-center font-black text-gray-600 dark:text-gray-300 bg-gray-200/60 dark:bg-zinc-800 px-1 py-0.5 rounded-md text-[11px]">
+                        {item.quantity} {item.unit || ""}
+                      </div>
+                      <div className="col-span-3 text-left font-black text-rose-600 dark:text-rose-400">
+                        {Number(item.totalPrice || item.price || 0).toLocaleString()} <span className="text-[9px] font-bold text-gray-400">د.ع</span>
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Total Footer */}
+              <div className="bg-gray-100/90 dark:bg-zinc-800 px-4 py-3 border-t border-gray-200 dark:border-zinc-700 flex justify-between items-center text-xs">
+                <span className="font-bold text-gray-600 dark:text-gray-300">
+                  إجمالي الفاتورة: {(viewingReceiptExpense.items || []).length || viewingReceiptExpense.itemCount || 0} مادة
+                </span>
+                <span className="font-black text-sm text-rose-600 dark:text-rose-400">
+                  {Number(viewingReceiptExpense.amount).toLocaleString()} د.ع
+                </span>
+              </div>
+            </div>
+
+            {/* Actions Bar */}
+            <div className="flex flex-wrap gap-2.5 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  const rawItems = viewingReceiptExpense.items || [];
+                  const lines = rawItems.map((it: any, i: number) => `${i + 1}. ${it.name} (${it.quantity} ${it.unit || ''}) - ${Number(it.totalPrice || it.price || 0).toLocaleString()} د.ع`);
+                  const text = `🧾 فاتورة: ${viewingReceiptExpense.storeName || viewingReceiptExpense.title || viewingReceiptExpense.description}\n📅 التاريخ: ${viewingReceiptExpense.date || ''}\n💰 الإجمالي: ${Number(viewingReceiptExpense.amount).toLocaleString()} د.ع\n\nالمواد:\n${lines.join("\n")}`;
+                  navigator.clipboard.writeText(text);
+                  toast.success("تم نسخ قائمة الفاتورة إلى الحافظة 📋");
+                }}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                <Copy className="w-4 h-4" /> نسخ القائمة
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const expToEdit = viewingReceiptExpense;
+                  setViewingReceiptExpense(null);
+                  openEditModal(expToEdit);
+                }}
+                className="flex-1 bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                <Edit className="w-4 h-4" /> تعديل المصروف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

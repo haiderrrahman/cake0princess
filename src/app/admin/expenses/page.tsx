@@ -207,7 +207,11 @@ export default function ExpensesAdmin() {
                         <td className="py-4 px-6">
                           <p className="font-bold text-gray-900 dark:text-gray-100">{expense.title}</p>
                           {expense.notes && <p className="text-xs text-gray-500 mt-1 max-w-[250px] truncate">{expense.notes}</p>}
-                          {expense.isInventoryExpense && <span className="text-[9px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-bold">📦 مخزن</span>}
+                          {expense.isInventoryExpense && (
+                            <span className="inline-flex items-center gap-1 text-[11px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-lg font-black mt-1">
+                              🧾 فاتورة مشتريات مخزن
+                            </span>
+                          )}
                         </td>
                         <td className="py-4 px-6">
                           <div className="flex flex-col gap-1">
