@@ -6,7 +6,8 @@ import {
   ShoppingBag, CheckCircle, XCircle, Clock, Loader2, Package, Plus,
   DollarSign, AlertTriangle, TrendingUp, Smartphone, Receipt,
   BarChart3, RefreshCw, ChevronRight, User, Phone, MapPin,
-  Calendar, ArrowRight, Search, Filter, Edit, ChevronDown, GraduationCap, PlayCircle, Image as ImageIcon, Check, MessageCircle, Sparkles, PackageCheck, Banknote
+  Calendar, ArrowRight, Search, Filter, Edit, ChevronDown, GraduationCap, PlayCircle, Image as ImageIcon, Check, MessageCircle, Sparkles, PackageCheck, Banknote,
+  Trash2, ExternalLink, ShoppingCart
 } from "lucide-react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, query, orderBy, limit, onSnapshot, increment, where } from "firebase/firestore";
 import { toast } from "sonner";
@@ -17,6 +18,10 @@ import EditInventoryModal from "@/components/EditInventoryModal";
 import AdminQuickEntry from "@/components/AdminQuickEntry";
 import CustomerProfileModal from "@/components/CustomerProfileModal";
 import MapLink from "@/components/MapLink";
+import ScanCakeInvoiceModal from "@/components/ScanCakeInvoiceModal";
+import ManualCakePurchaseModal from "@/components/ManualCakePurchaseModal";
+import CakeMaterialTimelineModal from "@/components/CakeMaterialTimelineModal";
+import { CakeMaterialPurchase, calculateItemConsumption } from "@/lib/cakeMaterialPurchases";
 import { customConfirm } from '@/lib/customConfirm';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -136,6 +141,17 @@ function AdminHubContent() {
   const [purchaseSource, setPurchaseSource] = useState<Record<string, 'salary' | 'cake'>>({});
   const [invExpSummary, setInvExpSummary] = useState({ haider: 0, cake: 0 });
   const [blacklistedCustomers, setBlacklistedCustomers] = useState<string[]>([]);
+
+  // Inventory sub-tab & cake material purchases state
+  const [inventorySubTab, setInventorySubTab] = useState<'stock' | 'cycles' | 'purchases'>('stock');
+  const [purchases, setPurchases] = useState<CakeMaterialPurchase[]>([]);
+  const [isScanCakeInvoiceOpen, setIsScanCakeInvoiceOpen] = useState(false);
+  const [isManualCakePurchaseOpen, setIsManualCakePurchaseOpen] = useState(false);
+  const [manualPurchaseInitialItem, setManualPurchaseInitialItem] = useState<any>(null);
+  const [timelineModalItem, setTimelineModalItem] = useState<any>(null);
+  const [cycleFilterStatus, setCycleFilterStatus] = useState<'all' | 'critical' | 'warning' | 'safe'>('all');
+  const [purchaseInvoiceFilter, setPurchaseInvoiceFilter] = useState<'all' | 'invoiced' | 'non_invoiced'>('all');
+  const [purchaseSearchQuery, setPurchaseSearchQuery] = useState("");
 
   const [stats, setStats] = useState<any>(() => {
     if (typeof window !== 'undefined') {
@@ -271,6 +287,15 @@ function AdminHubContent() {
       }));
     });
 
+    // Real-time listener for cake material purchases
+    const unsubPurchases = onSnapshot(
+      query(collection(db, "cake_material_purchases"), orderBy("purchaseDate", "desc")),
+      (snap) => {
+        setPurchases(snap.docs.map(d => ({ id: d.id, ...d.data() } as CakeMaterialPurchase)));
+      },
+      (err) => console.error("Purchases listener err:", err)
+    );
+
     // Real-time listener for home debts
     const unsubHomeDebts = onSnapshot(doc(db, "home_finance", "debts"), (snap) => {
       if (snap.exists() && snap.data().data) {
@@ -300,6 +325,7 @@ function AdminHubContent() {
       window.removeEventListener('backgroundUploadSuccess', handleBackgroundUpload);
       unsubExpenses();
       unsubInventory();
+      unsubPurchases();
       unsubHomeDebts();
       unsubHomeExpenses();
       unsubHomeIncomes();
@@ -856,6 +882,50 @@ function AdminHubContent() {
   });
   const lowStockItems = filteredInventory.filter(i => Number(i.neededQuantity || 0) > 0);
 
+  const itemsWithConsumption = useMemo(() => {
+    return inventory.map(item => ({
+      item,
+      metrics: calculateItemConsumption(item, purchases)
+    }));
+  }, [inventory, purchases]);
+
+  const filteredCyclesItems = useMemo(() => {
+    return itemsWithConsumption.filter(({ item, metrics }) => {
+      if (cycleFilterStatus !== 'all' && metrics.depletionStatus !== cycleFilterStatus) {
+        return false;
+      }
+      if (!inventorySearch) return true;
+      const s = inventorySearch.toLowerCase();
+      return (item.name || "").toLowerCase().includes(s) || (item.category || "").toLowerCase().includes(s);
+    });
+  }, [itemsWithConsumption, cycleFilterStatus, inventorySearch]);
+
+  const filteredPurchases = useMemo(() => {
+    return purchases.filter(p => {
+      if (purchaseInvoiceFilter === 'invoiced' && !p.hasInvoice) return false;
+      if (purchaseInvoiceFilter === 'non_invoiced' && p.hasInvoice) return false;
+      if (purchaseSearchQuery) {
+        const s = purchaseSearchQuery.toLowerCase();
+        const matchesName = (p.itemName || "").toLowerCase().includes(s);
+        const matchesStore = (p.storeName || "").toLowerCase().includes(s);
+        const matchesCat = (p.category || "").toLowerCase().includes(s);
+        if (!matchesName && !matchesStore && !matchesCat) return false;
+      }
+      return true;
+    });
+  }, [purchases, purchaseInvoiceFilter, purchaseSearchQuery]);
+
+  const handleDeletePurchase = async (purchaseId: string) => {
+    if (!(await customConfirm("هل أنت متأكد من حذف هذا السجل نهائياً؟"))) return;
+
+    try {
+      await deleteDoc(doc(db, "cake_material_purchases", purchaseId));
+      toast.success("تم حذف السجل بنجاح");
+    } catch (e) {
+      toast.error("حدث خطأ أثناء الحذف");
+    }
+  };
+
   const filteredExternalOrders = externalOrders.filter(o => {
     if (extSearch && !o.customerName?.includes(extSearch) && !o.cakeName?.includes(extSearch)) return false;
     return true;
@@ -1039,9 +1109,38 @@ function AdminHubContent() {
               </button>
             )}
             {activeTab === "inventory" && (
-              <button onClick={() => setShowAddInventory(true)} className="bg-white text-blue-950 rounded-xl px-3.5 py-2 flex items-center gap-1.5 text-xs font-black shadow-md hover:bg-gray-100 transition active:scale-95">
-                <Plus className="w-4 h-4 text-blue-600" /> إضافة مادة
-              </button>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsScanCakeInvoiceOpen(true)}
+                  className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 text-slate-950 rounded-xl px-2.5 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black shadow-md active:scale-95 transition"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-950" />
+                  <span className="hidden sm:inline">📸 فاتورة بالـ AI</span>
+                  <span className="sm:hidden">📸 فاتورة</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualPurchaseInitialItem(null);
+                    setIsManualCakePurchaseOpen(true);
+                  }}
+                  className="bg-white/15 hover:bg-white/25 text-white rounded-xl px-2.5 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black backdrop-blur-md transition active:scale-95 border border-white/20"
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">تسجيل شراء</span>
+                  <span className="sm:hidden">شراء</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddInventory(true)}
+                  className="bg-white text-blue-950 rounded-xl px-2.5 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black shadow-md hover:bg-gray-100 transition active:scale-95"
+                >
+                  <Plus className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="hidden sm:inline">إضافة مادة</span>
+                  <span className="sm:hidden">مادة</span>
+                </button>
+              </div>
             )}
             <button onClick={fetchAll} className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center hover:bg-white/20 transition backdrop-blur-md border border-white/10" title="تحديث">
               <RefreshCw className={`w-4 h-4 text-white ${loading ? "animate-spin" : ""}`} />
@@ -1223,6 +1322,45 @@ function AdminHubContent() {
           }}
         />
       )}
+
+      {/* Cake Materials & AI Invoices Modals */}
+      <ScanCakeInvoiceModal
+        isOpen={isScanCakeInvoiceOpen}
+        onClose={() => setIsScanCakeInvoiceOpen(false)}
+        onSuccess={() => {
+          fetchAll();
+          setIsScanCakeInvoiceOpen(false);
+        }}
+        inventoryItems={inventory}
+      />
+
+      <ManualCakePurchaseModal
+        isOpen={isManualCakePurchaseOpen}
+        onClose={() => {
+          setIsManualCakePurchaseOpen(false);
+          setManualPurchaseInitialItem(null);
+        }}
+        onSuccess={() => {
+          fetchAll();
+          setIsManualCakePurchaseOpen(false);
+          setManualPurchaseInitialItem(null);
+        }}
+        inventoryItems={inventory}
+        initialItem={manualPurchaseInitialItem}
+      />
+
+      <CakeMaterialTimelineModal
+        isOpen={!!timelineModalItem}
+        onClose={() => setTimelineModalItem(null)}
+        item={timelineModalItem}
+        allPurchases={purchases}
+        onOpenPurchaseModal={(item) => {
+          setTimelineModalItem(null);
+          setManualPurchaseInitialItem(item);
+          setIsManualCakePurchaseOpen(true);
+        }}
+        onDeletePurchase={handleDeletePurchase}
+      />
 
       <div className="p-5">
         {loading ? (
@@ -1687,174 +1825,159 @@ function AdminHubContent() {
             {/* === INVENTORY TAB === */}
             {activeTab === "inventory" && (
               <div className="space-y-4">
-                <div className="relative">
-                  <Search className="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="ابحث عن مادة في المخزن..."
-                    value={inventorySearch}
-                    onChange={(e) => setInventorySearch(e.target.value)}
-                    className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl pl-4 pr-12 py-3.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
-                  />
-                </div>
-                {lowStockItems.length > 0 && (
-                  <div className="rounded-3xl overflow-hidden shadow-lg border border-orange-200 dark:border-orange-800/40">
-                    {/* Header */}
-                    <div className="bg-gradient-to-l from-orange-600 to-red-600 px-5 py-4">
-                      <div className="flex justify-between items-start gap-3 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center">
-                            <AlertTriangle className="w-4 h-4 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-black text-white">النواقص — مطلوب شراؤها</h3>
-                            <p className="text-orange-200 text-[10px] font-bold">{lowStockItems.length} مادة بحاجة للشراء</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2 flex-wrap">
-                          <div className="bg-white/15 backdrop-blur-sm rounded-2xl px-3 py-2 text-center border border-white/20">
-                            <p className="text-orange-200 text-[9px] font-bold mb-0.5">💰 التكلفة الإجمالية</p>
-                            <p className="text-white font-black text-sm">{lowStockItems.reduce((s, i) => s + (Number(i.price || 0) * Number(i.neededQuantity || 1)), 0).toLocaleString()} <span className="text-[9px] font-normal">د.ع</span></p>
-                          </div>
-                        </div>
-                      </div>
-
-
-                    </div>
-
-                    {/* Grid of shortage cards */}
-                    <div className="bg-orange-50 dark:bg-orange-900/10 p-4">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {lowStockItems.map(i => {
-                          const neededQty = Number(i.neededQuantity || 1);
-                          const cost = neededQty * Number(i.price || 0);
-                          return (
-                            <div key={i.id} className="bg-white dark:bg-zinc-900 rounded-2xl border border-orange-100 dark:border-orange-800/30 shadow-sm overflow-hidden flex flex-col relative">
-                              <button onClick={() => setShowEditInventory(i)} className="absolute top-1.5 left-1.5 z-10 w-6 h-6 bg-white/80 dark:bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-blue-500 transition">
-                                <Edit className="w-3 h-3" />
-                              </button>
-                              {/* Item image / emoji */}
-                              <div className="h-20 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-zinc-800 dark:to-zinc-700 flex items-center justify-center text-4xl relative">
-                                {(i.imageUrl || i.tempImageUrl) ? (
-                                  <img src={i.imageUrl || i.tempImageUrl} alt={i.name} className="w-full h-full object-cover" />
-                                ) : (
-                                  <span>{i.category === "كريمات" ? "🧁" : i.category === "حشوات" ? "🍫" : i.category === "طحين وسكر" ? "🌾" : i.category === "ألوان وإضافات" ? "🎨" : i.category === "تغليف وزينة" ? "🎀" : i.category === "أدوات" ? "🔧" : "📦"}</span>
-                                )}
-                                <span className="absolute top-1.5 right-1.5 bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg">{neededQty} {i.unit}</span>
-                              </div>
-
-                              <div className="p-3 flex flex-col gap-2 flex-1">
-                                <div>
-                                  <p className="font-black text-gray-900 dark:text-white text-sm leading-tight truncate">{i.name}</p>
-                                  <p className="text-[10px] text-gray-500 font-bold">{cost > 0 ? `${cost.toLocaleString()} د.ع` : 'لا يوجد سعر'}</p>
-                                </div>
-
-                                {/* Quantity controls */}
-                                <div className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800 rounded-xl px-2 py-1 border border-gray-100 dark:border-zinc-700">
-                                  <button onClick={async () => {
-                                    const newVal = neededQty + 1;
-                                    // Optimistic
-                                    setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: newVal } : x));
-                                    try {
-                                      await updateDoc(doc(db, "cake_inventory", i.id), { neededQuantity: newVal });
-                                    } catch (e) {
-                                      setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: neededQty } : x));
-                                      toast.error("فشل التحديث");
-                                    }
-                                  }} className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-700 text-emerald-600 font-bold text-base flex items-center justify-center shadow-sm hover:bg-emerald-50 transition">+</button>
-                                  <span className="text-xs font-black text-gray-700 dark:text-gray-200">{neededQty}</span>
-                                  <button onClick={async () => {
-                                    const newVal = Math.max(0, neededQty - 1);
-                                    // Optimistic
-                                    setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: newVal } : x));
-                                    try {
-                                      await updateDoc(doc(db, "cake_inventory", i.id), { neededQuantity: newVal });
-                                    } catch (e) {
-                                      setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: neededQty } : x));
-                                      toast.error("فشل التحديث");
-                                    }
-                                  }} className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-700 text-red-500 font-bold text-base flex items-center justify-center shadow-sm hover:bg-red-50 transition">−</button>
-                                </div>
-                                <div className="mt-auto flex flex-col gap-1.5 w-full">
-                                  <button onClick={() => handlePurchaseMissing(i)} className="w-full text-[10px] font-black py-2 rounded-lg transition shadow-sm bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-1.5">
-                                    <Check className="w-3 h-3" /> تم توفير المادة
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center mt-6">
-                  <h3 className="font-black text-gray-800 dark:text-gray-200">سجل المخزن (جميع المواد) ({filteredInventory.length})</h3>
-                  <button onClick={() => setShowAddInventory(true)} className="text-xs font-bold bg-blue-500 text-white px-3 py-1.5 rounded-lg hover:bg-blue-600 flex items-center gap-1 transition shadow-sm">
-                    <Plus className="w-3 h-3" /> إضافة مادة
+                {/* Unified Sub-tab Segmented Navigation */}
+                <div className="flex bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setInventorySubTab("stock")}
+                    className={`flex-1 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition ${
+                      inventorySubTab === "stock"
+                        ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
+                        : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    <Package className="w-4 h-4" />
+                    <span className="truncate">المخزون ({filteredInventory.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInventorySubTab("cycles")}
+                    className={`flex-1 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition ${
+                      inventorySubTab === "cycles"
+                        ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
+                        : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span className="truncate">دورة النفاد ({itemsWithConsumption.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInventorySubTab("purchases")}
+                    className={`flex-1 py-2.5 px-2 sm:px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition ${
+                      inventorySubTab === "purchases"
+                        ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
+                        : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    <Receipt className="w-4 h-4" />
+                    <span className="truncate">سجل المشتريات ({purchases.length})</span>
                   </button>
                 </div>
 
-                {filteredInventory.length === 0 ? (
-                  <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
-                    <Package className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500 font-bold">لا توجد مواد في المخزن بعد</p>
-                    <Link href="/admin/inventory" className="mt-3 inline-block bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-bold">إضافة مواد</Link>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {INVENTORY_CATEGORIES.map(cat => {
-                      const catItems = filteredInventory.filter(item => {
-                        const itemCat = item.category || "أخرى";
-                        const matchesCat = itemCat === cat || (cat === "أخرى" && !INVENTORY_CATEGORIES.includes(itemCat));
-                        return matchesCat;
-                      });
-                      if (catItems.length === 0) return null;
-                      return (
-                        <div key={cat} className="space-y-3">
-                          <h3 className={`text-sm font-black px-3 py-1.5 rounded-full inline-block ${CAT_COLORS[cat] || "bg-gray-100 text-gray-600"}`}>
-                            {cat} ({catItems.length})
-                          </h3>
+                {/* ──────── SUB-TAB 1: STOCK & SHORTAGES ──────── */}
+                {inventorySubTab === "stock" && (
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <Search className="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="ابحث عن مادة في المخزن..."
+                        value={inventorySearch}
+                        onChange={(e) => setInventorySearch(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl pl-4 pr-12 py-3.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-sm font-bold"
+                      />
+                    </div>
+
+                    {lowStockItems.length > 0 && (
+                      <div className="rounded-3xl overflow-hidden shadow-lg border border-orange-200 dark:border-orange-800/40">
+                        {/* Header */}
+                        <div className="bg-gradient-to-l from-orange-600 to-red-600 px-5 py-4">
+                          <div className="flex justify-between items-start gap-3 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center">
+                                <AlertTriangle className="w-4 h-4 text-white" />
+                              </div>
+                              <div>
+                                <h3 className="text-sm font-black text-white">النواقص — مطلوب شراؤها</h3>
+                                <p className="text-orange-200 text-[10px] font-bold">{lowStockItems.length} مادة بحاجة للشراء</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 flex-wrap">
+                              <div className="bg-white/15 backdrop-blur-sm rounded-2xl px-3 py-2 text-center border border-white/20">
+                                <p className="text-orange-200 text-[9px] font-bold mb-0.5">💰 التكلفة الإجمالية</p>
+                                <p className="text-white font-black text-sm">{lowStockItems.reduce((s, i) => s + (Number(i.price || 0) * Number(i.neededQuantity || 1)), 0).toLocaleString()} <span className="text-[9px] font-normal">د.ع</span></p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Grid of shortage cards */}
+                        <div className="bg-orange-50 dark:bg-orange-900/10 p-4">
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {catItems.map(item => {
-                              const isLow = Number(item.quantity) <= Number(item.minAlert);
-                              const isZero = Number(item.quantity) <= 0;
+                            {lowStockItems.map(i => {
+                              const neededQty = Number(i.neededQuantity || 1);
+                              const cost = neededQty * Number(i.price || 0);
                               return (
-                                <div key={item.id} className={`bg-white dark:bg-zinc-900 rounded-2xl border shadow-sm overflow-hidden flex flex-col relative ${isZero ? "border-red-300 dark:border-red-800/60" : isLow ? "border-orange-300 dark:border-orange-800/60" : "border-gray-100 dark:border-zinc-800"}`}>
-                                  <button onClick={() => setShowEditInventory(item)} className="absolute top-1.5 left-1.5 z-10 w-6 h-6 bg-white/80 dark:bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-blue-500 transition">
+                                <div key={i.id} className="bg-white dark:bg-zinc-900 rounded-2xl border border-orange-100 dark:border-orange-800/30 shadow-sm overflow-hidden flex flex-col relative">
+                                  <button onClick={() => setShowEditInventory(i)} className="absolute top-1.5 left-1.5 z-10 w-6 h-6 bg-white/80 dark:bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-blue-500 transition">
                                     <Edit className="w-3 h-3" />
                                   </button>
-                                  
-                                  <div className={`h-24 flex items-center justify-center text-4xl relative ${isZero ? 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-zinc-800 dark:to-zinc-700' : isLow ? 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-zinc-800 dark:to-zinc-700' : 'bg-gradient-to-br from-gray-50 to-slate-50 dark:from-zinc-800 dark:to-zinc-700'}`}>
-                                    {(item.imageUrl || item.tempImageUrl) ? (
-                                      <img src={item.imageUrl || item.tempImageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                  {/* Item image / emoji */}
+                                  <div className="h-20 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-zinc-800 dark:to-zinc-700 flex items-center justify-center text-4xl relative">
+                                    {(i.imageUrl || i.tempImageUrl) ? (
+                                      <img src={i.imageUrl || i.tempImageUrl} alt={i.name} className="w-full h-full object-cover" />
                                     ) : (
-                                      <span>{item.category === "كريمات" ? "🧁" : item.category === "حشوات" ? "🍫" : item.category === "طحين وسكر" ? "🌾" : item.category === "ألوان وإضافات" ? "🎨" : item.category === "تغليف وزينة" ? "🎀" : item.category === "أدوات" ? "🔧" : "📦"}</span>
+                                      <span>{i.category === "كريمات" ? "🧁" : i.category === "حشوات" ? "🍫" : i.category === "طحين وسكر" ? "🌾" : i.category === "ألوان وإضافات" ? "🎨" : i.category === "تغليف وزينة" ? "🎀" : i.category === "أدوات" ? "🔧" : "📦"}</span>
                                     )}
-                                    <span className={`absolute top-1.5 right-1.5 text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg ${Number(item.quantity) <= 0 ? 'bg-red-500' : isLow ? 'bg-orange-500' : 'bg-emerald-500'}`}>
-                                      {item.quantity} {item.unit}
-                                    </span>
+                                    <span className="absolute top-1.5 right-1.5 bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg">{neededQty} {i.unit}</span>
                                   </div>
-                                  
-                                  <div className="p-2 flex flex-col gap-2 flex-1 justify-between">
+
+                                  <div className="p-2.5 flex flex-col gap-2 flex-1">
                                     <div>
-                                      <p className="font-black text-gray-900 dark:text-white text-sm leading-tight line-clamp-2 mb-1">{item.name}</p>
-                                      <p className="text-[11px] text-gray-600 dark:text-gray-400 font-bold">المفرد: <span className="font-black">{item.price ? Number(item.price).toLocaleString() : '0'}</span> د.ع</p>
-                                      <p className="text-xs text-emerald-600 dark:text-emerald-400 font-black mt-0.5">الإجمالي: {item.price ? (Number(item.price) * Number(item.quantity)).toLocaleString() : '0'} د.ع</p>
-                                      {Number(item.quantity) <= 0 ? (
-                                        <span className="inline-flex mt-1 bg-red-100 text-red-600 text-[9px] px-1.5 py-0.5 rounded-md font-bold items-center gap-1"><AlertTriangle className="w-2.5 h-2.5" /> نفدت الكمية</span>
-                                      ) : isLow ? (
-                                        <span className="inline-flex mt-1 bg-orange-100 text-orange-600 text-[9px] px-1.5 py-0.5 rounded-md font-bold items-center gap-1"><AlertTriangle className="w-2.5 h-2.5" /> نقص</span>
-                                      ) : null}
+                                      <p className="font-black text-gray-900 dark:text-white text-xs sm:text-sm leading-tight truncate">{i.name}</p>
+                                      <p className="text-[10px] text-gray-500 font-bold">{cost > 0 ? `${cost.toLocaleString()} د.ع` : 'لا يوجد سعر'}</p>
                                     </div>
-                                    
-                                    <div className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800 rounded-xl px-1.5 py-1 border border-gray-100 dark:border-zinc-700 mt-1">
-                                      <button onClick={() => updateInventoryQuantity(item.id, Number(item.quantity), 1)}
-                                        className="w-6 h-6 flex items-center justify-center bg-white dark:bg-zinc-700 text-emerald-600 rounded-lg font-black hover:bg-emerald-50 transition shadow-sm text-sm">+</button>
-                                      <span className="text-xs font-black text-gray-800 dark:text-gray-200">{item.quantity}</span>
-                                      <button onClick={() => updateInventoryQuantity(item.id, Number(item.quantity), -1)}
-                                        className="w-6 h-6 flex items-center justify-center bg-white dark:bg-zinc-700 text-red-600 rounded-lg font-black hover:bg-red-50 transition shadow-sm text-sm">−</button>
+
+                                    {/* Quantity controls */}
+                                    <div className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800 rounded-xl px-2 py-1 border border-gray-100 dark:border-zinc-700">
+                                      <button onClick={async () => {
+                                        const newVal = neededQty + 1;
+                                        setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: newVal } : x));
+                                        try {
+                                          await updateDoc(doc(db, "cake_inventory", i.id), { neededQuantity: newVal });
+                                        } catch (e) {
+                                          setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: neededQty } : x));
+                                          toast.error("فشل التحديث");
+                                        }
+                                      }} className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-700 text-emerald-600 font-bold text-base flex items-center justify-center shadow-sm hover:bg-emerald-50 transition">+</button>
+                                      <span className="text-xs font-black text-gray-700 dark:text-gray-200">{neededQty}</span>
+                                      <button onClick={async () => {
+                                        const newVal = Math.max(0, neededQty - 1);
+                                        setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: newVal } : x));
+                                        try {
+                                          await updateDoc(doc(db, "cake_inventory", i.id), { neededQuantity: newVal });
+                                        } catch (e) {
+                                          setInventory(prev => prev.map(x => x.id === i.id ? { ...x, neededQuantity: neededQty } : x));
+                                          toast.error("فشل التحديث");
+                                        }
+                                      }} className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-700 text-red-500 font-bold text-base flex items-center justify-center shadow-sm hover:bg-red-50 transition">−</button>
+                                    </div>
+
+                                    <div className="mt-auto flex flex-col gap-1.5 w-full">
+                                      <button onClick={() => handlePurchaseMissing(i)} className="w-full text-[10px] font-black py-1.5 rounded-lg transition shadow-sm bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-1">
+                                        <Check className="w-3 h-3" /> تم التوفير
+                                      </button>
+                                      <div className="flex gap-1 w-full">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setManualPurchaseInitialItem(i);
+                                            setIsManualCakePurchaseOpen(true);
+                                          }}
+                                          className="flex-1 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 text-gray-700 dark:text-gray-200 text-[10px] font-bold py-1 rounded-lg transition text-center"
+                                        >
+                                          🛒 شراء بتفاصيل
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setTimelineModalItem(i)}
+                                          className="w-7 h-7 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 text-gray-600 dark:text-gray-300 rounded-lg flex items-center justify-center shrink-0 transition"
+                                          title="عرض دورة النفاد"
+                                        >
+                                          <Clock className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -1862,8 +1985,410 @@ function AdminHubContent() {
                             })}
                           </div>
                         </div>
-                      );
-                    })}
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-center mt-6">
+                      <h3 className="font-black text-gray-800 dark:text-gray-200">سجل المخزن (جميع المواد) ({filteredInventory.length})</h3>
+                      <button onClick={() => setShowAddInventory(true)} className="text-xs font-bold bg-blue-500 text-white px-3 py-1.5 rounded-lg hover:bg-blue-600 flex items-center gap-1 transition shadow-sm">
+                        <Plus className="w-3 h-3" /> إضافة مادة
+                      </button>
+                    </div>
+
+                    {filteredInventory.length === 0 ? (
+                      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
+                        <Package className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                        <p className="text-gray-500 font-bold">لا توجد مواد تطابق البحث</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        {INVENTORY_CATEGORIES.map(cat => {
+                          const catItems = filteredInventory.filter(item => {
+                            const itemCat = item.category || "أخرى";
+                            return itemCat === cat || (cat === "أخرى" && !INVENTORY_CATEGORIES.includes(itemCat));
+                          });
+                          if (catItems.length === 0) return null;
+                          return (
+                            <div key={cat} className="space-y-3">
+                              <h3 className={`text-sm font-black px-3 py-1.5 rounded-full inline-block ${CAT_COLORS[cat] || "bg-gray-100 text-gray-600"}`}>
+                                {cat} ({catItems.length})
+                              </h3>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {catItems.map(item => {
+                                  const isLow = Number(item.quantity) <= Number(item.minAlert);
+                                  const isZero = Number(item.quantity) <= 0;
+                                  return (
+                                    <div key={item.id} className={`bg-white dark:bg-zinc-900 rounded-2xl border shadow-sm overflow-hidden flex flex-col relative ${isZero ? "border-red-300 dark:border-red-800/60" : isLow ? "border-orange-300 dark:border-orange-800/60" : "border-gray-100 dark:border-zinc-800"}`}>
+                                      <button onClick={() => setShowEditInventory(item)} className="absolute top-1.5 left-1.5 z-10 w-6 h-6 bg-white/80 dark:bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-blue-500 transition">
+                                        <Edit className="w-3 h-3" />
+                                      </button>
+                                      
+                                      <div className={`h-24 flex items-center justify-center text-4xl relative ${isZero ? 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-zinc-800 dark:to-zinc-700' : isLow ? 'bg-gradient-to-br from-orange-50 to-amber-50 dark:from-zinc-800 dark:to-zinc-700' : 'bg-gradient-to-br from-gray-50 to-slate-50 dark:from-zinc-800 dark:to-zinc-700'}`}>
+                                        {(item.imageUrl || item.tempImageUrl) ? (
+                                          <img src={item.imageUrl || item.tempImageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <span>{item.category === "كريمات" ? "🧁" : item.category === "حشوات" ? "🍫" : item.category === "طحين وسكر" ? "🌾" : item.category === "ألوان وإضافات" ? "🎨" : item.category === "تغليف وزينة" ? "🎀" : item.category === "أدوات" ? "🔧" : "📦"}</span>
+                                        )}
+                                        <span className={`absolute top-1.5 right-1.5 text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg ${Number(item.quantity) <= 0 ? 'bg-red-500' : isLow ? 'bg-orange-500' : 'bg-emerald-500'}`}>
+                                          {item.quantity} {item.unit}
+                                        </span>
+                                      </div>
+                                      
+                                      <div className="p-2.5 flex flex-col gap-2 flex-1 justify-between">
+                                        <div>
+                                          <p className="font-black text-gray-900 dark:text-white text-xs sm:text-sm leading-tight line-clamp-2 mb-1">{item.name}</p>
+                                          <p className="text-[11px] text-gray-600 dark:text-gray-400 font-bold">المفرد: <span className="font-black">{item.price ? Number(item.price).toLocaleString() : '0'}</span> د.ع</p>
+                                          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-black mt-0.5">الإجمالي: {item.price ? (Number(item.price) * Number(item.quantity)).toLocaleString() : '0'} د.ع</p>
+                                          {Number(item.quantity) <= 0 ? (
+                                            <span className="inline-flex mt-1 bg-red-100 text-red-600 text-[9px] px-1.5 py-0.5 rounded-md font-bold items-center gap-1"><AlertTriangle className="w-2.5 h-2.5" /> نفدت</span>
+                                          ) : isLow ? (
+                                            <span className="inline-flex mt-1 bg-orange-100 text-orange-600 text-[9px] px-1.5 py-0.5 rounded-md font-bold items-center gap-1"><AlertTriangle className="w-2.5 h-2.5" /> نقص</span>
+                                          ) : null}
+                                        </div>
+                                        
+                                        <div className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800 rounded-xl px-1.5 py-1 border border-gray-100 dark:border-zinc-700 mt-1">
+                                          <button onClick={() => updateInventoryQuantity(item.id, Number(item.quantity), 1)}
+                                            className="w-6 h-6 flex items-center justify-center bg-white dark:bg-zinc-700 text-emerald-600 rounded-lg font-black hover:bg-emerald-50 transition shadow-sm text-sm">+</button>
+                                          <span className="text-xs font-black text-gray-800 dark:text-gray-200">{item.quantity}</span>
+                                          <button onClick={() => updateInventoryQuantity(item.id, Number(item.quantity), -1)}
+                                            className="w-6 h-6 flex items-center justify-center bg-white dark:bg-zinc-700 text-red-600 rounded-lg font-black hover:bg-red-50 transition shadow-sm text-sm">−</button>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 pt-1 mt-1 border-t border-gray-100 dark:border-zinc-800">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setManualPurchaseInitialItem(item);
+                                              setIsManualCakePurchaseOpen(true);
+                                            }}
+                                            className="flex-1 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 text-blue-700 dark:text-blue-300 font-bold text-[10px] py-1 rounded-lg transition text-center flex items-center justify-center gap-0.5"
+                                          >
+                                            <ShoppingCart className="w-3 h-3" />
+                                            <span>شراء</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setTimelineModalItem(item)}
+                                            className="w-6 h-6 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 flex items-center justify-center shrink-0 transition"
+                                            title="دورة النفاد والسجل"
+                                          >
+                                            <Clock className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ──────── SUB-TAB 2: SMART DEPLETION CYCLES (مربعات مرتبة) ──────── */}
+                {inventorySubTab === "cycles" && (
+                  <div className="space-y-4">
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="ابحث باسم المادة لمعرفة موعد نفادها..."
+                        value={inventorySearch}
+                        onChange={(e) => setInventorySearch(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl pl-4 pr-12 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-sm font-bold"
+                      />
+                    </div>
+
+                    {/* Filter Pills */}
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setCycleFilterStatus("all")}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
+                          cycleFilterStatus === "all"
+                            ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm"
+                            : "bg-white dark:bg-zinc-900 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-zinc-800"
+                        }`}
+                      >
+                        الكل ({itemsWithConsumption.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCycleFilterStatus("critical")}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1 ${
+                          cycleFilterStatus === "critical"
+                            ? "bg-red-600 text-white shadow-sm"
+                            : "bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/30 dark:border-red-900/40"
+                        }`}
+                      >
+                        <span>🔴 عاجل ({itemsWithConsumption.filter(i => i.metrics.depletionStatus === "critical").length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCycleFilterStatus("warning")}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1 ${
+                          cycleFilterStatus === "warning"
+                            ? "bg-amber-600 text-white shadow-sm"
+                            : "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-900/40"
+                        }`}
+                      >
+                        <span>🟡 أسبوع ({itemsWithConsumption.filter(i => i.metrics.depletionStatus === "warning").length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCycleFilterStatus("safe")}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1 ${
+                          cycleFilterStatus === "safe"
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900/40"
+                        }`}
+                      >
+                        <span>🟢 كافية ({itemsWithConsumption.filter(i => i.metrics.depletionStatus === "safe").length})</span>
+                      </button>
+                    </div>
+
+                    {/* Square Cards Grid (2 columns on mobile!) */}
+                    {filteredCyclesItems.length === 0 ? (
+                      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
+                        <Clock className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                        <p className="text-gray-500 font-bold">لا توجد مواد مطابقة للفلتر</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {filteredCyclesItems.map(({ item, metrics }) => (
+                          <div
+                            key={item.id}
+                            className={`bg-white dark:bg-zinc-900 rounded-2xl border p-3 shadow-sm flex flex-col justify-between relative hover:shadow-md transition ${
+                              metrics.depletionStatus === "critical"
+                                ? "border-red-300 dark:border-red-900/60 bg-red-50/10"
+                                : metrics.depletionStatus === "warning"
+                                ? "border-amber-300 dark:border-amber-900/60 bg-amber-50/10"
+                                : "border-gray-100 dark:border-zinc-800"
+                            }`}
+                          >
+                            <div>
+                              {/* Category & Status pill */}
+                              <div className="flex items-center justify-between gap-1 mb-2">
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate max-w-[55%] ${CAT_COLORS[item.category] || "bg-gray-100 text-gray-600"}`}>
+                                  {item.category}
+                                </span>
+                                <span
+                                  className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
+                                    metrics.depletionStatus === "critical"
+                                      ? "bg-red-500 text-white"
+                                      : metrics.depletionStatus === "warning"
+                                      ? "bg-amber-500 text-white"
+                                      : "bg-emerald-500 text-white"
+                                  }`}
+                                >
+                                  {metrics.depletionStatus === "critical" ? "🔴 عاجل" : metrics.depletionStatus === "warning" ? "🟡 قريب" : "🟢 كافية"}
+                                </span>
+                              </div>
+
+                              {/* Item Name */}
+                              <h4 className="font-black text-xs sm:text-sm text-gray-900 dark:text-white line-clamp-2 leading-tight mb-2">
+                                {item.name}
+                              </h4>
+
+                              {/* Metric Mini Pills */}
+                              <div className="space-y-1 text-[10px] bg-gray-50 dark:bg-zinc-800/80 p-2 rounded-xl border border-gray-100 dark:border-zinc-700/50 mb-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-500 font-bold">المخزون:</span>
+                                  <span className="font-black text-gray-800 dark:text-gray-200">
+                                    {item.quantity} {item.unit}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-500 font-bold">دورة النفاد:</span>
+                                  <span className="font-black text-blue-600 dark:text-blue-400">
+                                    {metrics.averageCycleDays ? `كل ~${metrics.averageCycleDays} يوم` : "تحت المراقبة"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center pt-0.5 border-t border-gray-200/50 dark:border-zinc-700/50">
+                                  <span className="text-gray-500 font-bold">متبقي:</span>
+                                  <span className={`font-black ${metrics.estimatedDaysRemaining !== null && metrics.estimatedDaysRemaining <= 3 ? "text-red-600" : "text-emerald-600 dark:text-emerald-400"}`}>
+                                    {metrics.estimatedDaysRemaining !== null ? `~${metrics.estimatedDaysRemaining} يوم` : "—"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-1.5 pt-1 mt-auto">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setManualPurchaseInitialItem(item);
+                                  setIsManualCakePurchaseOpen(true);
+                                }}
+                                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] py-1.5 px-2 rounded-xl transition flex items-center justify-center gap-1 shadow-sm active:scale-95"
+                              >
+                                <ShoppingCart className="w-3 h-3" />
+                                <span>شراء</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTimelineModalItem(item)}
+                                className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 flex items-center justify-center shrink-0 transition"
+                                title="سجل الشراء ومعدل النفاد"
+                              >
+                                <Clock className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ──────── SUB-TAB 3: PURCHASES & INVOICES LOG (مربعات مرتبة) ──────── */}
+                {inventorySubTab === "purchases" && (
+                  <div className="space-y-4">
+                    {/* Search & Toggle Filters */}
+                    <div className="bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm space-y-2.5">
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="ابحث باسم المادة أو المتجر..."
+                          value={purchaseSearchQuery}
+                          onChange={(e) => setPurchaseSearchQuery(e.target.value)}
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-xs font-bold rounded-xl py-2.5 pr-9 pl-3 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div className="flex gap-1 bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setPurchaseInvoiceFilter("all")}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-black transition ${
+                            purchaseInvoiceFilter === "all"
+                              ? "bg-white dark:bg-zinc-700 text-blue-900 dark:text-blue-200 shadow-sm"
+                              : "text-gray-500"
+                          }`}
+                        >
+                          الكل ({purchases.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPurchaseInvoiceFilter("invoiced")}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-black transition ${
+                            purchaseInvoiceFilter === "invoiced"
+                              ? "bg-white dark:bg-zinc-700 text-blue-900 dark:text-blue-200 shadow-sm"
+                              : "text-gray-500"
+                          }`}
+                        >
+                          بفاتورة ({purchases.filter(p => p.hasInvoice).length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPurchaseInvoiceFilter("non_invoiced")}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-black transition ${
+                            purchaseInvoiceFilter === "non_invoiced"
+                              ? "bg-white dark:bg-zinc-700 text-blue-900 dark:text-blue-200 shadow-sm"
+                              : "text-gray-500"
+                          }`}
+                        >
+                          بدون فاتورة ({purchases.filter(p => !p.hasInvoice).length})
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Square Purchases Grid (2 columns on mobile!) */}
+                    {filteredPurchases.length === 0 ? (
+                      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800 space-y-3">
+                        <Receipt className="w-10 h-10 text-gray-300 mx-auto" />
+                        <h4 className="font-black text-gray-700 dark:text-gray-300 text-sm">لا توجد مشتريات مسجلة بعد</h4>
+                        <p className="text-xs text-gray-500">يمكنك تصوير فاتورة بالـ AI أو تسجيل شراء مباشر لحساب تواريخ الاستهلاك</p>
+                        <div className="flex justify-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsScanCakeInvoiceOpen(true)}
+                            className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl transition"
+                          >
+                            📸 تصوير فاتورة
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setManualPurchaseInitialItem(null);
+                              setIsManualCakePurchaseOpen(true);
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-3.5 py-2 rounded-xl transition"
+                          >
+                            🛒 تسجيل شراء
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {filteredPurchases.map(p => (
+                          <div
+                            key={p.id}
+                            className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm p-3 flex flex-col justify-between relative hover:shadow-md transition"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between gap-1 mb-1.5">
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate max-w-[60%] ${CAT_COLORS[p.category] || "bg-gray-100 text-gray-600"}`}>
+                                  {p.category || "أخرى"}
+                                </span>
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${p.hasInvoice ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"}`}>
+                                  {p.hasInvoice ? "🧾 بفاتورة" : "🛒 كاش"}
+                                </span>
+                              </div>
+
+                              <h4 className="font-black text-xs sm:text-sm text-gray-900 dark:text-white line-clamp-2 leading-tight mb-2">
+                                {p.itemName}
+                              </h4>
+
+                              <div className="bg-gray-50 dark:bg-zinc-800/80 p-2 rounded-xl text-[10px] space-y-1 mb-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-500 font-bold">الكمية:</span>
+                                  <span className="font-black text-gray-800 dark:text-gray-200">{p.quantity} {p.unit}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-500 font-bold">المبلغ:</span>
+                                  <span className="font-black text-purple-700 dark:text-purple-300">{Number(p.totalPrice || 0).toLocaleString()} د.ع</span>
+                                </div>
+                                <div className="flex justify-between items-center pt-0.5 border-t border-gray-200/50 dark:border-zinc-700/50 text-[9px] text-gray-500">
+                                  <span>📅 {p.purchaseDate}</span>
+                                  {p.storeName && <span className="truncate max-w-[45%]">🏪 {p.storeName}</span>}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-1 pt-1 mt-auto border-t border-gray-100 dark:border-zinc-800">
+                              {p.invoiceImageUrl ? (
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(p.invoiceImageUrl, "_blank")}
+                                  className="text-[10px] text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 py-1 px-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-zinc-800 transition"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>الوصل</span>
+                                </button>
+                              ) : (
+                                <span className="text-[9px] text-gray-400">بدون وصل</span>
+                              )}
+                              
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePurchase(p.id!)}
+                                className="text-gray-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 dark:hover:bg-zinc-800 transition"
+                                title="حذف"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

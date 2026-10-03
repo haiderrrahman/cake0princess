@@ -82,33 +82,15 @@ export default function FinancesAdmin() {
   const [settleDebtModalOpen, setSettleDebtModalOpen] = useState(false);
   const [settleAmount, setSettleAmount] = useState("");
 
-  // Cake Materials & Invoices states
+  // Cake Materials scan state
   const [isScanCakeInvoiceOpen, setIsScanCakeInvoiceOpen] = useState(false);
   const [cakeInventoryItems, setCakeInventoryItems] = useState<any[]>([]);
-  const [cakePurchasesStats, setCakePurchasesStats] = useState({ total: 0, invoiced: 0, nonInvoiced: 0, count: 0 });
 
   useEffect(() => {
     // Load cake inventory items for matching in AI scan modal
     getDocs(collection(db, "cake_inventory")).then((snap) => {
       setCakeInventoryItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     }).catch(console.error);
-
-    // Real-time purchase stats
-    const unsubPurchases = onSnapshot(collection(db, "cake_material_purchases"), (snap) => {
-      let total = 0;
-      let invoiced = 0;
-      let nonInvoiced = 0;
-      snap.docs.forEach((d) => {
-        const p = d.data();
-        const amt = Number(p.totalPrice) || 0;
-        total += amt;
-        if (p.hasInvoice) invoiced += amt;
-        else nonInvoiced += amt;
-      });
-      setCakePurchasesStats({ total, invoiced, nonInvoiced, count: snap.docs.length });
-    }, console.error);
-
-    return () => unsubPurchases();
   }, []);
 
   useEffect(() => {
@@ -428,7 +410,7 @@ export default function FinancesAdmin() {
               <span>📸 تصوير فاتورة كيك (AI)</span>
             </button>
             <Link
-              href="/admin/inventory"
+              href="/admin/hub?tab=inventory"
               className="bg-white/10 hover:bg-white/20 text-white rounded-xl px-3 py-2 flex items-center gap-1.5 text-xs font-black backdrop-blur-md transition"
             >
               <Clock className="w-4 h-4" />
@@ -467,7 +449,6 @@ export default function FinancesAdmin() {
         </div>
 
         {/* Salary Debt Breakdown */}
-        {/* Salary Debt Breakdown */}
         <div className="bg-orange-500/20 border border-orange-400/30 rounded-2xl px-4 py-3 mt-3 relative z-10 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-2xl">👤</span>
@@ -503,71 +484,7 @@ export default function FinancesAdmin() {
       </div>
 
       <div className="px-5 mt-6 relative z-10 space-y-4">
-        {/* Cake Materials & Invoices Audit Card */}
-        <div className="bg-gradient-to-r from-indigo-900/10 via-purple-900/10 to-pink-900/10 border border-purple-200/80 dark:border-purple-900/40 rounded-3xl p-5 shadow-sm space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/25">
-                <Receipt className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-black text-base text-gray-900 dark:text-white flex items-center gap-2">
-                  جرد مشتريات وفواتير مواد الكيك
-                  <span className="text-[10px] bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-800">
-                    مزامنة المخزن
-                  </span>
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  تتبع المشتريات (بفواتير وبدون فواتير) وتأثيرها المالي ودورة الاستهلاك
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsScanCakeInvoiceOpen(true)}
-                className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition"
-              >
-                <Sparkles className="w-3.5 h-3.5" /> مسح فاتورة بالـ AI
-              </button>
-              <Link
-                href="/admin/inventory"
-                className="bg-white dark:bg-zinc-800 text-gray-800 dark:text-white border border-gray-200 dark:border-zinc-700 font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 hover:bg-gray-50 dark:hover:bg-zinc-700 transition"
-              >
-                <Package className="w-3.5 h-3.5 text-blue-500" /> فتح المخزن والنفاد
-              </Link>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-purple-100 dark:border-purple-900/30 text-center">
-            <div className="bg-white/80 dark:bg-zinc-900/80 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800">
-              <p className="text-[10px] font-bold text-gray-500 mb-0.5">إجمالي مشتريات المواد</p>
-              <p className="text-base font-black text-purple-950 dark:text-white">
-                {cakePurchasesStats.total.toLocaleString()} <span className="text-[10px] font-normal text-gray-400">د.ع</span>
-              </p>
-              <p className="text-[10px] text-gray-400">{cakePurchasesStats.count} عملية شراء</p>
-            </div>
-
-            <div className="bg-white/80 dark:bg-zinc-900/80 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800">
-              <p className="text-[10px] font-bold text-blue-600 mb-0.5">مشتريات بفواتير 🧾</p>
-              <p className="text-base font-black text-blue-900 dark:text-blue-300">
-                {cakePurchasesStats.invoiced.toLocaleString()} <span className="text-[10px] font-normal text-gray-400">د.ع</span>
-              </p>
-              <p className="text-[10px] text-blue-500">مسجلة بوصل رسمي</p>
-            </div>
-
-            <div className="bg-white/80 dark:bg-zinc-900/80 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800">
-              <p className="text-[10px] font-bold text-emerald-600 mb-0.5">بدون فاتورة (كاش/سوق) 🛒</p>
-              <p className="text-base font-black text-emerald-900 dark:text-emerald-300">
-                {cakePurchasesStats.nonInvoiced.toLocaleString()} <span className="text-[10px] font-normal text-gray-400">د.ع</span>
-              </p>
-              <p className="text-[10px] text-emerald-500">مسواك مباشر</p>
-            </div>
-          </div>
-        </div>
-
-        <h2 className="text-sm font-black text-gray-800 dark:text-white pt-2 flex items-center gap-2">
+        <h2 className="text-sm font-black text-gray-800 dark:text-gray-200 pt-2 flex items-center gap-2">
           <Receipt className="w-4 h-4 text-purple-500" /> سجل المصروفات العام
         </h2>
 
