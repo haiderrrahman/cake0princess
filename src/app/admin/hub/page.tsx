@@ -1246,6 +1246,31 @@ function AdminHubContent() {
                 </button>
               </div>
             )}
+            {activeTab === "supplies_orders" && (
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsScanCakeInvoiceOpen(true)}
+                  className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 text-slate-950 rounded-xl px-2.5 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black shadow-md active:scale-95 transition"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-950" />
+                  <span className="hidden sm:inline">📸 فاتورة بالـ AI</span>
+                  <span className="sm:hidden">📸 فاتورة</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualPurchaseInitialItem(null);
+                    setIsManualCakePurchaseOpen(true);
+                  }}
+                  className="bg-white/15 hover:bg-white/25 text-white rounded-xl px-2.5 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black backdrop-blur-md transition active:scale-95 border border-white/20"
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">تسجيل شراء</span>
+                  <span className="sm:hidden">شراء</span>
+                </button>
+              </div>
+            )}
             <button onClick={fetchAll} className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center hover:bg-white/20 transition backdrop-blur-md border border-white/10" title="تحديث">
               <RefreshCw className={`w-4 h-4 text-white ${loading ? "animate-spin" : ""}`} />
             </button>
@@ -1385,6 +1410,38 @@ function AdminHubContent() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Futuristic Hub Navigation Tabs Bar */}
+      <div className="px-4 sm:px-5 -mt-5 relative z-20">
+        <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl border border-gray-100 dark:border-zinc-800 p-1.5 rounded-2xl shadow-xl flex items-center gap-1 overflow-x-auto custom-scrollbar">
+          {[
+            { id: "external", label: "📱 سوشيال", count: stats.pendingExtOrders },
+            { id: "orders", label: "🛒 التطبيق", count: stats.pendingOrders },
+            { id: "inventory", label: "📦 المخزن", count: null },
+            { id: "supplies_orders", label: "🧂 مواد الكيك", count: null },
+            { id: "courses", label: "🎓 الأكاديمية", count: null },
+            { id: "audit", label: "📊 مطابقة وكشف", count: null },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTab(t.id as any)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                activeTab === t.id
+                  ? "bg-gradient-to-r from-slate-900 to-zinc-800 text-white dark:from-white dark:to-zinc-200 dark:text-zinc-950 shadow-md scale-[1.02]"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800"
+              }`}
+            >
+              <span>{t.label}</span>
+              {t.count !== null && t.count > 0 && (
+                <span className="bg-rose-500 text-white font-mono text-[10px] px-1.5 py-0.5 rounded-full font-black">
+                  {t.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Modals */}
