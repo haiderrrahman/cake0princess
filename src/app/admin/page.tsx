@@ -4,41 +4,74 @@ import {
   Package, BookOpen, ShoppingBag, Users, BarChart3, DollarSign, Smartphone,
   Receipt, Store, Settings, Crown, Image as ImageIcon, Tag, Sparkles, TrendingUp,
   Star, Home, Megaphone, Box, GraduationCap, Cake, ShoppingCart, Layers,
-  PlusCircle, Wallet, ClipboardList, Award
+  PlusCircle, Wallet, ClipboardList, Award, ArrowUpRight, ShieldCheck, Activity,
+  AlertTriangle, CheckCircle2, ChevronRight, Zap, Target, Flame, Compass, RefreshCw
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { useEffect, useState } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { useEffect, useState, useMemo } from "react";
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AdminQuickEntry from "@/components/AdminQuickEntry";
 
 export default function AdminDashboard() {
   const { user, isAdmin } = useAuth();
   const [statsLoading, setStatsLoading] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return !localStorage.getItem('admin_dashboard_stats');
+    if (typeof window !== "undefined") {
+      return !localStorage.getItem("admin_dashboard_stats");
     }
     return true;
   });
   const [showQuickEntry, setShowQuickEntry] = useState(false);
+  const [currentTime, setCurrentTime] = useState("");
+  const [activeOperationalCounts, setActiveOperationalCounts] = useState({
+    pendingExternal: 0,
+    pendingApp: 0,
+    todayDeliveries: 0,
+    totalExpensesCount: 0
+  });
+
   const [realStats, setRealStats] = useState(() => {
     // Load from cache for instant display
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       try {
-        const cached = localStorage.getItem('admin_dashboard_stats');
+        const cached = localStorage.getItem("admin_dashboard_stats");
         if (cached) return JSON.parse(cached);
       } catch {}
     }
     return {
-      todaySales: 0, weekSales: 0, monthSales: 0,
-      totalRevenue: 0, netProfit: 0, totalExpenses: 0,
-      totalSalaryDebt: 0, cakeMaterialsExpense: 0,
+      todaySales: 0,
+      weekSales: 0,
+      monthSales: 0,
+      totalRevenue: 0,
+      netProfit: 0,
+      totalExpenses: 0,
+      totalSalaryDebt: 0,
+      cakeMaterialsExpense: 0,
       breakdown: { social: 0, appCakes: 0, appAcademy: 0, storeSupplies: 0 },
     };
   });
 
+  // Live Baghdad clock
   useEffect(() => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const updateClock = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString("ar-IQ", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true,
+        })
+      );
+    };
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -49,14 +82,28 @@ export default function AdminDashboard() {
     let currentStoreSales: any[] = [];
 
     const calculateStats = () => {
-      let todaySales = 0, weekSales = 0, monthSales = 0, totalRevenue = 0, totalProfit = 0;
-      let social = 0, appCakes = 0, appAcademy = 0, storeSupplies = 0;
-      
-      let socialReceived = 0, appReceived = 0, suppliesReceived = 0;
+      let todaySales = 0,
+        weekSales = 0,
+        monthSales = 0,
+        totalRevenue = 0,
+        totalProfit = 0;
+      let social = 0,
+        appCakes = 0,
+        appAcademy = 0,
+        storeSupplies = 0;
 
-      currentExtOrders.forEach(o => {
-        const isDelivered = o.status === 'delivered' || o.status === 'completed';
-        if (!isDelivered) return;
+      let socialReceived = 0,
+        appReceived = 0,
+        suppliesReceived = 0;
+
+      let pExt = 0;
+      let todayDlv = 0;
+
+      currentExtOrders.forEach((o) => {
+        const isDelivered = o.status === "delivered" || o.status === "completed";
+        if (!isDelivered && o.status !== "cancelled" && o.status !== "rejected") {
+          pExt++;
+        }
 
         const price = Number(o.price || 0);
         const paid = Number(o.paidAmount ?? price);
@@ -65,33 +112,52 @@ export default function AdminDashboard() {
         let received = price;
         if (isDebt) {
           const diff = price - paid;
-          if (diff > 0) received = paid; // Customer owes us
-          else received = price; // We owe customer
+          if (diff > 0) received = paid;
+          else received = price;
         }
 
-        socialReceived += received;
-        social += received; // Use received for breakdown
-        totalProfit += Number(o.profit || 0);
+        if (isDelivered) {
+          socialReceived += received;
+          social += received;
+          totalProfit += Number(o.profit || 0);
 
-        const rawDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
-        
-        const d = new Date(rawDate);
-        d.setHours(0, 0, 0, 0);
-        if (d.getTime() === today.getTime()) todaySales += received;
-        if (d >= weekAgo) weekSales += received;
-        if (rawDate >= thirtyDaysAgo) monthSales += received;
+          const rawDate = o.deliveryDate
+            ? new Date(o.deliveryDate)
+            : o.createdAt?.toDate
+            ? o.createdAt.toDate()
+            : new Date(o.createdAt || 0);
+
+          const d = new Date(rawDate);
+          d.setHours(0, 0, 0, 0);
+          if (d.getTime() === today.getTime()) todaySales += received;
+          if (d >= weekAgo) weekSales += received;
+          if (rawDate >= thirtyDaysAgo) monthSales += received;
+        }
+
+        // Today's delivery check
+        if (o.deliveryDate) {
+          const dlDate = new Date(o.deliveryDate);
+          dlDate.setHours(0, 0, 0, 0);
+          if (dlDate.getTime() === today.getTime() && o.status !== "cancelled") {
+            todayDlv++;
+          }
+        }
       });
 
+      let pApp = 0;
       // ── App Orders (orders) ──
-      currentOrders.forEach(o => {
-        const isDelivered = o.status === 'delivered' || o.status === 'completed';
+      currentOrders.forEach((o) => {
+        if (["pending", "processing", "delivering"].includes(o.status)) {
+          pApp++;
+        }
+
+        const isDelivered = o.status === "delivered" || o.status === "completed";
         if (!isDelivered) return;
 
-        const hasSupplies = o.items?.some((i: any) => i.isSupply || i.category === 'supplies' || i.id?.includes('supply'));
-        const hasCourses = o.items?.some((i: any) => i.type === 'course');
-        if (hasCourses && !hasSupplies && o.items?.length === 1) {
-          // Pure academy - maybe count? We need to count it in breakdown
-        }
+        const hasSupplies = o.items?.some(
+          (i: any) => i.isSupply || i.category === "supplies" || i.id?.includes("supply")
+        );
+        const hasCourses = o.items?.some((i: any) => i.type === "course");
 
         const total = Number(o.total || o.toPayNow || 0);
         const isDebt = o.isDebt === true;
@@ -108,15 +174,19 @@ export default function AdminDashboard() {
         if (hasCourses && !hasSupplies && o.items?.length === 1) {
           appAcademy += received;
         } else if (hasSupplies) {
-          appCakes += received; // Wait, actually the app cakes breakdown
+          appCakes += received;
         } else {
           appCakes += received;
         }
 
-        totalProfit += (total * 0.3); // App profit estimate
+        totalProfit += total * 0.3;
 
-        const rawDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
-        
+        const rawDate = o.deliveryDate
+          ? new Date(o.deliveryDate)
+          : o.createdAt?.toDate
+          ? o.createdAt.toDate()
+          : new Date(o.createdAt || 0);
+
         const d = new Date(rawDate);
         d.setHours(0, 0, 0, 0);
         if (d.getTime() === today.getTime()) todaySales += received;
@@ -125,17 +195,19 @@ export default function AdminDashboard() {
       });
 
       // ── Store Sales (store_sales) ──
-      currentStoreSales.forEach(o => {
+      currentStoreSales.forEach((o) => {
         if (["rejected", "cancelled"].includes(o.status)) return;
         const amt = Number(o.price || 0);
         const profit = Number(o.profit || 0);
-        
+
         suppliesReceived += amt;
         storeSupplies += amt;
         totalProfit += profit;
 
-        const rawDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || o.date || 0);
-        
+        const rawDate = o.createdAt?.toDate
+          ? o.createdAt.toDate()
+          : new Date(o.createdAt || o.date || 0);
+
         const d = new Date(rawDate);
         d.setHours(0, 0, 0, 0);
         if (d.getTime() === today.getTime()) todaySales += amt;
@@ -145,264 +217,743 @@ export default function AdminDashboard() {
 
       totalRevenue = socialReceived + appReceived + suppliesReceived;
 
-      const totalExpenses = currentExpenses.filter(e => !e.isDebt).reduce((s, e) => s + (Number(e.amount) || 0), 0);
-      const totalSalaryDebt = currentExpenses.filter(e => e.isDebt).reduce((s, e) => s + (Number(e.amount) || 0), 0);
-      const cakeMaterialsExpense = currentExpenses.filter(e => {
-        const cat = e.category || "";
-        const desc = e.description || e.title || "";
-        return cat === "مشتريات مخزنية" || cat === "مواد الكيك" || cat === "مواد كيك" || cat === "المواد الأولية (كيك وكريمة)" || 
-               desc.includes("المخزن") || desc.includes("مادة") || desc.includes("مواد");
-      }).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      const totalExpenses = currentExpenses
+        .filter((e) => !e.isDebt)
+        .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      const totalSalaryDebt = currentExpenses
+        .filter((e) => e.isDebt)
+        .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      const cakeMaterialsExpense = currentExpenses
+        .filter((e) => {
+          const cat = e.category || "";
+          const desc = e.description || e.title || "";
+          return (
+            cat === "مشتريات مخزنية" ||
+            cat === "مواد الكيك" ||
+            cat === "مواد كيك" ||
+            cat === "المواد الأولية (كيك وكريمة)" ||
+            desc.includes("المخزن") ||
+            desc.includes("مادة") ||
+            desc.includes("مواد")
+          );
+        })
+        .reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
-      const netProfit = totalRevenue - totalExpenses - totalSalaryDebt; // Profit based on Revenue - Expenses - Debt
-      
+      const netProfit = totalRevenue - totalExpenses - totalSalaryDebt;
+
       const result = {
-        todaySales, weekSales, monthSales,
-        totalRevenue, netProfit, totalExpenses,
-        totalSalaryDebt, cakeMaterialsExpense,
-        breakdown: { social, appCakes, appAcademy, storeSupplies }
+        todaySales,
+        weekSales,
+        monthSales,
+        totalRevenue,
+        netProfit,
+        totalExpenses,
+        totalSalaryDebt,
+        cakeMaterialsExpense,
+        breakdown: { social, appCakes, appAcademy, storeSupplies },
       };
 
       setRealStats(result);
       setStatsLoading(false);
-      try { localStorage.setItem('admin_dashboard_stats', JSON.stringify(result)); } catch {}
+      setActiveOperationalCounts({
+        pendingExternal: pExt,
+        pendingApp: pApp,
+        todayDeliveries: todayDlv,
+        totalExpensesCount: currentExpenses.length,
+      });
+
+      try {
+        localStorage.setItem("admin_dashboard_stats", JSON.stringify(result));
+      } catch {}
     };
 
-    import("firebase/firestore").then(({ onSnapshot, query, orderBy, limit }) => {
+    import("firebase/firestore").then(({ onSnapshot, query, orderBy }) => {
       const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"));
       const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
       const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"));
       const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"));
 
       const unsubOrders = onSnapshot(qOrders, (snap) => {
-        currentOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        currentOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         calculateStats();
       });
       const unsubExt = onSnapshot(qExt, (snap) => {
-        currentExtOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        
+        currentExtOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
         // Notifications Logic
-        currentExtOrders.forEach(o => {
+        currentExtOrders.forEach((o) => {
           if (o.deliveryDate) {
             const deliveryDateObj = new Date(o.deliveryDate);
             const now = new Date();
             const diffHours = (deliveryDateObj.getTime() - now.getTime()) / (1000 * 60 * 60);
-            let title = "", message = "", updateObj: any = null;
+            let title = "",
+              message = "",
+              updateObj: any = null;
             if (diffHours <= 1 && diffHours >= 0 && !o.notified1h) {
-              title = `طلب الزبون: ${o.customerName || 'مجهول'} ⚠️`;
-              message = `الوقت يقترب! يجب تسليم كيكة (${o.cakeName || 'بدون اسم'}) بعد ساعة.`;
+              title = `طلب الزبون: ${o.customerName || "مجهول"} ⚠️`;
+              message = `الوقت يقترب! يجب تسليم كيكة (${o.cakeName || "بدون اسم"}) بعد ساعة.`;
               updateObj = { notified1h: true };
             } else if (diffHours <= 10 && diffHours > 1 && !o.notified10h) {
-              title = `طلب الزبون: ${o.customerName || 'مجهول'} ⚠️`;
-              message = `يجب إكمال كيكة (${o.cakeName || 'بدون اسم'}) الآن!`;
+              title = `طلب الزبون: ${o.customerName || "مجهول"} ⚠️`;
+              message = `يجب إكمال كيكة (${o.cakeName || "بدون اسم"}) الآن!`;
               updateObj = { notified10h: true };
             } else if (diffHours <= 24 && diffHours > 10 && !o.notified24h) {
-              title = `طلب الزبون: ${o.customerName || 'مجهول'} ⚠️`;
-              message = `تذكير: يجب تحضير كيكة (${o.cakeName || 'بدون اسم'}) بسرعة.`;
+              title = `طلب الزبون: ${o.customerName || "مجهول"} ⚠️`;
+              message = `تذكير: يجب تحضير كيكة (${o.cakeName || "بدون اسم"}) بسرعة.`;
               updateObj = { notified24h: true };
             }
             if (updateObj) {
-              addDoc(collection(db, "notifications"), { userId: "admin", title, message, type: "order", imageUrl: o.imageUrl || "", read: false, link: "/admin/hub?tab=external", createdAt: serverTimestamp() });
+              addDoc(collection(db, "notifications"), {
+                userId: "admin",
+                title,
+                message,
+                type: "order",
+                imageUrl: o.imageUrl || "",
+                read: false,
+                link: "/admin/hub?tab=external",
+                createdAt: serverTimestamp(),
+              });
               updateDoc(doc(db, "external_orders", o.id), updateObj).catch(console.error);
             }
           }
         });
-        
+
         calculateStats();
       });
       const unsubExp = onSnapshot(qExp, (snap) => {
-        currentExpenses = snap.docs.map(d => d.data());
+        currentExpenses = snap.docs.map((d) => d.data());
         calculateStats();
       });
       const unsubStore = onSnapshot(qStore, (snap) => {
-        currentStoreSales = snap.docs.map(d => d.data());
+        currentStoreSales = snap.docs.map((d) => d.data());
         calculateStats();
       });
-
-      // Quick entry background refresh
-      const handleBackgroundUpload = () => {
-        // With onSnapshot, it will auto-update, but we keep this for consistency if needed.
-      };
-      window.addEventListener('backgroundUploadSuccess', handleBackgroundUpload);
 
       return () => {
         unsubOrders();
         unsubExt();
         unsubExp();
         unsubStore();
-        window.removeEventListener('backgroundUploadSuccess', handleBackgroundUpload);
       };
     });
   }, []);
 
+  // Performance calculations
+  const profitMargin = useMemo(() => {
+    if (!realStats.totalRevenue || realStats.totalRevenue <= 0) return 0;
+    return Math.round((realStats.netProfit / realStats.totalRevenue) * 100);
+  }, [realStats]);
+
+  const debtRatio = useMemo(() => {
+    if (!realStats.totalRevenue || realStats.totalRevenue <= 0) return 0;
+    return Math.round((realStats.totalSalaryDebt / realStats.totalRevenue) * 100);
+  }, [realStats]);
+
+  const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+
   if (!isAdmin) {
-    return <div className="p-8 text-center text-red-500 font-bold">غير مصرح لك بالدخول</div>;
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center text-rose-400 font-black">
+        <div className="bg-rose-950/40 border border-rose-800/60 p-8 rounded-3xl backdrop-blur-xl">
+          <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-rose-400" />
+          <h2 className="text-xl">غير مصرح لك بالدخول</h2>
+          <p className="text-xs text-rose-300/80 mt-1">هذه المنطقة مخصصة لإدارة كيك الأميرة فقط</p>
+        </div>
+      </div>
+    );
   }
 
-  const top4Icons = [
-    { title: "سوشيال", icon: "📱", href: "/admin/hub?tab=external", bg: "bg-emerald-500", shadow: "shadow-emerald-500/30", badge: null },
-    { title: "تطبيق", icon: "🛒", href: "/admin/hub?tab=orders", bg: "bg-pink-500", shadow: "shadow-pink-500/30", badge: null },
-    { title: "المخزن", icon: "📦", href: "/admin/hub?tab=inventory", bg: "bg-blue-500", shadow: "shadow-blue-500/30", badge: null },
-    { title: "مواد الكيك", icon: "🧂", href: "/admin/hub?tab=supplies_orders", bg: "bg-orange-500", shadow: "shadow-orange-500/30", badge: null },
+  // Tactical Core 4 Operation Hubs
+  const tacticalPillars = [
+    {
+      title: "طلبات السوشيال",
+      subtitle: "واتساب وانستغرام",
+      icon: "📱",
+      href: "/admin/hub?tab=external",
+      count: activeOperationalCounts.pendingExternal,
+      countLabel: "قيد التنفيذ",
+      gradient: "from-emerald-500 to-teal-700",
+      glow: "shadow-emerald-500/25",
+      border: "border-emerald-500/40",
+    },
+    {
+      title: "طلبات التطبيق",
+      subtitle: "متجر الزبائن",
+      icon: "🛒",
+      href: "/admin/hub?tab=orders",
+      count: activeOperationalCounts.pendingApp,
+      countLabel: "طلب نشط",
+      gradient: "from-pink-500 to-rose-700",
+      glow: "shadow-pink-500/25",
+      border: "border-pink-500/40",
+    },
+    {
+      title: "المخزن والمستودع",
+      subtitle: "جرد ومتابعة المواد",
+      icon: "📦",
+      href: "/admin/hub?tab=inventory",
+      count: null,
+      countLabel: "مراقبة المخزون",
+      gradient: "from-cyan-500 to-blue-700",
+      glow: "shadow-cyan-500/25",
+      border: "border-cyan-500/40",
+    },
+    {
+      title: "فواتير ومواد الكيك",
+      subtitle: "المشتريات وتتبع النفاد",
+      icon: "🧂",
+      href: "/admin/hub?tab=supplies_orders",
+      count: null,
+      countLabel: "الفواتير والمصروف",
+      gradient: "from-amber-500 to-orange-700",
+      glow: "shadow-amber-500/25",
+      border: "border-amber-500/40",
+    },
   ];
 
-  const mainIcons = [
-    { title: "المستخدمين والزبائن", icon: "👥", href: "/admin/customers", bg: "bg-violet-500", shadow: "shadow-violet-500/30", badge: null },
-    { title: "الجرد المالي", icon: "💰", href: "/admin/finances", bg: "bg-teal-500", shadow: "shadow-teal-500/30", badge: null },
-    { title: "المطابقة والكشف", icon: "📊", href: "/admin/hub?tab=audit", bg: "bg-indigo-500", shadow: "shadow-indigo-500/30", badge: null },
-    { title: "منتجات الكيك", icon: "🎂", href: "/admin/products", bg: "bg-rose-500", shadow: "shadow-rose-500/30", badge: null },
-    { title: "الأكاديمية", icon: "🎓", href: "/admin/courses", bg: "bg-cyan-500", shadow: "shadow-cyan-500/30", badge: null },
-    { title: "العروض", icon: "🏷️", href: "/admin/offers", bg: "bg-amber-500", shadow: "shadow-amber-500/30", badge: null },
-    { title: "الإعلانات", icon: "📢", href: "/admin/ads", bg: "bg-lime-500", shadow: "shadow-lime-500/30", badge: null },
-    { title: "البنرات", icon: "🖼️", href: "/admin/banners", bg: "bg-sky-500", shadow: "shadow-sky-500/30", badge: null },
-    { title: "التصنيفات", icon: "🏷️", href: "/admin/categories", bg: "bg-fuchsia-500", shadow: "shadow-fuchsia-500/30", badge: null },
-    { title: "المسابقات", icon: "🏆", href: "/admin/competitions", bg: "bg-yellow-500", shadow: "shadow-yellow-500/30", badge: null },
-    { title: "تصميم خاص", icon: "👑", href: "/admin/custom-orders", bg: "bg-purple-500", shadow: "shadow-purple-500/30", badge: null },
-    { title: "الطلبات العامة", icon: "📋", href: "/admin/orders", bg: "bg-gray-500", shadow: "shadow-gray-500/30", badge: null },
+  // Strategic Operations Matrix Categories
+  const commandSections = [
+    {
+      title: "👑 الإدارة المالية والحسابات",
+      items: [
+        {
+          title: "إدارة المنزل والميزانية",
+          subtitle: "قسم خاص ومستقل",
+          icon: "🏠",
+          href: "/admin/home-finance",
+          bg: "from-rose-600 to-red-800",
+          glow: "shadow-rose-600/30",
+          badge: "VIP",
+        },
+        {
+          title: "الجرد المالي السريع",
+          subtitle: "أرباح ومصروفات",
+          icon: "💰",
+          href: "/admin/finances",
+          bg: "from-teal-600 to-emerald-800",
+          glow: "shadow-teal-600/30",
+          badge: null,
+        },
+        {
+          title: "المطابقة والكشف المالي",
+          subtitle: "ديون وصندوق الكيك",
+          icon: "📊",
+          href: "/admin/hub?tab=audit",
+          bg: "from-indigo-600 to-blue-800",
+          glow: "shadow-indigo-600/30",
+          badge: null,
+        },
+      ],
+    },
+    {
+      title: "🎂 الإنتاج وتصاميم الكيك",
+      items: [
+        {
+          title: "منتجات الكيك",
+          subtitle: "قائمة الكيك والأسعار",
+          icon: "🎂",
+          href: "/admin/products",
+          bg: "from-purple-600 to-pink-800",
+          glow: "shadow-purple-600/30",
+          badge: null,
+        },
+        {
+          title: "تصميم خاص بالزبون",
+          subtitle: "طلبات مخصصة بالصور",
+          icon: "👑",
+          href: "/admin/custom-orders",
+          bg: "from-fuchsia-600 to-purple-800",
+          glow: "shadow-fuchsia-600/30",
+          badge: null,
+        },
+        {
+          title: "تصنيفات المتجر",
+          subtitle: "أقسام المعرض",
+          icon: "🏷️",
+          href: "/admin/categories",
+          bg: "from-violet-600 to-indigo-800",
+          glow: "shadow-violet-600/30",
+          badge: null,
+        },
+      ],
+    },
+    {
+      title: "📢 التسويق والبنرات والمبيعات",
+      items: [
+        {
+          title: "استوديو البنرات",
+          subtitle: "حملات الصفحة الرئيسية",
+          icon: "🖼️",
+          href: "/admin/banners",
+          bg: "from-sky-500 to-blue-700",
+          glow: "shadow-sky-500/30",
+          badge: "جديد ⚡",
+        },
+        {
+          title: "الإعلانات والعروض",
+          subtitle: "خصومات ترويجية",
+          icon: "📢",
+          href: "/admin/ads",
+          bg: "from-lime-600 to-emerald-800",
+          glow: "shadow-lime-600/30",
+          badge: null,
+        },
+        {
+          title: "العروض الترويجية",
+          subtitle: "أكواد وخصومات",
+          icon: "🏷️",
+          href: "/admin/offers",
+          bg: "from-amber-600 to-orange-800",
+          glow: "shadow-amber-600/30",
+          badge: null,
+        },
+        {
+          title: "المسابقات والجوائز",
+          subtitle: "تفاعل الزبائن",
+          icon: "🏆",
+          href: "/admin/competitions",
+          bg: "from-yellow-500 to-amber-700",
+          glow: "shadow-yellow-500/30",
+          badge: null,
+        },
+      ],
+    },
+    {
+      title: "👥 العملاء والتدريب الاحترافي",
+      items: [
+        {
+          title: "الزبائن والمستخدمين",
+          subtitle: "سجل العملاء والنقاط",
+          icon: "👥",
+          href: "/admin/customers",
+          bg: "from-purple-700 to-indigo-900",
+          glow: "shadow-purple-700/30",
+          badge: null,
+        },
+        {
+          title: "الأكاديمية والورشات",
+          subtitle: "دورات صناعة الكيك",
+          icon: "🎓",
+          href: "/admin/courses",
+          bg: "from-cyan-600 to-teal-800",
+          glow: "shadow-cyan-600/30",
+          badge: null,
+        },
+        {
+          title: "الطلبات العامة",
+          subtitle: "سجل الأرشيف الشامل",
+          icon: "📋",
+          href: "/admin/orders",
+          bg: "from-slate-600 to-gray-800",
+          glow: "shadow-slate-600/30",
+          badge: null,
+        },
+      ],
+    },
   ];
-
-  const fmt = (n: number) => n.toLocaleString("en-US");
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8] dark:bg-[#0D0A1A] pb-28 font-sans">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-gray-900 via-zinc-900 to-black pt-14 pb-10 px-5 rounded-b-[36px] shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-72 h-72 bg-pink-600/20 blur-[100px] -translate-y-1/2 translate-x-1/3 rounded-full pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-44 h-44 bg-blue-600/20 blur-[70px] translate-y-1/2 -translate-x-1/4 rounded-full pointer-events-none" />
+    <div className="min-h-screen bg-[#07050e] text-slate-100 pb-36 font-sans relative selection:bg-pink-500 selection:text-white">
+      {/* Background Holographic Atmosphere */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute -top-40 right-[-10%] w-[500px] h-[500px] bg-pink-600/15 rounded-full blur-[140px]" />
+        <div className="absolute top-1/3 left-[-15%] w-[450px] h-[450px] bg-indigo-600/15 rounded-full blur-[140px]" />
+        <div className="absolute bottom-10 right-1/4 w-[400px] h-[400px] bg-emerald-600/10 rounded-full blur-[140px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] opacity-40" />
+      </div>
 
-        <div className="relative z-10">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-[52px] h-[52px] rounded-2xl overflow-hidden shadow-xl border-2 border-white/90 shrink-0 bg-white p-1 flex items-center justify-center ring-2 ring-pink-500/20">
-                <img src="/cp-logo.png" alt="كيك الأميرة" className="w-full h-full object-contain" />
+      <div className="relative z-10">
+        {/* ═══════════════ CYBER EXECUTIVE HEADER ═══════════════ */}
+        <header className="pt-12 pb-8 px-4 sm:px-6 border-b border-white/10 bg-gradient-to-b from-[#130b24]/90 via-[#0d081b]/80 to-transparent backdrop-blur-xl">
+          <div className="max-w-5xl mx-auto space-y-4">
+            {/* Top Bar: Status, Clock & Profile */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-2xl p-1 bg-gradient-to-tr from-pink-500 via-purple-500 to-cyan-400 p-[2px] shadow-lg shadow-pink-500/20">
+                    <div className="w-full h-full bg-[#0d0718] rounded-[14px] flex items-center justify-center overflow-hidden">
+                      <img src="/cp-logo.png" alt="كيك الأميرة" className="w-10 h-10 object-contain" />
+                    </div>
+                  </div>
+                  <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-[#0d0718] rounded-full animate-pulse" />
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-1.5">
+                      مقر القيادة المركزية <span className="text-amber-400">👑</span>
+                    </h1>
+                    <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-black text-emerald-400">
+                      LIVE ● مباشر
+                    </span>
+                  </div>
+                  <p className="text-xs text-pink-300/80 font-bold mt-0.5">
+                    مرحباً {user?.displayName?.split(" ")[0] || "مديرة كيك الأميرة"} ✨ | توقيت بغداد:{" "}
+                    <span className="font-mono text-cyan-300 font-bold" dir="ltr">{currentTime || "..."}</span>
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-2xl font-black text-white tracking-tight mb-0.5">مقر القيادة المركزية 👑</h1>
-                <p className="text-xs text-pink-200 font-bold">أهلاً {user?.displayName?.split(" ")[0] || "مديرة كيك الأميرة"} ✨</p>
+
+              {/* Fast Action Trigger Bar */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickEntry(true)}
+                  className="bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-black px-4 py-2.5 rounded-2xl shadow-xl shadow-pink-500/30 flex items-center gap-2 text-xs sm:text-sm active:scale-95 transition"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>إدخال فوري ذكي</span>
+                </button>
+
+                <Link
+                  href="/admin/home-finance"
+                  className="bg-white/10 hover:bg-white/15 border border-white/15 text-white font-black px-3 py-2.5 rounded-2xl flex items-center gap-1.5 text-xs transition active:scale-95 backdrop-blur-md"
+                >
+                  <span>🏠 المنزل</span>
+                </Link>
               </div>
             </div>
-            <button
-              onClick={() => setShowQuickEntry(true)}
-              className="bg-gradient-to-br from-pink-500 to-rose-600 text-white font-black px-4 py-3 rounded-2xl shadow-xl shadow-pink-500/40 hover:-translate-y-0.5 transition-all flex items-center gap-1.5 text-sm"
+
+            {/* ═══════════════ AI SENTINEL RADAR (OPERATIONAL PULSE) ═══════════════ */}
+            <div className="bg-gradient-to-r from-purple-950/60 via-indigo-950/40 to-slate-900/60 border border-purple-500/30 rounded-3xl p-4 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center shrink-0 mt-0.5">
+                    <Sparkles className="w-5 h-5 text-purple-300 animate-spin-slow" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-purple-200">المرصد الذكي للعمليات الحية:</span>
+                      <span className="text-[10px] bg-purple-500/30 text-purple-200 px-2 py-0.5 rounded-full font-mono">
+                        Sentinel AI
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 font-bold mt-1">
+                      {activeOperationalCounts.todayDeliveries > 0 ? (
+                        <span className="text-amber-300 font-black">
+                          🚨 انتباه: لديك {activeOperationalCounts.todayDeliveries} طلبات سوشيال تستحق التسليم اليوم! اضغط لمتابعتها في المحور.
+                        </span>
+                      ) : activeOperationalCounts.pendingExternal > 0 ? (
+                        <span className="text-emerald-300">
+                          ⚡ العمليات نشطة: يوجد {activeOperationalCounts.pendingExternal} طلب سوشيال قيد التجهيز و {activeOperationalCounts.pendingApp} طلب تطبيق.
+                        </span>
+                      ) : (
+                        <span className="text-cyan-300">
+                          ✅ كافة الطلبات مكتملة ومحدّثة. الأداء التشغيلي في أعلى درجات الاستقرار.
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <Link
+                    href="/admin/hub?tab=external"
+                    className="text-xs font-black bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/40 text-purple-200 px-3 py-1.5 rounded-xl flex items-center gap-1 transition"
+                  >
+                    <span>فتح غرفة العمليات</span>
+                    <ChevronRight className="w-3.5 h-3.5 rotate-180" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* ═══════════════ KPI FLIGHT DECK (FINANCIAL RADAR) ═══════════════ */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+              {/* Card 1: Total Revenue */}
+              <div className="bg-white/5 hover:bg-white/10 transition border border-white/10 rounded-3xl p-4 backdrop-blur-md relative overflow-hidden group">
+                <div className="flex items-center justify-between text-purple-200 mb-2">
+                  <span className="text-[11px] font-bold flex items-center gap-1.5">
+                    <Wallet className="w-4 h-4 text-purple-400" /> إجمالي الإيرادات
+                  </span>
+                  <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-bold">
+                    كل القنوات
+                  </span>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                  {statsLoading ? "…" : fmt(realStats.totalRevenue)}
+                  <span className="text-xs text-purple-300/70 font-normal mr-1">د.ع</span>
+                </div>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5 text-[10px] text-slate-400 font-bold">
+                  <span>مبيعات اليوم:</span>
+                  <span className="text-emerald-400 font-black">+{fmt(realStats.todaySales)} د.ع</span>
+                </div>
+              </div>
+
+              {/* Card 2: Monthly Inflow */}
+              <div className="bg-white/5 hover:bg-white/10 transition border border-white/10 rounded-3xl p-4 backdrop-blur-md relative overflow-hidden group">
+                <div className="flex items-center justify-between text-cyan-200 mb-2">
+                  <span className="text-[11px] font-bold flex items-center gap-1.5">
+                    <TrendingUp className="w-4 h-4 text-cyan-400" /> مبيعات 30 يوماً
+                  </span>
+                  <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-bold">
+                    شهري
+                  </span>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-cyan-300 tracking-tight">
+                  {statsLoading ? "…" : fmt(realStats.monthSales)}
+                  <span className="text-xs text-cyan-200/70 font-normal mr-1">د.ع</span>
+                </div>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5 text-[10px] text-slate-400 font-bold">
+                  <span>الأسبوع الحالي:</span>
+                  <span className="text-cyan-400 font-black">{fmt(realStats.weekSales)} د.ع</span>
+                </div>
+              </div>
+
+              {/* Card 3: Cake Operating Expenses */}
+              <div className="bg-white/5 hover:bg-white/10 transition border border-white/10 rounded-3xl p-4 backdrop-blur-md relative overflow-hidden group">
+                <div className="flex items-center justify-between text-rose-200 mb-2">
+                  <span className="text-[11px] font-bold flex items-center gap-1.5">
+                    <Receipt className="w-4 h-4 text-rose-400" /> مصروفات الكيك
+                  </span>
+                  <span className="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full font-bold">
+                    أموال الكيك
+                  </span>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-rose-400 tracking-tight">
+                  {statsLoading ? "…" : fmt(realStats.totalExpenses)}
+                  <span className="text-xs text-rose-300/70 font-normal mr-1">د.ع</span>
+                </div>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5 text-[10px] text-slate-400 font-bold">
+                  <span>منها مواد خام ومخزن:</span>
+                  <span className="text-rose-300 font-black">{fmt(realStats.cakeMaterialsExpense)} د.ع</span>
+                </div>
+              </div>
+
+              {/* Card 4: Net Profit */}
+              <div className="bg-gradient-to-br from-emerald-950/60 to-emerald-900/30 border border-emerald-500/30 rounded-3xl p-4 backdrop-blur-md relative overflow-hidden group shadow-lg shadow-emerald-950/40">
+                <div className="flex items-center justify-between text-emerald-200 mb-2">
+                  <span className="text-[11px] font-bold flex items-center gap-1.5">
+                    <Crown className="w-4 h-4 text-emerald-400" /> صافي الربح الحقيقي
+                  </span>
+                  <span className="text-[10px] bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full font-black">
+                    {profitMargin}% هامش
+                  </span>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-emerald-300 tracking-tight">
+                  {statsLoading ? "…" : fmt(realStats.netProfit)}
+                  <span className="text-xs text-emerald-200/70 font-normal mr-1">د.ع</span>
+                </div>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-emerald-500/20 text-[10px] text-emerald-300/80 font-bold">
+                  <span>بعد خصم المصاريف والديون:</span>
+                  <span className="text-white font-black">صافي كاش</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Salary Debt Alert Cockpit Bar */}
+            <div className="bg-gradient-to-r from-orange-950/50 via-amber-950/40 to-slate-900/50 border border-orange-500/30 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 backdrop-blur-md">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center font-black">
+                  👤
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-orange-300 font-black">دين مستحق شخصي (أموال الراتب المدفوعة للكيك):</p>
+                    {debtRatio > 0 && (
+                      <span className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded font-bold">
+                        يمثل {debtRatio}% من الإيراد
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-lg font-black text-white">
+                    {statsLoading ? "…" : fmt(realStats.totalSalaryDebt)}{" "}
+                    <span className="text-xs font-normal text-orange-200/70">د.ع مستحق استرداده لكِ</span>
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/admin/finances"
+                className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-black text-xs px-4 py-2 rounded-xl transition shadow-lg shadow-orange-500/20 whitespace-nowrap active:scale-95"
+              >
+                تسديد واسترداد الدين
+              </Link>
+            </div>
+
+            {/* ═══════════════ REVENUE CHANNELS RADAR ═══════════════ */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 backdrop-blur-md">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-300 mb-2.5">
+                <span className="flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-pink-400" />
+                  توزيع مصادر الدخل التشغيلي
+                </span>
+                <span className="text-[10px] text-slate-400">تحديث فوري لكل قناة</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="bg-black/30 rounded-xl p-2.5 border border-white/5">
+                  <div className="flex items-center justify-between text-[11px] text-emerald-400 font-bold mb-1">
+                    <span>📱 سوشيال</span>
+                    <span className="font-mono">
+                      {realStats.totalRevenue > 0
+                        ? Math.round((realStats.breakdown.social / realStats.totalRevenue) * 100)
+                        : 0}
+                      %
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm font-black text-white">{fmt(realStats.breakdown.social)} د.ع</p>
+                </div>
+
+                <div className="bg-black/30 rounded-xl p-2.5 border border-white/5">
+                  <div className="flex items-center justify-between text-[11px] text-pink-400 font-bold mb-1">
+                    <span>🛒 كيك التطبيق</span>
+                    <span className="font-mono">
+                      {realStats.totalRevenue > 0
+                        ? Math.round((realStats.breakdown.appCakes / realStats.totalRevenue) * 100)
+                        : 0}
+                      %
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm font-black text-white">{fmt(realStats.breakdown.appCakes)} د.ع</p>
+                </div>
+
+                <div className="bg-black/30 rounded-xl p-2.5 border border-white/5">
+                  <div className="flex items-center justify-between text-[11px] text-cyan-400 font-bold mb-1">
+                    <span>🎓 الأكاديمية</span>
+                    <span className="font-mono">
+                      {realStats.totalRevenue > 0
+                        ? Math.round((realStats.breakdown.appAcademy / realStats.totalRevenue) * 100)
+                        : 0}
+                      %
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm font-black text-white">{fmt(realStats.breakdown.appAcademy)} د.ع</p>
+                </div>
+
+                <div className="bg-black/30 rounded-xl p-2.5 border border-white/5">
+                  <div className="flex items-center justify-between text-[11px] text-amber-400 font-bold mb-1">
+                    <span>🧂 مستلزمات ومواد</span>
+                    <span className="font-mono">
+                      {realStats.totalRevenue > 0
+                        ? Math.round((realStats.breakdown.storeSupplies / realStats.totalRevenue) * 100)
+                        : 0}
+                      %
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm font-black text-white">{fmt(realStats.breakdown.storeSupplies)} د.ع</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* ═══════════════ MAIN CONTENT BODY ═══════════════ */}
+        <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-8">
+          {/* TACTICAL CORE 4 PILLARS */}
+          <div>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h2 className="text-sm font-black text-slate-200 flex items-center gap-2">
+                <Compass className="w-4 h-4 text-pink-400" />
+                محاور العمليات الميدانية الأربعة
+              </h2>
+              <span className="text-[11px] text-slate-400 font-bold">غرفة العمليات المركزية</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {tacticalPillars.map((item, idx) => (
+                <Link
+                  key={idx}
+                  href={item.href}
+                  className={`bg-gradient-to-br ${item.gradient} p-4 rounded-3xl shadow-xl ${item.glow} hover:-translate-y-1 active:scale-95 transition-all text-white relative overflow-hidden group flex flex-col justify-between min-h-[125px]`}
+                >
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-white/15 rounded-full blur-xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
+
+                  <div className="flex items-start justify-between">
+                    <span className="text-2xl sm:text-3xl p-1 bg-white/10 rounded-2xl backdrop-blur-md">
+                      {item.icon}
+                    </span>
+                    {item.count !== null && item.count > 0 && (
+                      <span className="bg-white/20 text-white font-mono font-black text-xs px-2 py-0.5 rounded-full border border-white/30 backdrop-blur-md animate-pulse">
+                        {item.count} {item.countLabel}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="font-black text-sm tracking-tight text-white mb-0.5">{item.title}</h3>
+                    <p className="text-[10px] text-white/80 font-bold">{item.subtitle}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* HOME FINANCE VIP CARD */}
+          <div>
+            <Link
+              href="/admin/home-finance"
+              className="bg-gradient-to-r from-rose-900/90 via-red-900/80 to-purple-950/90 border border-rose-500/30 rounded-3xl p-5 sm:p-6 flex items-center justify-between shadow-2xl shadow-rose-950/50 text-white relative overflow-hidden group hover:scale-[1.01] transition-all"
             >
-              <span className="text-lg leading-none">+</span> الإدخال
-            </button>
-          </div>
-
-          {/* Financial Stats */}
-          <div className="grid grid-cols-2 gap-3 mb-3 mt-4 relative z-10">
-            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
-              <p className="text-[10px] font-bold text-purple-200 mb-1 flex items-center gap-1"><Wallet className="w-3.5 h-3.5" /> إجمالي الإيرادات</p>
-              <p className="text-xl font-black text-white">{statsLoading ? "…" : fmt(realStats.totalRevenue)} <span className="text-[10px]">د.ع</span></p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
-              <p className="text-[10px] font-bold text-purple-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> المبيعات الشهرية</p>
-              <p className="text-xl font-black text-white">{statsLoading ? "…" : fmt(realStats.monthSales)} <span className="text-[10px]">د.ع</span></p>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3 mb-3 relative z-10">
-            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4">
-              <p className="text-[10px] font-bold text-purple-200 mb-1 flex items-center gap-1"><Receipt className="w-3.5 h-3.5" /> إجمالي المصروفات (أموال الكيك)</p>
-              <p className="text-xl font-black text-red-300">{statsLoading ? "…" : fmt(realStats.totalExpenses)} <span className="text-[10px]">د.ع</span></p>
-            </div>
-            <div className="bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-4">
-              <p className="text-[10px] font-bold text-emerald-200 mb-1 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> صافي الربح التقديري (بعد المصاريف)</p>
-              <p className="text-xl font-black text-white">{statsLoading ? "…" : fmt(realStats.netProfit)} <span className="text-[10px]">د.ع</span></p>
-            </div>
-          </div>
-
-          {/* Salary Debt Breakdown */}
-          <div className="bg-orange-500/20 border border-orange-400/30 rounded-2xl px-4 py-3 mt-3 relative z-10 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">👤</span>
-              <div>
-                <p className="text-[10px] text-orange-200 font-bold mb-1">دين مستحق (اموال الراتب)</p>
-                <p className="text-lg font-black text-white">{statsLoading ? "…" : fmt(realStats.totalSalaryDebt)} <span className="text-[10px]">د.ع</span></p>
+              <div className="absolute right-0 top-0 w-48 h-48 bg-rose-500/15 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
+              <div className="relative z-10 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-[10px] font-black tracking-wider">
+                    قسم مستقل VIP
+                  </span>
+                  <span className="text-xs text-rose-200/80 font-bold">ميزانية المنزل والعائلة</span>
+                </div>
+                <h2 className="text-lg sm:text-xl font-black tracking-tight text-white flex items-center gap-2">
+                  <Home className="w-5 h-5 text-rose-300" />
+                  إدارة المنزل والميزانية العائلية المتكاملة
+                </h2>
+                <p className="text-xs text-rose-200/70 font-bold max-w-xl">
+                  مستقل كلياً عن صندوق الكيك: إدارة رواتب الأسرة، المصاريف الشهرية، المرصد التنبؤي، وخطة القضاء على الديون.
+                </p>
               </div>
-            </div>
-            <Link href="/admin/finances" className="bg-orange-600 hover:bg-orange-700 text-white font-black text-xs px-3 py-1.5 rounded-xl transition shadow-md whitespace-nowrap">
-              تسديد الدين
+
+              <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center backdrop-blur-md shrink-0 group-hover:scale-110 transition-transform">
+                <span className="text-3xl">🏠</span>
+              </div>
             </Link>
           </div>
 
-          {/* Breakdown */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 relative z-10">
-            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-2.5 text-center hover:bg-white/10 transition">
-               <p className="text-[9px] text-purple-200 mb-1">الكل سوشيال</p>
-               <p className="text-xs font-black text-white">{statsLoading ? "…" : fmt(realStats.breakdown.social)} <span className="text-[8px] font-normal">د.ع</span></p>
-            </div>
-            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-2.5 text-center hover:bg-white/10 transition">
-               <p className="text-[9px] text-purple-200 mb-1">مواد الكيك</p>
-               <p className="text-xs font-black text-white">{statsLoading ? "…" : fmt(realStats.breakdown.storeSupplies)} <span className="text-[8px] font-normal">د.ع</span></p>
-            </div>
-            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-2.5 text-center hover:bg-white/10 transition">
-               <p className="text-[9px] text-purple-200 mb-1">الأكاديمية</p>
-               <p className="text-xs font-black text-white">{statsLoading ? "…" : fmt(realStats.breakdown.appAcademy)} <span className="text-[8px] font-normal">د.ع</span></p>
-            </div>
-            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-2.5 text-center hover:bg-white/10 transition">
-               <p className="text-[9px] text-purple-200 mb-1">طلبات التطبيق</p>
-               <p className="text-xs font-black text-white">{statsLoading ? "…" : fmt(realStats.breakdown.appCakes)} <span className="text-[8px] font-normal">د.ع</span></p>
-            </div>
+          {/* STRATEGIC SECTIONS MATRIX */}
+          <div className="space-y-6">
+            {commandSections.map((sec, secIdx) => (
+              <div key={secIdx} className="space-y-3">
+                <h3 className="text-xs font-black text-slate-300 px-1 tracking-wide flex items-center gap-1.5">
+                  <span>{sec.title}</span>
+                </h3>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {sec.items.map((item, i) => (
+                    <Link
+                      key={i}
+                      href={item.href}
+                      className={`bg-gradient-to-br ${item.bg} rounded-3xl p-4 sm:p-5 flex flex-col justify-between shadow-lg ${item.glow} hover:-translate-y-1 active:scale-95 transition-all text-white relative overflow-hidden group min-h-[110px] border border-white/10`}
+                    >
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full blur-xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
+
+                      <div className="flex items-start justify-between">
+                        <span className="text-2xl sm:text-3xl">{item.icon}</span>
+                        {item.badge && (
+                          <span className="bg-white/20 text-white font-black text-[9px] px-2 py-0.5 rounded-full border border-white/30 backdrop-blur-md">
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-2">
+                        <h4 className="font-black text-xs sm:text-sm tracking-tight text-white leading-tight">
+                          {item.title}
+                        </h4>
+                        <p className="text-[10px] text-white/75 font-bold mt-0.5">{item.subtitle}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        </main>
       </div>
 
+      {/* Quick Entry Drawer */}
       {showQuickEntry && (
         <AdminQuickEntry onClose={() => setShowQuickEntry(false)} onSuccess={() => setShowQuickEntry(false)} />
       )}
-
-      {/* Home Finance Distinct Block */}
-      <div className="px-5 mt-6">
-        <Link 
-          href="/admin/home-finance" 
-          className="bg-gradient-to-r from-red-500 to-rose-600 rounded-3xl p-5 flex items-center justify-between shadow-xl shadow-red-500/20 text-white relative overflow-hidden group hover:scale-[1.02] transition-transform"
-        >
-          <div className="absolute right-0 top-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Home className="w-5 h-5 text-red-100" />
-              <h2 className="text-lg font-black tracking-tight">إدارة المنزل والميزانية</h2>
-            </div>
-            <p className="text-xs text-red-100 font-bold opacity-80">قسم مستقل عن إدارة طلبات الكيك</p>
-          </div>
-          <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-md">
-            <span className="text-2xl">🏠</span>
-          </div>
-        </Link>
-      </div>
-
-      {/* Icons Grid */}
-      <div className="px-5 mt-6">
-        <div className="grid grid-cols-4 gap-2 mb-6">
-          {top4Icons.map((item, i) => (
-            <Link
-              key={i}
-              href={item.href}
-              className={`${item.bg} ${item.shadow} shadow-lg rounded-2xl p-3 flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-white relative overflow-hidden`}
-            >
-              <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full blur-xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-              <span className="text-2xl">{item.icon}</span>
-              <span className="text-[10px] font-black text-center leading-tight">{item.title}</span>
-            </Link>
-          ))}
-        </div>
-
-        <h2 className="text-sm font-black text-gray-700 dark:text-gray-300 mb-4 px-1">الوصول السريع</h2>
-        <div className="grid grid-cols-3 gap-3">
-          {mainIcons.map((item, i) => (
-            <Link
-              key={i}
-              href={item.href}
-              className={`${item.bg} ${item.shadow} shadow-lg rounded-2xl p-4 flex flex-col items-center justify-center gap-2 active:scale-95 transition-all text-white relative overflow-hidden`}
-            >
-              <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full blur-xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-              <span className="text-3xl">{item.icon}</span>
-              <span className="text-[11px] font-black text-center leading-tight">{item.title}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

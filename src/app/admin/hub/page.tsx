@@ -21,6 +21,7 @@ import MapLink from "@/components/MapLink";
 import ScanCakeInvoiceModal from "@/components/ScanCakeInvoiceModal";
 import ManualCakePurchaseModal from "@/components/ManualCakePurchaseModal";
 import CakeMaterialTimelineModal from "@/components/CakeMaterialTimelineModal";
+import EditCakeInvoiceModal from "@/components/EditCakeInvoiceModal";
 import { CakeMaterialPurchase, calculateItemConsumption } from "@/lib/cakeMaterialPurchases";
 import { customConfirm } from '@/lib/customConfirm';
 
@@ -155,6 +156,7 @@ function AdminHubContent() {
   const [purchaseViewMode, setPurchaseViewMode] = useState<'invoices' | 'items'>('invoices');
   const [expandedInvoiceIds, setExpandedInvoiceIds] = useState<Record<string, boolean>>({});
   const [viewingInvoice, setViewingInvoice] = useState<any | null>(null);
+  const [editingCakeInvoice, setEditingCakeInvoice] = useState<any | null>(null);
   const [invoiceItemFilter, setInvoiceItemFilter] = useState("");
 
   const toggleExpandInvoice = (invId: string) => {
@@ -991,16 +993,26 @@ function AdminHubContent() {
       for (const item of inv.items) {
         if (item.id) {
           await deleteDoc(doc(db, "cake_material_purchases", item.id));
+          try {
+            const qP = await getDocs(query(collection(db, "expenses"), where("purchaseId", "==", item.id)));
+            for (const pDoc of qP.docs) {
+              await deleteDoc(doc(db, "expenses", pDoc.id));
+            }
+          } catch {}
         }
       }
       if (inv.invoiceId) {
         try {
           await deleteDoc(doc(db, "cake_invoices", inv.invoiceId));
+          const qExp = await getDocs(query(collection(db, "expenses"), where("invoiceId", "==", inv.invoiceId)));
+          for (const expDoc of qExp.docs) {
+            await deleteDoc(doc(db, "expenses", expDoc.id));
+          }
         } catch (e) {
-          console.warn("Could not delete from cake_invoices:", e);
+          console.warn("Could not delete from cake_invoices or expenses:", e);
         }
       }
-      toast.success("تم حذف الفاتورة وجميع موادها بنجاح");
+      toast.success("تم حذف الفاتورة وجميع موادها والمصروف المرتبط بنجاح");
     } catch (e) {
       console.error(e);
       toast.error("حدث خطأ أثناء حذف الفاتورة");
@@ -2469,6 +2481,14 @@ function AdminHubContent() {
                                   )}
                                   <button
                                     type="button"
+                                    onClick={() => setEditingCakeInvoice(inv)}
+                                    className="text-gray-400 hover:text-purple-600 p-1.5 rounded-lg hover:bg-purple-50 dark:hover:bg-zinc-800 transition"
+                                    title="تعديل الفاتورة ومصدر الصرف"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
                                     onClick={() => handleDeleteWholeInvoice(inv)}
                                     className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-zinc-800 transition"
                                     title="حذف الفاتورة كاملة"
@@ -2488,7 +2508,11 @@ function AdminHubContent() {
                                   {inv.hasInvoice ? "🧾 بفاتورة" : "🛒 شراء كاش"}
                                 </span>
 
-                                {inv.paymentSource === "salary" ? (
+                                {inv.paymentSource === "none" ? (
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-gray-200 text-gray-800 dark:bg-zinc-700 dark:text-zinc-200">
+                                    🚫 بدون تسجيل مصروف
+                                  </span>
+                                ) : inv.paymentSource === "salary" ? (
                                   <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
                                     💳 دين من الراتب
                                   </span>
@@ -3078,6 +3102,18 @@ function AdminHubContent() {
 
               <button
                 type="button"
+                onClick={() => {
+                  const target = viewingInvoice;
+                  setViewingInvoice(null);
+                  setEditingCakeInvoice(target);
+                }}
+                className="bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-95"
+              >
+                <Edit className="w-4 h-4" /> تعديل الفاتورة
+              </button>
+
+              <button
+                type="button"
                 onClick={async () => {
                   const target = viewingInvoice;
                   setViewingInvoice(null);
@@ -3090,6 +3126,18 @@ function AdminHubContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit Cake Invoice Modal */}
+      {editingCakeInvoice && (
+        <EditCakeInvoiceModal
+          isOpen={!!editingCakeInvoice}
+          onClose={() => setEditingCakeInvoice(null)}
+          invoice={editingCakeInvoice}
+          onSuccess={() => {
+            setEditingCakeInvoice(null);
+          }}
+        />
       )}
     </div>
   );

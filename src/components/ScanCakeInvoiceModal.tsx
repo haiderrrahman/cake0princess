@@ -27,6 +27,8 @@ import {
   recordCakeInvoiceBatch,
   normalizeArabicText
 } from "@/lib/cakeMaterialPurchases";
+import { collection, getDocs, query, limit } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 interface ScanCakeInvoiceModalProps {
   isOpen: boolean;
@@ -55,11 +57,12 @@ export default function ScanCakeInvoiceModal({
   const [items, setItems] = useState<ScannedCakeItem[]>([]);
   const [paymentSource, setPaymentSource] = useState<"none" | "cake" | "salary" | "split">("cake");
   const [splitDebtAmount, setSplitDebtAmount] = useState("");
+  const [storeSuggestions, setStoreSuggestions] = useState<string[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset state when modal opens/closes
+  // Reset state when modal opens/closes & load store suggestions
   useEffect(() => {
     if (!isOpen) {
       setSelectedImages([]);
@@ -75,6 +78,27 @@ export default function ScanCakeInvoiceModal({
       setSplitDebtAmount("");
     } else {
       setInvoiceDate(new Date().toISOString().split("T")[0]);
+      const fetchStores = async () => {
+        try {
+          const qSnap = await getDocs(query(collection(db, "cake_material_purchases"), limit(120)));
+          const setNames = new Set<string>();
+          qSnap.docs.forEach((d) => {
+            const s = d.data().storeName;
+            if (s && typeof s === "string" && s.trim()) setNames.add(s.trim());
+          });
+          try {
+            const invSnap = await getDocs(query(collection(db, "cake_invoices"), limit(50)));
+            invSnap.docs.forEach((d) => {
+              const s = d.data().storeName;
+              if (s && typeof s === "string" && s.trim()) setNames.add(s.trim());
+            });
+          } catch {}
+          setStoreSuggestions(Array.from(setNames));
+        } catch (e) {
+          console.warn("Could not load store suggestions:", e);
+        }
+      };
+      fetchStores();
     }
   }, [isOpen]);
 
@@ -417,17 +441,42 @@ export default function ScanCakeInvoiceModal({
               {/* Invoice Meta Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
-                    <Store className="w-3.5 h-3.5" /> اسم المحل / المتجر
+                  <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Store className="w-3.5 h-3.5" /> اسم المحل / المتجر
+                    </span>
+                    <span className="text-[10px] text-blue-500 font-normal">اقتراح ذكي 💡</span>
                   </label>
-                  <input
-                    type="text"
-                    required
-                    value={storeName}
-                    onChange={(e) => setStoreName(e.target.value)}
-                    placeholder="مثال: معرض البركة"
-                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold focus:border-blue-500 focus:outline-none"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      list="scan-purchase-store-suggestions"
+                      required
+                      value={storeName}
+                      onChange={(e) => setStoreName(e.target.value)}
+                      placeholder="مثال: معرض البركة"
+                      className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold focus:border-blue-500 focus:outline-none"
+                    />
+                    <datalist id="scan-purchase-store-suggestions">
+                      {storeSuggestions.map((st, idx) => (
+                        <option key={idx} value={st} />
+                      ))}
+                    </datalist>
+                  </div>
+                  {storeSuggestions.length > 0 && !storeName && (
+                    <div className="flex flex-wrap gap-1 mt-1 max-h-12 overflow-y-auto">
+                      {storeSuggestions.slice(0, 4).map((st, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setStoreName(st)}
+                          className="text-[9px] bg-gray-100 hover:bg-blue-50 dark:bg-zinc-800 dark:hover:bg-blue-950/40 text-gray-700 dark:text-gray-300 hover:text-blue-700 px-1.5 py-0.5 rounded border border-gray-200 dark:border-zinc-700 transition"
+                        >
+                          🏬 {st}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>
