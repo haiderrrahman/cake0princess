@@ -58,5 +58,25 @@ service cloud.firestore {
     match /home_finance/{docId} {
       allow read, write: if true;
     }
+
+    // Cake Inventory, Material Purchases & Invoices
+    match /cake_inventory/{itemId} {
+      allow read, write: if true;
+    }
+    match /cake_material_purchases/{purchaseId} {
+      allow read, write: if true;
+    }
+    match /cake_invoices/{invoiceId} {
+      allow read, write: if true;
+    }
+    match /expenses/{expenseId} {
+      allow read, write: if true;
+    }
+    match /external_orders/{orderId} {
+      allow read, write: if true;
+    }
+    match /store_sales/{saleId} {
+      allow read, write: if true;
+    }
   }
 }
