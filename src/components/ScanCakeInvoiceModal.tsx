@@ -17,8 +17,6 @@ import {
   Tag
 } from "lucide-react";
 import { toast } from "sonner";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "@/lib/firebase";
 import {
   scanCakeInvoiceWithGemini,
   ScannedCakeItem,
@@ -232,24 +230,13 @@ export default function ScanCakeInvoiceModal({
 
     setSubmitting(true);
     try {
-      let uploadedImageUrl = "";
-      if (selectedImages.length > 0) {
-        try {
-          const firstImage = selectedImages[0];
-          const fileRef = ref(storage, `cake_invoices/${Date.now()}_${firstImage.name}`);
-          await uploadBytes(fileRef, firstImage);
-          uploadedImageUrl = await getDownloadURL(fileRef);
-        } catch (uploadErr) {
-          console.warn("Could not upload invoice image to storage, proceeding with data:", uploadErr);
-        }
-      }
-
+      // User requested: Do NOT attach or upload invoice image, only take its data
       await recordCakeInvoiceBatch({
         storeName: storeName.trim() || "معرض مستلزمات الكيك",
         invoiceDate: invoiceDate || new Date().toISOString().split("T")[0],
         invoiceNumber: invoiceNumber.trim(),
         totalAmount: totalCalculated,
-        imageUrl: uploadedImageUrl,
+        imageUrl: "", // Data only, no invoice image stored
         paymentSource,
         splitDebtAmount: paymentSource === "split" ? Number(splitDebtAmount) || 0 : 0,
         items: items.map((i) => ({
@@ -268,7 +255,7 @@ export default function ScanCakeInvoiceModal({
       onSuccess();
       onClose();
     } catch (err: any) {
-      console.error(err);
+      console.error("Error saving invoice:", err);
       toast.error("حدث خطأ أثناء حفظ الفاتورة: " + (err.message || "خطأ غير معروف"));
     } finally {
       setSubmitting(false);
@@ -276,10 +263,10 @@ export default function ScanCakeInvoiceModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl my-auto animate-fade-in max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex flex-col sm:items-center sm:justify-center p-0 sm:p-4 overflow-hidden">
+      <div className="bg-white dark:bg-zinc-900 border-0 sm:border border-gray-100 dark:border-zinc-800 sm:rounded-3xl w-full max-w-3xl h-full sm:h-auto sm:max-h-[92vh] overflow-hidden shadow-2xl flex flex-col my-auto animate-fade-in">
+        {/* Header (Always pinned at top) */}
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
               <Camera className="w-5 h-5 text-blue-200" />
@@ -304,97 +291,99 @@ export default function ScanCakeInvoiceModal({
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5">
-          {/* Scanning Progress Banner */}
-          {isScanning && (
-            <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 rounded-2xl p-6 text-center space-y-3">
-              <Loader2 className="w-10 h-10 text-blue-600 dark:text-blue-400 animate-spin mx-auto" />
-              <p className="font-black text-sm text-blue-900 dark:text-blue-200">
-                {scanStatus || "جاري استخراج بيانات الفاتورة بالذكاء الاصطناعي..."}
-              </p>
-              <p className="text-xs text-blue-700 dark:text-blue-300">
-                نقوم بقراءة الأسماء، الكميات، أسعار المفرد والإجمالي ومطابقتها مع مواد المخزن
-              </p>
-            </div>
-          )}
-
-          {/* Initial Upload Area */}
-          {!hasScanned && !isScanning && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => cameraInputRef.current?.click()}
-                  className="p-6 border-2 border-dashed border-blue-300 dark:border-blue-800/60 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition flex flex-col items-center justify-center gap-3 text-center group active:scale-95"
-                >
-                  <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition">
-                    <Camera className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <p className="font-black text-sm text-blue-950 dark:text-blue-100">
-                      التقاط صورة بكاميرا الهاتف 📸
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                      صوّر الفاتورة أو القائمة مباشرة وواضحة
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-6 border-2 border-dashed border-gray-200 dark:border-zinc-700 rounded-2xl bg-gray-50 dark:bg-zinc-800/40 hover:bg-gray-100 dark:hover:bg-zinc-800 transition flex flex-col items-center justify-center gap-3 text-center group active:scale-95"
-                >
-                  <div className="w-14 h-14 rounded-2xl bg-gray-700 text-white flex items-center justify-center shadow-md group-hover:scale-110 transition">
-                    <Upload className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <p className="font-black text-sm text-gray-800 dark:text-gray-100">
-                      رفع صورة من المعرض أو الجهاز 🖼️
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      اختر ملف صورة للفاتورة أو الوصل
-                    </p>
-                  </div>
-                </button>
+        {/* Modal Body / Flow */}
+        {!hasScanned ? (
+          <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 min-h-0">
+            {/* Scanning Progress Banner */}
+            {isScanning && (
+              <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 rounded-2xl p-6 text-center space-y-3">
+                <Loader2 className="w-10 h-10 text-blue-600 dark:text-blue-400 animate-spin mx-auto" />
+                <p className="font-black text-sm text-blue-900 dark:text-blue-200">
+                  {scanStatus || "جاري استخراج بيانات الفاتورة بالذكاء الاصطناعي..."}
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  نقوم بقراءة الأسماء، الكميات، أسعار المفرد والإجمالي ومطابقتها مع مواد المخزن
+                </p>
               </div>
+            )}
 
-              {/* Hidden file inputs */}
-              <input
-                type="file"
-                ref={cameraInputRef}
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => e.target.files && handleFilesSelected(Array.from(e.target.files))}
-              />
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => e.target.files && handleFilesSelected(Array.from(e.target.files))}
-              />
+            {/* Initial Upload Area */}
+            {!isScanning && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="p-6 border-2 border-dashed border-blue-300 dark:border-blue-800/60 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition flex flex-col items-center justify-center gap-3 text-center group active:scale-95"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition">
+                      <Camera className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <p className="font-black text-sm text-blue-950 dark:text-blue-100">
+                        التقاط صورة بكاميرا الهاتف 📸
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                        صوّر الفاتورة أو القائمة مباشرة وواضحة
+                      </p>
+                    </div>
+                  </button>
 
-              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-2xl p-4 flex items-start gap-3 text-amber-800 dark:text-amber-200">
-                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
-                <div className="text-xs leading-relaxed space-y-1">
-                  <p className="font-bold">نصائح للحصول على أدق قراءة:</p>
-                  <ul className="list-disc pr-4 space-y-0.5 text-amber-700 dark:text-amber-300">
-                    <li>تأكد من وضوح الإضاءة وعدم وجود ظل يحجب الأسعار أو المواد.</li>
-                    <li>المواد المسجلة ستتم مطابقتها تلقائياً مع مواد المخزن وتحديث كمياتها.</li>
-                    <li>يمكنك تعديل أي بند أو سعر قبل الحفظ النهائي بكل حرية.</li>
-                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-6 border-2 border-dashed border-gray-200 dark:border-zinc-700 rounded-2xl bg-gray-50 dark:bg-zinc-800/40 hover:bg-gray-100 dark:hover:bg-zinc-800 transition flex flex-col items-center justify-center gap-3 text-center group active:scale-95"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-gray-700 text-white flex items-center justify-center shadow-md group-hover:scale-110 transition">
+                      <Upload className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <p className="font-black text-sm text-gray-800 dark:text-gray-100">
+                        رفع صورة من المعرض أو الجهاز 🖼️
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        اختر ملف صورة للفاتورة أو الوصل
+                      </p>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Hidden file inputs */}
+                <input
+                  type="file"
+                  ref={cameraInputRef}
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => e.target.files && handleFilesSelected(Array.from(e.target.files))}
+                />
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => e.target.files && handleFilesSelected(Array.from(e.target.files))}
+                />
+
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-2xl p-4 flex items-start gap-3 text-amber-800 dark:text-amber-200">
+                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+                  <div className="text-xs leading-relaxed space-y-1">
+                    <p className="font-bold">نصائح للحصول على أدق قراءة:</p>
+                    <ul className="list-disc pr-4 space-y-0.5 text-amber-700 dark:text-amber-300">
+                      <li>تأكد من وضوح الإضاءة وعدم وجود ظل يحجب الأسعار أو المواد.</li>
+                      <li>المواد المسجلة ستتم مطابقتها تلقائياً مع مواد المخزن وتحديث كمياتها.</li>
+                      <li>تُستخرج البيانات رقمياً فقط دون تخزين أو رفع صورة الفاتورة.</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Scanned Result Review Form */}
-          {hasScanned && (
-            <form onSubmit={handleSubmit} className="space-y-5">
+            )}
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {/* Scanned Result Review Scrollable Area */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 min-h-0 pb-6">
               {/* Photo preview pill & re-scan button */}
               <div className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800/60 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800">
                 <div className="flex items-center gap-3">
@@ -410,7 +399,10 @@ export default function ScanCakeInvoiceModal({
                     <span className="text-xs font-black text-gray-800 dark:text-gray-200">
                       صورة الفاتورة الأصلية
                     </span>
-                    <p className="text-[11px] text-gray-500">تم استخراج {items.length} مادة</p>
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                      <Check className="w-3 h-3 stroke-[2.5]" />
+                      تؤخذ البيانات فقط (لن يتم حفظ صورة الفاتورة)
+                    </p>
                   </div>
                 </div>
                 <button
@@ -703,34 +695,38 @@ export default function ScanCakeInvoiceModal({
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl py-3.5 font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 active:scale-95 transition disabled:opacity-50"
-                >
-                  {submitting ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Check className="w-5 h-5" />
-                      تأكيد وحفظ الفاتورة وتحديث المخزن
-                    </>
-                  )}
-                </button>
+            </div>
 
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-5 py-3.5 rounded-2xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-bold text-sm hover:bg-gray-200 dark:hover:bg-zinc-700 transition"
-                >
-                  إلغاء
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
+            {/* Sticky Actions Bar: Always pinned at the bottom of the modal, never cut off or covered */}
+            <div className="shrink-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-gray-200 dark:border-zinc-800 p-3 sm:p-4 flex items-center gap-3 z-30 shadow-[0_-8px_25px_rgba(0,0,0,0.12)]">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl py-3.5 font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 active:scale-95 transition disabled:opacity-50"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>جاري حفظ الفاتورة وتحديث المخزن...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-5 h-5 stroke-[2.5]" />
+                    <span>تأكيد وحفظ الفاتورة وتحديث المخزن</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-3.5 rounded-2xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-bold text-sm hover:bg-gray-200 dark:hover:bg-zinc-700 transition shrink-0"
+              >
+                إلغاء
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

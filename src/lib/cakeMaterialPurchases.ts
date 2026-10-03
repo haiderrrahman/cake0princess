@@ -240,15 +240,18 @@ export async function recordSingleCakePurchase(data: {
   // 1. Update or create in cake_inventory
   if (targetItemId) {
     const invRef = doc(db, "cake_inventory", targetItemId);
-    await updateDoc(invRef, {
+    const updateData: Record<string, any> = {
       quantity: increment(quantity),
-      price: unitPrice > 0 ? unitPrice : undefined,
       lastPurchasedAt: purchaseDate,
       lastPurchasedPrice: unitPrice,
       lastPurchasedQty: quantity,
       lastStoreName: storeName || "",
       lastUpdated: serverTimestamp()
-    });
+    };
+    if (unitPrice > 0) {
+      updateData.price = unitPrice;
+    }
+    await updateDoc(invRef, updateData);
   } else if (createIfNotExist) {
     const newDoc = await addDoc(collection(db, "cake_inventory"), {
       name: itemName,
@@ -373,14 +376,14 @@ export async function recordCakeInvoiceBatch(data: {
 
   // 1. Create Invoice record in cake_invoices
   const invoiceRef = await addDoc(collection(db, "cake_invoices"), {
-    storeName,
-    invoiceDate,
-    invoiceNumber,
-    totalAmount,
+    storeName: storeName || "معرض مستلزمات الكيك",
+    invoiceDate: invoiceDate || new Date().toISOString().split("T")[0],
+    invoiceNumber: invoiceNumber || "",
+    totalAmount: Number(totalAmount) || 0,
     itemCount: items.length,
-    imageUrl,
-    paymentSource,
-    splitDebtAmount,
+    imageUrl: "", // No invoice image attached as requested
+    paymentSource: paymentSource || "cake",
+    splitDebtAmount: Number(splitDebtAmount) || 0,
     createdAt: serverTimestamp()
   });
 
@@ -389,34 +392,40 @@ export async function recordCakeInvoiceBatch(data: {
   // 2. Process each item: update or add to cake_inventory and log purchase
   for (const item of items) {
     let itemId = item.matchedInventoryId;
+    const qty = Number(item.quantity) || 0;
+    const uPrice = Number(item.unitPrice) || 0;
+    const tPrice = Number(item.totalPrice) || (qty * uPrice);
 
     if (itemId) {
       // Update existing item
       const itemRef = doc(db, "cake_inventory", itemId);
-      await updateDoc(itemRef, {
-        quantity: increment(item.quantity),
-        price: item.unitPrice > 0 ? item.unitPrice : undefined,
+      const updateData: Record<string, any> = {
+        quantity: increment(qty),
         lastPurchasedAt: invoiceDate,
-        lastPurchasedPrice: item.unitPrice,
-        lastPurchasedQty: item.quantity,
-        lastStoreName: storeName,
+        lastPurchasedPrice: uPrice,
+        lastPurchasedQty: qty,
+        lastStoreName: storeName || "",
         lastUpdated: serverTimestamp()
-      });
+      };
+      if (uPrice > 0) {
+        updateData.price = uPrice;
+      }
+      await updateDoc(itemRef, updateData);
     } else {
       // Create new inventory item
       const newInvDoc = await addDoc(collection(db, "cake_inventory"), {
-        name: item.name,
+        name: item.name || "مادة كيك",
         category: item.category || "أخرى",
-        quantity: item.quantity,
+        quantity: qty,
         unit: item.unit || "كغم",
-        price: item.unitPrice,
+        price: uPrice,
         minAlert: 1,
         neededQuantity: 0,
         imageUrl: "",
         lastPurchasedAt: invoiceDate,
-        lastPurchasedPrice: item.unitPrice,
-        lastPurchasedQty: item.quantity,
-        lastStoreName: storeName,
+        lastPurchasedPrice: uPrice,
+        lastPurchasedQty: qty,
+        lastStoreName: storeName || "",
         createdAt: serverTimestamp(),
         lastUpdated: serverTimestamp()
       });
@@ -425,20 +434,20 @@ export async function recordCakeInvoiceBatch(data: {
 
     // Add purchase record
     await addDoc(collection(db, "cake_material_purchases"), {
-      itemId,
-      itemName: item.name,
-      category: item.category,
-      quantity: item.quantity,
-      unit: item.unit,
-      unitPrice: item.unitPrice,
-      totalPrice: item.totalPrice,
+      itemId: itemId || "",
+      itemName: item.name || "",
+      category: item.category || "أخرى",
+      quantity: qty,
+      unit: item.unit || "كغم",
+      unitPrice: uPrice,
+      totalPrice: tPrice,
       purchaseDate: invoiceDate,
       hasInvoice: true,
       invoiceId,
-      invoiceNumber,
-      invoiceImageUrl: imageUrl,
-      storeName,
-      paymentSource,
+      invoiceNumber: invoiceNumber || "",
+      invoiceImageUrl: "",
+      storeName: storeName || "",
+      paymentSource: paymentSource || "cake",
       createdAt: serverTimestamp()
     });
   }
