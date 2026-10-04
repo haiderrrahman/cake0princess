@@ -17,31 +17,45 @@ import "react-datepicker/dist/react-datepicker.css";
 import CustomerProfileModal from "@/components/CustomerProfileModal";
 import MapLink from "@/components/MapLink";
 
+// Safe TTL cache helper: ensures we NEVER display stale ghost orders from weeks/months ago
+const getFreshCache = (key: string, maxAgeMs = 15 * 60 * 1000) => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && parsed._timestamp) {
+      if (Date.now() - parsed._timestamp < maxAgeMs && Array.isArray(parsed.data) && parsed.data.length > 0) {
+        return parsed.data;
+      }
+      localStorage.removeItem(key);
+      return null;
+    }
+    localStorage.removeItem(key);
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const setFreshCache = (key: string, data: any) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const envelope = {
+      _timestamp: Date.now(),
+      data
+    };
+    localStorage.setItem(key, JSON.stringify(envelope));
+  } catch (e) {
+    console.warn("Failed to set cache:", key, e);
+  }
+};
+
 export default function ExternalOrdersAdmin() {
   const [orders, setOrders] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem("cache_external_orders");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch (e) {}
-    }
-    return [];
+    return getFreshCache("cache_external_orders_v2") || [];
   });
-  const [loading, setLoading] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem("cache_external_orders");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return false;
-        }
-      } catch (e) {}
-    }
-    return true;
-  });
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<"orders" | "debts">("orders");
@@ -73,79 +87,29 @@ export default function ExternalOrdersAdmin() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Cache is now loaded synchronously in useState
-    // 1. Fast network query with onSnapshot for real-time and local cache
-    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(150));
+    // 1. Fast network query with onSnapshot for real-time
+    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snap) => {
       const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-
-      // fromCache = true means this is Firestore's offline cache emit (fast, before server).
-      // Preserve imageUrl already loaded from localStorage so images never flicker away.
-      if (snap.metadata.fromCache) {
-        setOrders(prev => {
-          const prevMap = new Map(prev.map((o: any) => [o.id, o]));
-          return fetchedOrders.map(o => {
-            const existing = prevMap.get(o.id);
-            if (!o.imageUrl && existing?.imageUrl) {
-              return { ...o, imageUrl: existing.imageUrl };
-            }
-            return o;
-          });
-        });
-      } else {
-        // Server confirmed data – trust fully
-        setOrders(fetchedOrders);
-      }
-
+      setOrders(fetchedOrders);
       setLoading(false);
       try {
-        const cleanExt = fetchedOrders.slice(0, 50).map(o => {
+        const cleanExt = fetchedOrders.slice(0, 30).map(o => {
           const clean = { ...o };
           delete clean.tempImageUrl;
-          // Strip base64 data URIs from cache to protect 5MB localStorage quota
-          if (typeof clean.imageUrl === "string" && clean.imageUrl.startsWith("data:")) {
-            delete clean.imageUrl;
-          }
           return clean;
         });
-        
-        try {
-          localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
-        } catch (e) {
-          console.warn("Cache too large, stripping images entirely for cache...");
-          const cleanExtFallback = cleanExt.map(o => {
-            const clean = { ...o };
-            delete clean.imageUrl;
-            delete clean.tempImageUrl;
-            return clean;
-          });
-          try { localStorage.setItem("cache_external_orders", JSON.stringify(cleanExtFallback)); } catch (e2) {}
-        }
+        setFreshCache("cache_external_orders_v2", cleanExt);
       } catch (e) {
         console.error("Cache error:", e);
       }
     }, (error) => {
       console.error("Error fetching external orders:", error);
-      // Fallback if index fails
       getDocs(collection(db, "external_orders")).then(snap => {
         let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
         fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime());
-        fetchedOrders = fetchedOrders.slice(0, 150);
+        fetchedOrders = fetchedOrders.slice(0, 100);
         setOrders(fetchedOrders);
-        setLoading(false);
-        try {
-          const cleanExt = fetchedOrders.slice(0, 50).map(o => {
-            const clean = { ...o };
-            delete clean.tempImageUrl;
-            if (typeof clean.imageUrl === "string" && clean.imageUrl.startsWith("data:")) {
-              delete clean.imageUrl;
-            }
-            return clean;
-          });
-          localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt));
-        } catch (e) {}
-      }).catch(e => {
-        console.error("Fallback error:", e);
         setLoading(false);
       });
     });

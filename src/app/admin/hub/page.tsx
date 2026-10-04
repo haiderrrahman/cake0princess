@@ -69,29 +69,51 @@ export default function AdminHub() {
   );
 }
 
+// Safe TTL cache helper: ensures we NEVER display stale ghost orders from weeks/months ago
+const getFreshCache = (key: string, maxAgeMs = 15 * 60 * 1000) => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && parsed._timestamp) {
+      if (Date.now() - parsed._timestamp < maxAgeMs && Array.isArray(parsed.data) && parsed.data.length > 0) {
+        return parsed.data;
+      }
+      localStorage.removeItem(key);
+      return null;
+    }
+    // Remove stale un-enveloped cache from previous versions
+    localStorage.removeItem(key);
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const setFreshCache = (key: string, data: any) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const envelope = {
+      _timestamp: Date.now(),
+      data
+    };
+    localStorage.setItem(key, JSON.stringify(envelope));
+  } catch (e) {
+    console.warn("Failed to set cache:", key, e);
+  }
+};
+
 function AdminHubContent() {
-  const [loading, setLoading] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const hasOrders = localStorage.getItem('cache_orders');
-      const hasExt = localStorage.getItem('cache_external_orders');
-      const hasInv = localStorage.getItem('cache_inventory');
-      return !(hasOrders && hasExt && hasInv);
-    }
-    return true;
-  });
+  const [extOrdersLoaded, setExtOrdersLoaded] = useState(false);
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+
   const [orders, setOrders] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('cache_orders');
-      if (saved) return JSON.parse(saved);
-    }
-    return [];
+    return getFreshCache('cache_orders_v2') || [];
   });
   const [externalOrders, setExternalOrders] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('cache_external_orders');
-      if (saved) return JSON.parse(saved);
-    }
-    return [];
+    return getFreshCache('cache_external_orders_v2') || [];
   });
   const [customOrders, setCustomOrders] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
@@ -99,11 +121,7 @@ function AdminHubContent() {
   const [homeExpenses, setHomeExpenses] = useState<any[]>([]);
   const [homeIncomes, setHomeIncomes] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('cache_inventory');
-      if (saved) return JSON.parse(saved);
-    }
-    return [];
+    return getFreshCache('cache_inventory_v2') || [];
   });
   const [storeSales, setStoreSales] = useState<any[]>([]);
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
@@ -197,30 +215,18 @@ function AdminHubContent() {
 
   useEffect(() => {
     try {
-      const cleanOrders = orders.slice(0, 150).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
-      try { localStorage.setItem("cache_orders", JSON.stringify(cleanOrders)); } catch (e) { console.error("Cache err orders:", e); }
+      const cleanOrders = orders.slice(0, 30).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
+      setFreshCache("cache_orders_v2", cleanOrders);
       
-      const cleanExt = externalOrders.slice(0, 150).map(o => {
+      const cleanExt = externalOrders.slice(0, 30).map(o => {
         const clean = { ...o };
-        if (clean.imageUrl) {
-          delete clean.tempImageUrl;
-        }
+        delete clean.tempImageUrl;
         return clean;
       });
-      try { 
-        localStorage.setItem("cache_external_orders", JSON.stringify(cleanExt)); 
-      } catch (e) { 
-        console.warn("Cache too large, stripping temp images...");
-        const cleanExtFallback = cleanExt.map(o => {
-          const clean = { ...o };
-          delete clean.tempImageUrl;
-          return clean;
-        });
-        try { localStorage.setItem("cache_external_orders", JSON.stringify(cleanExtFallback)); } catch (e2) { console.error(e2); }
-      }
+      setFreshCache("cache_external_orders_v2", cleanExt);
       
-      const cleanSales = storeSales.slice(0, 150);
-      try { localStorage.setItem("cache_store_sales", JSON.stringify(cleanSales)); } catch (e) { console.error("Cache err sales:", e); }
+      const cleanSales = storeSales.slice(0, 30);
+      setFreshCache("cache_store_sales_v2", cleanSales);
     } catch (e) {
       console.error("Cache error:", e);
     }
@@ -242,26 +248,6 @@ function AdminHubContent() {
   }, []);
 
   useEffect(() => {
-    // ⚡ Instant load from cache (0ms delay for Social and Hub orders)
-    try {
-      const cachedExt = localStorage.getItem("cache_external_orders");
-      if (cachedExt) {
-        const parsed = JSON.parse(cachedExt);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setExternalOrders(parsed);
-          setLoading(false);
-        }
-      }
-      const cachedOrd = localStorage.getItem("cache_orders");
-      if (cachedOrd) {
-        const parsed = JSON.parse(cachedOrd);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setOrders(parsed);
-          setLoading(false);
-        }
-      }
-    } catch (e) {}
-
     fetchAll();
 
     const handleBackgroundUpload = () => {
@@ -346,42 +332,44 @@ function AdminHubContent() {
     };
   }, [fetchAll]);
 
-  // Real-time listeners for orders, external_orders, and store_sales
+  // Real-time listeners for orders, external_orders, and store_sales with limits
   useEffect(() => {
-    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
+    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
     const unsubExt = onSnapshot(qExt, (snap) => {
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-      
-      // If this is a local Firestore cache emit (before server responds),
-      // preserve imageUrl from existing state so images don't flicker/disappear
-      if (snap.metadata.fromCache) {
-        setExternalOrders(prev => {
-          const prevMap = new Map(prev.map((o: any) => [o.id, o]));
-          return allExt.map(o => {
-            const existing = prevMap.get(o.id);
-            // Keep existing imageUrl if this emit doesn't have one yet
-            if (!o.imageUrl && existing?.imageUrl) {
-              return { ...o, imageUrl: existing.imageUrl };
-            }
-            return o;
-          });
-        });
-      } else {
-        // Server data – always trust it fully
-        setExternalOrders(allExt);
-      }
+      setExternalOrders(allExt);
+      setExtOrdersLoaded(true);
+      setLoading(false);
+    }, (err) => {
+      console.error("External orders listener error:", err);
+      // Fallback
+      getDocs(collection(db, "external_orders")).then(snap => {
+        const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
+        setExternalOrders(allExt.slice(0, 100));
+        setExtOrdersLoaded(true);
+        setLoading(false);
+      }).catch(() => {
+        setExtOrdersLoaded(true);
+        setLoading(false);
+      });
     });
 
-    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(100));
     const unsubOrders = onSnapshot(qOrders, (snap) => {
       const allOrd = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setOrders(allOrd);
+      setOrdersLoaded(true);
+    }, (err) => {
+      console.error("Orders listener error:", err);
     });
 
-    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"));
+    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100));
     const unsubStore = onSnapshot(qStore, (snap) => {
       const allStore = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setStoreSales(allStore);
+    }, (err) => {
+      console.error("Store sales listener error:", err);
     });
 
     return () => { unsubExt(); unsubOrders(); unsubStore(); };
@@ -1031,7 +1019,14 @@ function AdminHubContent() {
   };
 
   const filteredExternalOrders = externalOrders.filter(o => {
-    if (extSearch && !o.customerName?.includes(extSearch) && !o.cakeName?.includes(extSearch)) return false;
+    if (extSearch) {
+      const q = extSearch.toLowerCase().trim();
+      const matchName = o.customerName?.toLowerCase().includes(q);
+      const matchCake = o.cakeName?.toLowerCase().includes(q);
+      const matchPhone = o.customerPhone?.includes(q);
+      const matchId = o.id?.toLowerCase().includes(q);
+      if (!matchName && !matchCake && !matchPhone && !matchId) return false;
+    }
     return true;
   }).sort((a, b) => {
     const isBlacklistedA = blacklistedCustomers.includes(a.customerName || "") || blacklistedCustomers.includes(a.customerPhone || "");
@@ -1679,7 +1674,18 @@ function AdminHubContent() {
                   </div>
                 </div>
 
-                {filteredExternalOrders.length === 0 ? (
+                {!extOrdersLoaded && externalOrders.length === 0 ? (
+                  <div className="grid grid-cols-2 gap-2 max-w-4xl mx-auto w-full">
+                    {[1, 2, 3, 4].map(idx => (
+                      <div key={idx} className="bg-white dark:bg-zinc-900 rounded-3xl p-3 border border-gray-100 dark:border-zinc-800 animate-pulse flex flex-col gap-3">
+                        <div className="w-full aspect-square rounded-2xl bg-gray-200 dark:bg-zinc-800" />
+                        <div className="h-4 bg-gray-200 dark:bg-zinc-800 rounded-md w-3/4 mx-auto" />
+                        <div className="h-3 bg-gray-200 dark:bg-zinc-800 rounded-md w-1/2 mx-auto" />
+                        <div className="h-7 bg-gray-100 dark:bg-zinc-800/60 rounded-xl mt-1" />
+                      </div>
+                    ))}
+                  </div>
+                ) : filteredExternalOrders.length === 0 ? (
                   <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
                     <Smartphone className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                     <p className="text-gray-500 font-bold">لا توجد طلبات تطابق بحثك</p>

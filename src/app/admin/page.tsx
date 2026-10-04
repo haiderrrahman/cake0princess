@@ -15,12 +15,7 @@ import AdminQuickEntry from "@/components/AdminQuickEntry";
 
 export default function AdminDashboard() {
   const { user, isAdmin } = useAuth();
-  const [statsLoading, setStatsLoading] = useState(() => {
-    if (typeof window !== "undefined") {
-      return !localStorage.getItem("admin_dashboard_stats");
-    }
-    return true;
-  });
+  const [statsLoading, setStatsLoading] = useState(true);
   const [showQuickEntry, setShowQuickEntry] = useState(false);
   const [currentTime, setCurrentTime] = useState("");
   const [activeOperationalCounts, setActiveOperationalCounts] = useState({
@@ -31,11 +26,17 @@ export default function AdminDashboard() {
   });
 
   const [realStats, setRealStats] = useState(() => {
-    // Load from cache for instant display
+    // Load from cache for instant display if fresh (< 15 mins)
     if (typeof window !== "undefined") {
       try {
-        const cached = localStorage.getItem("admin_dashboard_stats");
-        if (cached) return JSON.parse(cached);
+        const raw = localStorage.getItem("admin_dashboard_stats_v2");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?._timestamp && (Date.now() - parsed._timestamp < 15 * 60 * 1000)) {
+            return parsed.data;
+          }
+          localStorage.removeItem("admin_dashboard_stats_v2");
+        }
       } catch {}
     }
     return {
@@ -263,15 +264,15 @@ export default function AdminDashboard() {
       });
 
       try {
-        localStorage.setItem("admin_dashboard_stats", JSON.stringify(result));
+        localStorage.setItem("admin_dashboard_stats_v2", JSON.stringify({ _timestamp: Date.now(), data: result }));
       } catch {}
     };
 
-    import("firebase/firestore").then(({ onSnapshot, query, orderBy }) => {
-      const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-      const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
-      const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"));
-      const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"));
+    import("firebase/firestore").then(({ onSnapshot, query, orderBy, limit }) => {
+      const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(100));
+      const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
+      const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(100));
+      const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100));
 
       const unsubOrders = onSnapshot(qOrders, (snap) => {
         currentOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -280,11 +281,12 @@ export default function AdminDashboard() {
       const unsubExt = onSnapshot(qExt, (snap) => {
         currentExtOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-        // Notifications Logic
+        // Notifications Logic: Only check ACTIVE, un-delivered orders
+        const now = new Date();
         currentExtOrders.forEach((o) => {
-          if (o.deliveryDate) {
+          const isFinished = ["delivered", "completed", "cancelled", "rejected"].includes(o.status);
+          if (!isFinished && o.deliveryDate) {
             const deliveryDateObj = new Date(o.deliveryDate);
-            const now = new Date();
             const diffHours = (deliveryDateObj.getTime() - now.getTime()) / (1000 * 60 * 60);
             let title = "",
               message = "",
@@ -312,7 +314,7 @@ export default function AdminDashboard() {
                 read: false,
                 link: "/admin/hub?tab=external",
                 createdAt: serverTimestamp(),
-              });
+              }).catch(console.error);
               updateDoc(doc(db, "external_orders", o.id), updateObj).catch(console.error);
             }
           }

@@ -42,7 +42,13 @@ export default function GlobalActions() {
 
   useEffect(() => {
     if (!mounted) return;
-    const newUnread = notifications.filter(n => !n.read && !notifiedIds.includes(n.id));
+    const now = Date.now();
+    const newUnread = notifications.filter(n => {
+      if (n.read || notifiedIds.includes(n.id)) return false;
+      const createdTime = n.createdAt?.toDate ? n.createdAt.toDate().getTime() : (n.createdAt?.seconds ? n.createdAt.seconds * 1000 : new Date(n.createdAt || 0).getTime());
+      // Only pop up toast if the notification was created recently (within last 15 minutes)
+      return (now - createdTime) < 15 * 60 * 1000;
+    });
     if (newUnread.length > 0) {
       newUnread.forEach(n => {
         toast.custom((t) => (

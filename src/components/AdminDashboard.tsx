@@ -4,18 +4,24 @@ import Link from "next/link";
 import {
   TrendingUp, TrendingDown, Store, BarChart3, Plus, RefreshCw, Smartphone, Package, Home, DollarSign, Boxes, Image as ImageIcon
 } from "lucide-react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AdminQuickEntry from "./AdminQuickEntry";
 
 export default function AdminDashboard() {
-  const CACHE_KEY = 'admin_quick_dashboard';
+  const CACHE_KEY = 'admin_quick_dashboard_v2';
 
   const [data, setData] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) return JSON.parse(cached);
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?._timestamp && (Date.now() - parsed._timestamp < 15 * 60 * 1000)) {
+            return parsed.data;
+          }
+          localStorage.removeItem(CACHE_KEY);
+        }
       } catch {}
     }
     return {
@@ -25,10 +31,7 @@ export default function AdminDashboard() {
       breakdown: { social: 0, appCakes: 0, appAcademy: 0, storeSupplies: 0 },
     };
   });
-  const [loading, setLoading] = useState(() => {
-    if (typeof window !== 'undefined') return !localStorage.getItem(CACHE_KEY);
-    return true;
-  });
+  const [loading, setLoading] = useState(true);
   const [showEntry, setShowEntry] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -36,10 +39,10 @@ export default function AdminDashboard() {
     setLoading(true);
     try {
       const [ordersSnap, extSnap, expSnap, storeSnap] = await Promise.all([
-        getDocs(collection(db, "orders")),
-        getDocs(collection(db, "external_orders")),
-        getDocs(collection(db, "expenses")),
-        getDocs(collection(db, "store_sales")),
+        getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(100))).catch(() => getDocs(collection(db, "orders"))),
+        getDocs(query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100))).catch(() => getDocs(collection(db, "external_orders"))),
+        getDocs(query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(100))).catch(() => getDocs(collection(db, "expenses"))),
+        getDocs(query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100))).catch(() => getDocs(collection(db, "store_sales"))),
       ]);
 
       const orders = ordersSnap.docs.map(d => d.data());
@@ -158,7 +161,9 @@ export default function AdminDashboard() {
         breakdown: { social, appCakes, appAcademy, storeSupplies } 
       };
       setData(result);
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify(result)); } catch {}
+      try { 
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ _timestamp: Date.now(), data: result })); 
+      } catch {}
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     }
