@@ -272,23 +272,9 @@ const FAMILY_MEMBERS = ["حيدر", "إيمان", "رقية", "قنوت", "إي�
 
 
 
-const getCachedHF = (key: string, defaultValue: any) => {
-  if (typeof window !== "undefined") {
-    try {
-      const cached = localStorage.getItem(`cache_hf_${key}`);
-      if (cached) return JSON.parse(cached);
-    } catch (e) {}
-  }
-  return defaultValue;
-};
 
 const syncToFirebase = async (key: string, data: any) => {
   try {
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem(`cache_hf_${key}`, JSON.stringify(data));
-      } catch (e) {}
-    }
     const syncPromise = setDoc(doc(db, "home_finance", key), { data });
     
     await Promise.race([
@@ -350,19 +336,19 @@ export default function HomeFinanceDashboard() {
   const [cakeSalaryDebt, setCakeSalaryDebt] = useState<number>(0);
   const [cakeDebtExpenses, setCakeDebtExpenses] = useState<Expense[]>([]);
   const [cakeDebtIncomes, setCakeDebtIncomes] = useState<Income[]>([]);
-  const [installments, setInstallments] = useState<Installment[]>(() => getCachedHF("installments", []));
-  const [bills, setBills] = useState<Bill[]>(() => getCachedHF("bills", []));
-  const [expenses, setExpenses] = useState<Expense[]>(() => getCachedHF("expenses", []));
-  const [incomes, setIncomes] = useState<Income[]>(() => getCachedHF("incomes", []));
-  const [inventory, setInventory] = useState<InventoryItem[]>(() => getCachedHF("inventory", []));
-  const [carInventory, setCarInventory] = useState<InventoryItem[]>(() => getCachedHF("carInventory", []));
-  const [travelInventory, setTravelInventory] = useState<InventoryItem[]>(() => getCachedHF("travelInventory", []));
-  const [needs, setNeeds] = useState<Need[]>(() => getCachedHF("needs", []));
-  const [debts, setDebts] = useState<Debt[]>(() => getCachedHF("debts", []));
-  const [familyNeeds, setFamilyNeeds] = useState<FamilyMemberNeed[]>(() => getCachedHF("familyNeeds", []));
-  const [travelTrips, setTravelTrips] = useState<TravelTrip[]>(() => getCachedHF("travelTrips", []));
-  const [travelExpenses, setTravelExpenses] = useState<TravelExpense[]>(() => getCachedHF("travelExpenses", []));
-  const [futurePlans, setFuturePlans] = useState<FuturePlan[]>(() => getCachedHF("futurePlans", []));
+  const [installments, setInstallments] = useState<Installment[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [incomes, setIncomes] = useState<Income[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [carInventory, setCarInventory] = useState<InventoryItem[]>([]);
+  const [travelInventory, setTravelInventory] = useState<InventoryItem[]>([]);
+  const [needs, setNeeds] = useState<Need[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [familyNeeds, setFamilyNeeds] = useState<FamilyMemberNeed[]>([]);
+  const [travelTrips, setTravelTrips] = useState<TravelTrip[]>([]);
+  const [travelExpenses, setTravelExpenses] = useState<TravelExpense[]>([]);
+  const [futurePlans, setFuturePlans] = useState<FuturePlan[]>([]);
   const [showFuturePlanModal, setShowFuturePlanModal] = useState(false);
   const [editFuturePlan, setEditFuturePlan] = useState<FuturePlan | null>(null);
   const [futurePlanSteps, setFuturePlanSteps] = useState<{id: string; text: string; isCompleted: boolean; date?: string}[]>([]);
@@ -389,7 +375,7 @@ export default function HomeFinanceDashboard() {
   const [settings, setSettings] = useState<{ 
     manualCycleStarts?: string[],
     budgetLimits?: Record<string, number>
-  }>(() => getCachedHF("settings", { 
+  }>({ 
     manualCycleStarts: [],
     budgetLimits: {
       "سوبر ماركت": 450000,
@@ -398,18 +384,12 @@ export default function HomeFinanceDashboard() {
       "العائلة": 100000,
       "الفواتير": 130000,
     }
-  }));
+  });
   const [showBudgetSettingsModal, setShowBudgetSettingsModal] = useState(false);
 
 
   const [mounted, setMounted] = useState(false);
-  const [dataLoading, setDataLoading] = useState(() => {
-    if (typeof window !== "undefined") {
-      const exp = localStorage.getItem("cache_hf_expenses");
-      if (exp) return false;
-    }
-    return true;
-  });
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Smart Modals
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -640,6 +620,17 @@ export default function HomeFinanceDashboard() {
   // LOAD / SAVE / FIREBASE SYNC
   // ──────────────────────────────────────────
   useEffect(() => {
+    // Clear stale cached financial data to prevent showing wrong/old numbers on refresh
+    if (typeof window !== "undefined") {
+      try {
+        [
+          "installments", "bills", "expenses", "incomes", "inventory", 
+          "carInventory", "travelInventory", "needs", "debts", 
+          "familyNeeds", "travelTrips", "travelExpenses", "futurePlans"
+        ].forEach(k => localStorage.removeItem(`cache_hf_${k}`));
+      } catch (e) {}
+    }
+
     const keys: ("installments" | "bills" | "expenses" | "incomes" | "inventory" | "carInventory" | "travelInventory" | "needs" | "debts" | "familyNeeds" | "travelTrips" | "travelExpenses" | "futurePlans" | "settings")[] = [
       "installments", "bills", "expenses", "incomes", "inventory", "carInventory", "travelInventory", "needs", "debts", "familyNeeds", "travelTrips", "travelExpenses", "futurePlans", "settings"
     ];
@@ -660,23 +651,37 @@ export default function HomeFinanceDashboard() {
       settings: setSettings,
     };
 
-    let loadedCount = 0;
-    
+    const loadedKeys = new Set<string>();
+    let cakeExpensesLoaded = false;
+
+    const checkAllLoaded = () => {
+      // Essential keys needed for financial balances and tab badges
+      const essentialKeys = ["expenses", "incomes", "debts", "bills", "installments", "needs"];
+      const essentialsReady = essentialKeys.every(k => loadedKeys.has(k));
+      if (essentialsReady && cakeExpensesLoaded) {
+        setDataLoading(false);
+      }
+    };
+
+    // Safety timeout: max 1200ms
+    const safetyTimeout = setTimeout(() => {
+      setDataLoading(false);
+    }, 1200);
+
     const unsubscribers = keys.map(k => {
       return onSnapshot(doc(db, "home_finance", k), (snap) => {
         if (snap.exists() && snap.data().data) {
           const val = snap.data().data;
           setters[k](val);
-          try {
-            localStorage.setItem(`cache_hf_${k}`, JSON.stringify(val));
-          } catch (e) {}
         } else {
           setters[k]([]);
         }
-        setDataLoading(false);
+        loadedKeys.add(k);
+        checkAllLoaded();
       }, (error) => {
         console.error(`Snapshot error for ${k}:`, error);
-        setDataLoading(false);
+        loadedKeys.add(k);
+        checkAllLoaded();
       });
     });
 
@@ -708,9 +713,16 @@ export default function HomeFinanceDashboard() {
         isFromCake: true
       } as any));
       setCakeDebtIncomes(convertedCakeIncs);
+      cakeExpensesLoaded = true;
+      checkAllLoaded();
+    }, (error) => {
+      console.error("Expenses snapshot error:", error);
+      cakeExpensesLoaded = true;
+      checkAllLoaded();
     });
 
     return () => {
+      clearTimeout(safetyTimeout);
       unsubscribers.forEach(unsub => unsub());
       unsubExpenses();
     };
@@ -2064,18 +2076,15 @@ setEditInventory(null);
         if (correspondingNeed && rawCrop && rawCrop.startsWith("data:image")) {
           try {
             const uploadedUrl = await uploadImageResiliently("needs", correspondingNeed.id, rawCrop);
-            setNeeds(prev => prev.map(n => n.id === correspondingNeed.id ? {
-              ...n,
-              imageUrl: uploadedUrl,
-              images: [uploadedUrl]
-            } : n));
-            const curNeeds = getCachedHF("needs", []);
-            const updatedWithUrl = curNeeds.map((n: any) => n.id === correspondingNeed.id ? {
-              ...n,
-              imageUrl: uploadedUrl,
-              images: [uploadedUrl]
-            } : n);
-            syncToFirebase("needs", updatedWithUrl);
+            setNeeds(prev => {
+              const updatedWithUrl = prev.map(n => n.id === correspondingNeed.id ? {
+                ...n,
+                imageUrl: uploadedUrl,
+                images: [uploadedUrl]
+              } : n);
+              syncToFirebase("needs", updatedWithUrl);
+              return updatedWithUrl;
+            });
           } catch (uploadErr) {
             console.warn("Background upload error for need", correspondingNeed.id, uploadErr);
           }
@@ -2228,9 +2237,11 @@ setEditInventory(null);
             currentNeedImages.map((img, idx) => uploadImageResiliently("needs", `${targetId}_${idx}`, img))
           );
           if (source === "need") {
-            setNeeds(prev => prev.map(n => n.id === targetId || (isEdit && n.id === editNeed!.id) ? { ...n, imageUrl: uploadedUrls[0], images: uploadedUrls } : n));
-            const curNeeds = getCachedHF("needs", []);
-            syncToFirebase("needs", curNeeds.map((n: any) => n.id === targetId || (isEdit && n.id === editNeed!.id) ? { ...n, imageUrl: uploadedUrls[0], images: uploadedUrls } : n));
+            setNeeds(prev => {
+              const updated = prev.map(n => n.id === targetId || (isEdit && n.id === editNeed!.id) ? { ...n, imageUrl: uploadedUrls[0], images: uploadedUrls } : n);
+              syncToFirebase("needs", updated);
+              return updated;
+            });
           }
         } catch (err) {
           console.warn("Background need upload warning:", err);
@@ -3433,7 +3444,7 @@ setEditTrip(null);
                   </span>
                   
                   {/* Badge */}
-                  {( (t.badge || 0) > 0 || (t.amount !== undefined && (t.isBalance || t.amount > 0)) ) && (
+                  {!dataLoading && ( (t.badge || 0) > 0 || (t.amount !== undefined && (t.isBalance || t.amount > 0)) ) && (
                     <span className={`absolute -top-2 -right-2 min-w-[22px] h-[22px] rounded-full text-[9px] sm:text-[10px] font-black flex items-center justify-center px-1.5 shadow-sm border-[1.5px] transition-all duration-300 ${
                       isActive 
                         ? "bg-white text-gray-900 border-transparent dark:bg-zinc-900 dark:text-white dark:border-zinc-700" 
@@ -3538,7 +3549,7 @@ setEditTrip(null);
                     <span>{availCard.title}</span>
                   </span>
                   <div className="text-left">
-                    <span className="text-2xl font-black text-white">{availCard.count}</span>
+                    <span className="text-2xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-lg">...</span> : availCard.count}</span>
                     <span className="text-[10px] text-gray-400 block font-bold">{availCard.countLabel}</span>
                   </div>
                 </div>
@@ -3546,7 +3557,7 @@ setEditTrip(null);
                   <div className="mt-3 pt-2 border-t border-emerald-500/10 flex justify-between items-baseline">
                     <span className="text-[11px] font-bold text-gray-400">القيمة التقديرية / الرصيد:</span>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-lg font-black text-emerald-300">{fmt(availCard.value)}</span>
+                      <span className="text-lg font-black text-emerald-300">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(availCard.value)}</span>
                       <span className="text-[10px] text-emerald-400 font-bold">د.ع</span>
                     </div>
                   </div>
@@ -3566,7 +3577,7 @@ setEditTrip(null);
                     <span>{shortCard.title}</span>
                   </span>
                   <div className="text-left">
-                    <span className="text-2xl font-black text-white">{shortCard.count}</span>
+                    <span className="text-2xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-lg">...</span> : shortCard.count}</span>
                     <span className="text-[10px] text-gray-400 block font-bold">{shortCard.countLabel}</span>
                   </div>
                 </div>
@@ -3574,7 +3585,7 @@ setEditTrip(null);
                   <div className="mt-3 pt-2 border-t border-red-500/10 flex justify-between items-baseline">
                     <span className="text-[11px] font-bold text-gray-400">التكلفة / المطلوب:</span>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-lg font-black text-red-300">{fmt(shortCard.value)}</span>
+                      <span className="text-lg font-black text-red-300">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(shortCard.value)}</span>
                       <span className="text-[10px] text-red-400 font-bold">د.ع</span>
                     </div>
                   </div>
@@ -3701,12 +3712,22 @@ setEditTrip(null);
                     </div>
 
                     <div className={`text-4xl md:text-5xl font-black tracking-tight ${balance < 0 ? "text-rose-400 drop-shadow-[0_0_15px_rgba(251,113,133,0.3)]" : "text-emerald-300 drop-shadow-[0_0_15px_rgba(110,231,183,0.3)]"}`}>
-                      {fmt(balance)} <span className="text-xl md:text-2xl font-bold text-white/50">د.ع</span>
+                      {dataLoading ? (
+                        <span className="opacity-40 animate-pulse text-2xl md:text-3xl">جاري الحساب...</span>
+                      ) : (
+                        <>
+                          {fmt(balance)} <span className="text-xl md:text-2xl font-bold text-white/50">د.ع</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   
                   <div className="flex flex-col gap-2 w-full md:w-auto">
-                    {balance < 0 ? (
+                    {dataLoading ? (
+                      <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-white/20">
+                        <span className="text-white/70 text-xs font-black animate-pulse">جاري فحص الميزانية والالتزامات...</span>
+                      </div>
+                    ) : balance < 0 ? (
                       <div className="flex items-center gap-2 bg-rose-500/20 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-rose-500/40">
                         <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                         <span className="text-rose-200 text-xs font-black">تجاوزت الميزانية المحددة لهذا الشهر!</span>
@@ -3733,7 +3754,7 @@ setEditTrip(null);
                     <span className="text-emerald-200 text-xs font-bold">الدخل الكلي</span>
                     <div className="p-1.5 bg-emerald-500/20 rounded-lg"><TrendingUp className="w-3.5 h-3.5 text-emerald-400" /></div>
                   </div>
-                  <div className="text-lg md:text-xl font-black text-white">{fmt(totalIncome)} <span className="text-[10px] text-gray-400">د.ع</span></div>
+                  <div className="text-lg md:text-xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalIncome)} <span className="text-[10px] text-gray-400">د.ع</span></div>
                 </div>
 
                 <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors flex flex-col justify-between">
@@ -3741,7 +3762,7 @@ setEditTrip(null);
                     <span className="text-rose-200 text-xs font-bold">المصاريف الكلية</span>
                     <div className="p-1.5 bg-rose-500/20 rounded-lg"><TrendingDown className="w-3.5 h-3.5 text-rose-400" /></div>
                   </div>
-                  <div className="text-lg md:text-xl font-black text-white">{fmt(totalExpensesAmt)} <span className="text-[10px] text-gray-400">د.ع</span></div>
+                  <div className="text-lg md:text-xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalExpensesAmt)} <span className="text-[10px] text-gray-400">د.ع</span></div>
                 </div>
 
                 <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors flex flex-col justify-between">
@@ -3749,7 +3770,7 @@ setEditTrip(null);
                     <span className="text-indigo-200 text-xs font-bold">الأقساط الشهرية</span>
                     <div className="p-1.5 bg-indigo-500/20 rounded-lg"><CreditCard className="w-3.5 h-3.5 text-indigo-400" /></div>
                   </div>
-                  <div className="text-lg md:text-xl font-black text-white">{fmt(totalInstallmentMonthly)} <span className="text-[10px] text-gray-400">د.ع</span></div>
+                  <div className="text-lg md:text-xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalInstallmentMonthly)} <span className="text-[10px] text-gray-400">د.ع</span></div>
                 </div>
 
                 <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors flex flex-col justify-between">
@@ -3757,7 +3778,7 @@ setEditTrip(null);
                     <span className="text-amber-200 text-xs font-bold">الفواتير الثابتة</span>
                     <div className="p-1.5 bg-amber-500/20 rounded-lg"><Receipt className="w-3.5 h-3.5 text-amber-400" /></div>
                   </div>
-                  <div className="text-lg md:text-xl font-black text-white">{fmt(totalBillsAmt)} <span className="text-[10px] text-gray-400">د.ع</span></div>
+                  <div className="text-lg md:text-xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalBillsAmt)} <span className="text-[10px] text-gray-400">د.ع</span></div>
                 </div>
               </div>
 

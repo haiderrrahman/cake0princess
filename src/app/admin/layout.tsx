@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
+import TheatricalSocialAlert from "@/components/TheatricalSocialAlert";
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
@@ -33,5 +35,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   // Only render children if we are definitely an admin
-  return <>{children}</>;
+  return (
+    <>
+      <TheatricalSocialAlert />
+      {children}
+    </>
+  );
 }
