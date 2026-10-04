@@ -9,13 +9,13 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState, useMemo } from "react";
-import { collection, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AdminQuickEntry from "@/components/AdminQuickEntry";
 
 export default function AdminDashboard() {
   const { user, isAdmin } = useAuth();
-  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [showQuickEntry, setShowQuickEntry] = useState(false);
   const [currentTime, setCurrentTime] = useState("");
   const [activeOperationalCounts, setActiveOperationalCounts] = useState({
@@ -268,18 +268,17 @@ export default function AdminDashboard() {
       } catch {}
     };
 
-    import("firebase/firestore").then(({ onSnapshot, query, orderBy, limit }) => {
-      const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(100));
-      const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
-      const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(100));
-      const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100));
+    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(100));
+    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
+    const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(100));
+    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100));
 
-      const unsubOrders = onSnapshot(qOrders, (snap) => {
-        currentOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        calculateStats();
-      });
-      const unsubExt = onSnapshot(qExt, (snap) => {
-        currentExtOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const unsubOrders = onSnapshot(qOrders, (snap) => {
+      currentOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      calculateStats();
+    });
+    const unsubExt = onSnapshot(qExt, (snap) => {
+      currentExtOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
         // Notifications Logic: Only check ACTIVE, un-delivered orders
         const now = new Date();
@@ -331,13 +330,12 @@ export default function AdminDashboard() {
         calculateStats();
       });
 
-      return () => {
-        unsubOrders();
-        unsubExt();
-        unsubExp();
-        unsubStore();
-      };
-    });
+    return () => {
+      unsubOrders();
+      unsubExt();
+      unsubExp();
+      unsubStore();
+    };
   }, []);
 
   // Performance calculations
@@ -609,6 +607,7 @@ export default function AdminDashboard() {
 
                 <Link
                   href="/admin/home-finance"
+                  prefetch={true}
                   className="bg-white/10 hover:bg-white/15 border border-white/15 text-white font-black px-3 py-2.5 rounded-2xl flex items-center gap-1.5 text-xs transition active:scale-95 backdrop-blur-md"
                 >
                   <span>🏠 المنزل</span>
@@ -886,6 +885,7 @@ export default function AdminDashboard() {
           <div>
             <Link
               href="/admin/home-finance"
+              prefetch={true}
               className="bg-gradient-to-r from-rose-900/90 via-red-900/80 to-purple-950/90 border border-rose-500/30 rounded-3xl p-5 sm:p-6 flex items-center justify-between shadow-2xl shadow-rose-950/50 text-white relative overflow-hidden group hover:scale-[1.01] transition-all"
             >
               <div className="absolute right-0 top-0 w-48 h-48 bg-rose-500/15 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/2" />

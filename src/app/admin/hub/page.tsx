@@ -107,7 +107,7 @@ const setFreshCache = (key: string, data: any) => {
 function AdminHubContent() {
   const [extOrdersLoaded, setExtOrdersLoaded] = useState(false);
   const [ordersLoaded, setOrdersLoaded] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const [orders, setOrders] = useState<any[]>(() => {
     return getFreshCache('cache_orders_v2') || [];
@@ -1519,10 +1519,7 @@ function AdminHubContent() {
       />
 
       <div className="p-5">
-        {loading ? (
-          <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-[#e8456b]" /></div>
-        ) : (
-          <>
+        <>
 
             {/* === ORDERS TAB === */}
             {activeTab === "orders" && (
@@ -2887,7 +2884,6 @@ function AdminHubContent() {
               </div>
             )}
           </>
-        )}
       </div>
 
       {showInventoryDeduct && (

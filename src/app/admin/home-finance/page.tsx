@@ -3294,7 +3294,17 @@ setEditTrip(null);
 
         {/* Back + Title */}
         <div className="relative z-10 flex items-center gap-3 mb-5">
-          <Link href="/admin" className="w-10 h-10 bg-white/15 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 hover:bg-white/25 transition shrink-0">
+          <Link 
+            href="/admin" 
+            prefetch={true}
+            onClick={(e) => {
+              if (typeof window !== 'undefined' && window.history.length > 1) {
+                e.preventDefault();
+                window.history.back();
+              }
+            }}
+            className="w-10 h-10 bg-white/15 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 hover:bg-white/25 transition shrink-0 active:scale-95"
+          >
             <ArrowRight className="w-5 h-5 text-white" />
           </Link>
           <div className="w-11 h-11 rounded-2xl overflow-hidden shadow-lg border-2 border-white/90 shrink-0 bg-white p-1 flex items-center justify-center">
