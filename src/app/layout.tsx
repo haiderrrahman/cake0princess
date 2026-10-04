@@ -80,7 +80,7 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" className={cairo.variable} suppressHydrationWarning>
       <body className="bg-[#FFF8F0] dark:bg-[#0D0A1A] pb-20 md:pb-0 font-sans antialiased text-gray-900 dark:text-gray-100 selection:bg-[#FF3366]/20 selection:text-[#FF3366]">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
           <AuthProvider>
             <CartProvider>
               <FavoritesProvider>

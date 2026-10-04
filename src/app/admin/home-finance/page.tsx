@@ -3345,7 +3345,7 @@ setEditTrip(null);
       )}
 
       {/* ═══════════════ HEADER ═══════════════ */}
-      <div className="relative bg-gradient-to-br from-[#1a0533] via-[#2d1060] to-[#0f3460] pt-14 pb-6 px-5 overflow-hidden">
+      <div className="relative bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 dark:from-[#1a0533] dark:via-[#2d1060] dark:to-[#0f3460] pt-14 pb-6 px-5 overflow-hidden shadow-lg transition-colors">
         {/* Blobs */}
         <div className="absolute top-0 right-0 w-72 h-72 bg-purple-600/20 blur-[100px] rounded-full -translate-y-1/2 translate-x-1/4 pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/15 blur-[80px] rounded-full translate-y-1/2 -translate-x-1/4 pointer-events-none" />
@@ -3542,57 +3542,57 @@ setEditTrip(null);
           return (
             <div className="grid grid-cols-2 gap-3">
               {/* Card 1: المتوفر / الإيجابي */}
-              <div className="bg-gradient-to-br from-emerald-950/80 via-zinc-900 to-zinc-900 dark:from-emerald-950/50 dark:to-zinc-900/90 border border-emerald-500/30 rounded-3xl p-3 sm:p-4 text-white shadow-lg relative overflow-hidden flex flex-col justify-between">
+              <div className="bg-gradient-to-br from-emerald-50 via-white to-emerald-50/40 dark:from-emerald-950/80 dark:via-zinc-900 dark:to-zinc-900 border border-emerald-200 dark:border-emerald-500/30 rounded-3xl p-3 sm:p-4 text-slate-900 dark:text-white shadow-sm dark:shadow-lg relative overflow-hidden flex flex-col justify-between transition-colors">
                 <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1.5">
+                  <span className="text-xs font-black text-emerald-800 dark:text-emerald-400 bg-emerald-100/80 dark:bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-300/60 dark:border-emerald-500/30 flex items-center gap-1.5">
                     <span>{availCard.icon}</span>
                     <span>{availCard.title}</span>
                   </span>
                   <div className="text-left">
-                    <span className="text-2xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-lg">...</span> : availCard.count}</span>
-                    <span className="text-[10px] text-gray-400 block font-bold">{availCard.countLabel}</span>
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-lg">...</span> : availCard.count}</span>
+                    <span className="text-[10px] text-slate-500 dark:text-gray-400 block font-bold">{availCard.countLabel}</span>
                   </div>
                 </div>
                 {availCard.value !== 0 ? (
-                  <div className="mt-3 pt-2 border-t border-emerald-500/10 flex justify-between items-baseline">
-                    <span className="text-[11px] font-bold text-gray-400">القيمة التقديرية / الرصيد:</span>
+                  <div className="mt-3 pt-2 border-t border-emerald-200/60 dark:border-emerald-500/10 flex justify-between items-baseline">
+                    <span className="text-[11px] font-bold text-slate-600 dark:text-gray-400">القيمة التقديرية / الرصيد:</span>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-lg font-black text-emerald-300">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(availCard.value)}</span>
-                      <span className="text-[10px] text-emerald-400 font-bold">د.ع</span>
+                      <span className="text-lg font-black text-emerald-700 dark:text-emerald-300">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(availCard.value)}</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">د.ع</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 pt-2 border-t border-emerald-500/10 flex justify-between items-baseline">
-                    <span className="text-[11px] font-bold text-gray-500">الحالة:</span>
-                    <span className="text-xs font-bold text-emerald-400">محدث أولاً بأول</span>
+                  <div className="mt-3 pt-2 border-t border-emerald-200/60 dark:border-emerald-500/10 flex justify-between items-baseline">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-gray-500">الحالة:</span>
+                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">محدث أولاً بأول</span>
                   </div>
                 )}
               </div>
 
               {/* Card 2: النواقص / المطلوب */}
-              <div className="bg-gradient-to-br from-red-950/80 via-zinc-900 to-zinc-900 dark:from-red-950/50 dark:to-zinc-900/90 border border-red-500/30 rounded-3xl p-3 sm:p-4 text-white shadow-lg relative overflow-hidden flex flex-col justify-between">
+              <div className="bg-gradient-to-br from-rose-50 via-white to-red-50/40 dark:from-red-950/80 dark:via-zinc-900 dark:to-zinc-900 border border-red-200 dark:border-red-500/30 rounded-3xl p-3 sm:p-4 text-slate-900 dark:text-white shadow-sm dark:shadow-lg relative overflow-hidden flex flex-col justify-between transition-colors">
                 <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-black text-red-400 bg-red-500/10 dark:bg-red-500/20 px-3 py-1 rounded-full border border-red-500/30 flex items-center gap-1.5">
+                  <span className="text-xs font-black text-rose-800 dark:text-red-400 bg-rose-100/80 dark:bg-red-500/10 px-3 py-1 rounded-full border border-rose-300/60 dark:border-red-500/30 flex items-center gap-1.5">
                     <span>{shortCard.icon}</span>
                     <span>{shortCard.title}</span>
                   </span>
                   <div className="text-left">
-                    <span className="text-2xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-lg">...</span> : shortCard.count}</span>
-                    <span className="text-[10px] text-gray-400 block font-bold">{shortCard.countLabel}</span>
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-lg">...</span> : shortCard.count}</span>
+                    <span className="text-[10px] text-slate-500 dark:text-gray-400 block font-bold">{shortCard.countLabel}</span>
                   </div>
                 </div>
                 {shortCard.value !== 0 ? (
-                  <div className="mt-3 pt-2 border-t border-red-500/10 flex justify-between items-baseline">
-                    <span className="text-[11px] font-bold text-gray-400">التكلفة / المطلوب:</span>
+                  <div className="mt-3 pt-2 border-t border-red-200/60 dark:border-red-500/10 flex justify-between items-baseline">
+                    <span className="text-[11px] font-bold text-slate-600 dark:text-gray-400">التكلفة / المطلوب:</span>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-lg font-black text-red-300">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(shortCard.value)}</span>
-                      <span className="text-[10px] text-red-400 font-bold">د.ع</span>
+                      <span className="text-lg font-black text-rose-700 dark:text-red-300">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(shortCard.value)}</span>
+                      <span className="text-[10px] text-rose-600 dark:text-red-400 font-bold">د.ع</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 pt-2 border-t border-red-500/10 flex justify-between items-baseline">
-                    <span className="text-[11px] font-bold text-gray-500">الحالة:</span>
-                    <span className="text-xs font-bold text-green-400">لا توجد نواقص معلقة 🎉</span>
+                  <div className="mt-3 pt-2 border-t border-red-200/60 dark:border-red-500/10 flex justify-between items-baseline">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-gray-500">الحالة:</span>
+                    <span className="text-xs font-bold text-emerald-700 dark:text-green-400">لا توجد نواقص معلقة 🎉</span>
                   </div>
                 )}
               </div>
@@ -3629,21 +3629,21 @@ setEditTrip(null);
             </div>
 
             {/* Financial Cycle & Health Hero Section */}
-            <div className="relative bg-gradient-to-br from-[#120324] via-[#240b4a] to-[#0a2540] rounded-[2.2rem] p-5 sm:p-6 shadow-2xl border border-white/10 overflow-hidden">
-              <div className="absolute top-0 right-0 w-80 h-80 bg-purple-500/15 rounded-full blur-[100px] pointer-events-none" />
-              <div className="absolute bottom-0 left-0 w-80 h-80 bg-cyan-500/15 rounded-full blur-[100px] pointer-events-none" />
+            <div className="relative bg-gradient-to-br from-white via-indigo-50/40 to-purple-50/50 dark:from-[#120324] dark:via-[#240b4a] dark:to-[#0a2540] rounded-[2.2rem] p-5 sm:p-6 shadow-xl dark:shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden">
+              <div className="absolute top-0 right-0 w-80 h-80 bg-purple-500/10 dark:bg-purple-500/15 rounded-full blur-[100px] pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-80 h-80 bg-cyan-500/10 dark:bg-cyan-500/15 rounded-full blur-[100px] pointer-events-none" />
 
               {/* Cycle Selector Bar */}
-              <div className="relative z-10 mb-5 bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/20 flex flex-col md:flex-row items-center justify-between gap-3">
+              <div className="relative z-10 mb-5 bg-white/90 dark:bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-purple-100 dark:border-white/20 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
                 <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
                   <div className="flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4 text-purple-300" />
-                    <h3 className="font-black text-white text-xs sm:text-sm">الدورة المالية:</h3>
+                    <Calendar className="w-4 h-4 text-purple-600 dark:text-purple-300" />
+                    <h3 className="font-black text-slate-800 dark:text-white text-xs sm:text-sm">الدورة المالية:</h3>
                   </div>
                   <select
                     value={selectedCycleId}
                     onChange={(e) => setSelectedCycleId(e.target.value)}
-                    className="bg-black/40 border border-white/20 rounded-xl text-xs font-bold text-white focus:ring-2 focus:ring-purple-500 py-1.5 px-3 outline-none"
+                    className="bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/20 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-purple-500 py-1.5 px-3 outline-none"
                   >
                     {cycles.map(c => (
                       <option key={c.id} value={c.id} className="text-black">{c.label}</option>
@@ -3670,7 +3670,7 @@ setEditTrip(null);
                     const newId = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getDate()}`;
                     setTimeout(() => setSelectedCycleId(newId), 50);
                   }}
-                  className="w-full md:w-auto bg-blue-600/40 hover:bg-blue-600 border border-blue-400/40 text-white rounded-xl px-3.5 py-1.5 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95"
+                  className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-3.5 py-1.5 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>إنهاء الدورة يدوياً</span>
@@ -3679,44 +3679,44 @@ setEditTrip(null);
 
               {/* Helper Alert if user is on new cycle */}
               {(expenses.length > 0 || incomes.length > 0) && totalExpensesAmt === 0 && totalIncome === 0 && selectedCycleId === cycles[0]?.id && (
-                <div className="relative z-10 bg-indigo-500/20 backdrop-blur-md border border-indigo-400/50 rounded-2xl p-4 text-center mb-5 shadow-lg shadow-indigo-500/20 animate-pulse">
+                <div className="relative z-10 bg-indigo-50 dark:bg-indigo-500/20 backdrop-blur-md border border-indigo-200 dark:border-indigo-400/50 rounded-2xl p-4 text-center mb-5 shadow-sm dark:shadow-lg dark:shadow-indigo-500/20 animate-pulse">
                   <div className="flex justify-center items-center gap-2 mb-1">
-                    <span className="text-indigo-100 font-black text-sm">مرحباً! لقد بدأت دورة مالية جديدة فارغة 🗓️</span>
+                    <span className="text-indigo-950 dark:text-indigo-100 font-black text-sm">مرحباً! لقد بدأت دورة مالية جديدة فارغة 🗓️</span>
                   </div>
-                  <p className="text-indigo-200/80 font-bold text-xs mt-1">
+                  <p className="text-indigo-800/80 dark:text-indigo-200/80 font-bold text-xs mt-1">
                     أنت الآن في دورة شهرية جديدة. لرؤية مصاريفك وإدخالاتك السابقة، قم بتغيير الدورة المالية من القائمة المنسدلة في الأعلى (اختر الدورة السابقة).
                   </p>
                 </div>
               )}
 
               {/* Main Balance Card with Health Score */}
-              <div className="relative z-10 bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 backdrop-blur-xl rounded-[2rem] p-6 border border-white/20 shadow-2xl relative overflow-hidden group mb-4">
+              <div className="relative z-10 bg-gradient-to-br from-indigo-50/90 via-purple-50/80 to-pink-50/80 dark:from-indigo-500/20 dark:via-purple-500/20 dark:to-pink-500/20 backdrop-blur-xl rounded-[2rem] p-6 border border-purple-200/60 dark:border-white/20 shadow-md dark:shadow-2xl relative overflow-hidden group mb-4">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md">
-                        <Wallet className="w-5 h-5 text-purple-200" />
+                      <div className="p-2 bg-white dark:bg-white/10 rounded-xl shadow-sm backdrop-blur-md">
+                        <Wallet className="w-5 h-5 text-purple-600 dark:text-purple-200" />
                       </div>
-                      <span className="text-purple-100 text-sm font-black tracking-wide">الرصيد الصافي للشهر</span>
+                      <span className="text-purple-900 dark:text-purple-100 text-sm font-black tracking-wide">الرصيد الصافي للشهر</span>
                       
                       {/* Financial Health Score Pill */}
                       <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
                         smartFinancialIntelligence.healthScore >= 80 
-                          ? "bg-emerald-500/20 border-emerald-400/50 text-emerald-300"
+                          ? "bg-emerald-100 border-emerald-300 text-emerald-800 dark:bg-emerald-500/20 dark:border-emerald-400/50 dark:text-emerald-300"
                           : smartFinancialIntelligence.healthScore >= 50
-                            ? "bg-amber-500/20 border-amber-400/50 text-amber-300"
-                            : "bg-rose-500/20 border-rose-400/50 text-rose-300 animate-pulse"
+                            ? "bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-500/20 dark:border-amber-400/50 dark:text-amber-300"
+                            : "bg-rose-100 border-rose-300 text-rose-800 dark:bg-rose-500/20 dark:border-rose-400/50 dark:text-rose-300 animate-pulse"
                       }`}>
                         نبض الميزانية: {smartFinancialIntelligence.healthScore}/100
                       </span>
                     </div>
 
-                    <div className={`text-4xl md:text-5xl font-black tracking-tight ${balance < 0 ? "text-rose-400 drop-shadow-[0_0_15px_rgba(251,113,133,0.3)]" : "text-emerald-300 drop-shadow-[0_0_15px_rgba(110,231,183,0.3)]"}`}>
+                    <div className={`text-4xl md:text-5xl font-black tracking-tight ${balance < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-300"}`}>
                       {dataLoading ? (
                         <span className="opacity-40 animate-pulse text-2xl md:text-3xl">جاري الحساب...</span>
                       ) : (
                         <>
-                          {fmt(balance)} <span className="text-xl md:text-2xl font-bold text-white/50">د.ع</span>
+                          {fmt(balance)} <span className="text-xl md:text-2xl font-bold text-slate-500 dark:text-white/50">د.ع</span>
                         </>
                       )}
                     </div>
@@ -3724,23 +3724,23 @@ setEditTrip(null);
                   
                   <div className="flex flex-col gap-2 w-full md:w-auto">
                     {dataLoading ? (
-                      <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-white/20">
-                        <span className="text-white/70 text-xs font-black animate-pulse">جاري فحص الميزانية والالتزامات...</span>
+                      <div className="flex items-center gap-2 bg-white/80 dark:bg-white/10 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-slate-200 dark:border-white/20">
+                        <span className="text-slate-600 dark:text-white/70 text-xs font-black animate-pulse">جاري فحص الميزانية والالتزامات...</span>
                       </div>
                     ) : balance < 0 ? (
-                      <div className="flex items-center gap-2 bg-rose-500/20 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-rose-500/40">
-                        <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                        <span className="text-rose-200 text-xs font-black">تجاوزت الميزانية المحددة لهذا الشهر!</span>
+                      <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-500/20 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-rose-200 dark:border-rose-500/40">
+                        <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                        <span className="text-rose-800 dark:text-rose-200 text-xs font-black">تجاوزت الميزانية المحددة لهذا الشهر!</span>
                       </div>
                     ) : balance >= unpaidObligations ? (
-                      <div className="flex items-center gap-2 bg-emerald-500/20 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-emerald-500/40">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span className="text-emerald-200 text-xs font-black">الرصيد يغطي جميع الالتزامات بنجاح</span>
+                      <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/20 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-emerald-200 dark:border-emerald-500/40">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span className="text-emerald-800 dark:text-emerald-200 text-xs font-black">الرصيد يغطي جميع الالتزامات بنجاح</span>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 bg-amber-500/20 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-amber-500/40">
-                        <AlertCircle className="w-4 h-4 text-amber-300 shrink-0" />
-                        <span className="text-amber-200 text-xs font-black">الرصيد لا يكفي لكل الالتزامات المعلقة</span>
+                      <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-500/20 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-amber-200 dark:border-amber-500/40">
+                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-300 shrink-0" />
+                        <span className="text-amber-800 dark:text-amber-200 text-xs font-black">الرصيد لا يكفي لكل الالتزامات المعلقة</span>
                       </div>
                     )}
                   </div>
@@ -3749,71 +3749,71 @@ setEditTrip(null);
 
               {/* 4 KPI Top Cards */}
               <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors flex flex-col justify-between">
+                <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-emerald-200 text-xs font-bold">الدخل الكلي</span>
-                    <div className="p-1.5 bg-emerald-500/20 rounded-lg"><TrendingUp className="w-3.5 h-3.5 text-emerald-400" /></div>
+                    <span className="text-emerald-700 dark:text-emerald-200 text-xs font-bold">الدخل الكلي</span>
+                    <div className="p-1.5 bg-emerald-100 dark:bg-emerald-500/20 rounded-lg"><TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /></div>
                   </div>
-                  <div className="text-lg md:text-xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalIncome)} <span className="text-[10px] text-gray-400">د.ع</span></div>
+                  <div className="text-lg md:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalIncome)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
                 </div>
 
-                <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors flex flex-col justify-between">
+                <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-rose-200 text-xs font-bold">المصاريف الكلية</span>
-                    <div className="p-1.5 bg-rose-500/20 rounded-lg"><TrendingDown className="w-3.5 h-3.5 text-rose-400" /></div>
+                    <span className="text-rose-700 dark:text-rose-200 text-xs font-bold">المصاريف الكلية</span>
+                    <div className="p-1.5 bg-rose-100 dark:bg-rose-500/20 rounded-lg"><TrendingDown className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" /></div>
                   </div>
-                  <div className="text-lg md:text-xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalExpensesAmt)} <span className="text-[10px] text-gray-400">د.ع</span></div>
+                  <div className="text-lg md:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalExpensesAmt)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
                 </div>
 
-                <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors flex flex-col justify-between">
+                <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-indigo-200 text-xs font-bold">الأقساط الشهرية</span>
-                    <div className="p-1.5 bg-indigo-500/20 rounded-lg"><CreditCard className="w-3.5 h-3.5 text-indigo-400" /></div>
+                    <span className="text-indigo-700 dark:text-indigo-200 text-xs font-bold">الأقساط الشهرية</span>
+                    <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg"><CreditCard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /></div>
                   </div>
-                  <div className="text-lg md:text-xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalInstallmentMonthly)} <span className="text-[10px] text-gray-400">د.ع</span></div>
+                  <div className="text-lg md:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalInstallmentMonthly)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
                 </div>
 
-                <div className="bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-white/10 transition-colors flex flex-col justify-between">
+                <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-3xl p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-amber-200 text-xs font-bold">الفواتير الثابتة</span>
-                    <div className="p-1.5 bg-amber-500/20 rounded-lg"><Receipt className="w-3.5 h-3.5 text-amber-400" /></div>
+                    <span className="text-amber-700 dark:text-amber-200 text-xs font-bold">الفواتير الثابتة</span>
+                    <div className="p-1.5 bg-amber-100 dark:bg-amber-500/20 rounded-lg"><Receipt className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /></div>
                   </div>
-                  <div className="text-lg md:text-xl font-black text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalBillsAmt)} <span className="text-[10px] text-gray-400">د.ع</span></div>
+                  <div className="text-lg md:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalBillsAmt)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
                 </div>
               </div>
 
               {/* Mini-Cards: Debts vs Needs */}
               <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="bg-gradient-to-br from-cyan-950/60 to-blue-950/60 backdrop-blur-md rounded-3xl p-4 border border-cyan-500/30 shadow-lg">
+                <div className="bg-gradient-to-br from-cyan-50 to-blue-50/70 dark:from-cyan-950/60 dark:to-blue-950/60 backdrop-blur-md rounded-3xl p-4 border border-cyan-200 dark:border-cyan-500/30 shadow-sm dark:shadow-lg">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-                      <span className="text-cyan-200 text-xs font-bold">لك (ديون خارجية وأموال لك)</span>
+                      <div className="w-2 h-2 bg-cyan-500 dark:bg-cyan-400 rounded-full animate-pulse" />
+                      <span className="text-cyan-800 dark:text-cyan-200 text-xs font-bold">لك (ديون خارجية وأموال لك)</span>
                     </div>
-                    <span className="text-base font-black text-white">{fmt(totalDebtsForMe)} <span className="text-[10px] text-cyan-300/50">د.ع</span></span>
+                    <span className="text-base font-black text-slate-900 dark:text-white">{fmt(totalDebtsForMe)} <span className="text-[10px] text-slate-500 dark:text-cyan-300/50">د.ع</span></span>
                   </div>
-                  <div className="w-full h-px bg-cyan-400/10 my-2.5"></div>
+                  <div className="w-full h-px bg-cyan-200 dark:bg-cyan-400/10 my-2.5"></div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-rose-400 rounded-full" />
-                      <span className="text-rose-200 text-xs font-bold">عليك (ديون غير مسددة)</span>
+                      <div className="w-2 h-2 bg-rose-500 dark:bg-rose-400 rounded-full" />
+                      <span className="text-rose-800 dark:text-rose-200 text-xs font-bold">عليك (ديون غير مسددة)</span>
                     </div>
-                    <span className="text-base font-black text-white">{fmt(totalDebtsOnMe)} <span className="text-[10px] text-rose-300/50">د.ع</span></span>
+                    <span className="text-base font-black text-slate-900 dark:text-white">{fmt(totalDebtsOnMe)} <span className="text-[10px] text-slate-500 dark:text-rose-300/50">د.ع</span></span>
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-orange-950/60 to-amber-950/60 backdrop-blur-md rounded-3xl p-4 border border-orange-500/30 shadow-lg flex flex-col justify-between">
+                <div className="bg-gradient-to-br from-orange-50 to-amber-50/70 dark:from-orange-950/60 dark:to-amber-950/60 backdrop-blur-md rounded-3xl p-4 border border-orange-200 dark:border-orange-500/30 shadow-sm dark:shadow-lg flex flex-col justify-between">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <ShoppingCart className="w-4 h-4 text-orange-400" />
-                      <span className="text-orange-200 text-xs font-bold">نواقص البيت والعائلة (تقديري)</span>
+                      <ShoppingCart className="w-4 h-4 text-orange-500 dark:text-orange-400" />
+                      <span className="text-orange-900 dark:text-orange-200 text-xs font-bold">نواقص البيت والعائلة (تقديري)</span>
                     </div>
-                    <span className="text-base font-black text-white">{fmt(totalNeedsAmt)} <span className="text-[10px] text-orange-300/50">د.ع</span></span>
+                    <span className="text-base font-black text-slate-900 dark:text-white">{fmt(totalNeedsAmt)} <span className="text-[10px] text-slate-500 dark:text-orange-300/50">د.ع</span></span>
                   </div>
                   {unifiedDeficits.length > 0 && (
-                    <div className="mt-2 text-[10px] text-orange-200 font-bold bg-black/30 rounded-xl p-2 flex items-center justify-between border border-white/5">
+                    <div className="mt-2 text-[10px] text-orange-900 dark:text-orange-200 font-bold bg-white/80 dark:bg-black/30 rounded-xl p-2 flex items-center justify-between border border-orange-200/60 dark:border-white/5">
                       <span>{unifiedDeficits.length} احتياجات معلقة في القائمة</span>
-                      <button type="button" onClick={() => setActiveTab("needs")} className="bg-orange-500/30 hover:bg-orange-500/50 px-2.5 py-1 rounded-lg transition text-white font-bold">
+                      <button type="button" onClick={() => setActiveTab("needs")} className="bg-orange-500 hover:bg-orange-600 px-2.5 py-1 rounded-lg transition text-white font-bold">
                         فتح النواقص ‹
                       </button>
                     </div>
@@ -3825,47 +3825,47 @@ setEditTrip(null);
             {/* ══════════════════════════════════════════════════════════════════════════════
                 🌟 المرصد المالي الذكي ومرصد نبض المنزل (CONTINUOUS AI SENTINEL & PREDICTOR)
             ══════════════════════════════════════════════════════════════════════════════ */}
-            <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 rounded-[2.2rem] p-5 sm:p-6 border border-indigo-500/30 shadow-2xl relative overflow-hidden space-y-5">
-              <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/10 rounded-full blur-[90px] pointer-events-none" />
+            <div className="bg-gradient-to-br from-white via-indigo-50/40 to-slate-50 dark:from-slate-900 dark:via-indigo-950 dark:to-slate-950 rounded-[2.2rem] p-5 sm:p-6 border border-indigo-100 dark:border-indigo-500/30 shadow-xl dark:shadow-2xl relative overflow-hidden space-y-5">
+              <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/5 dark:bg-indigo-500/10 rounded-full blur-[90px] pointer-events-none" />
 
               {/* Sentinel Header */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-white/10 pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 shrink-0">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
                     <BrainCircuit className="w-5 h-5 animate-pulse" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-black text-white text-base sm:text-lg">المرصد المالي التنبؤي الذكي</h3>
-                      <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-400/40 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-amber-300" /> رقابة لحظية
+                      <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg">المرصد المالي التنبؤي الذكي</h3>
+                      <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-400/40 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-amber-500 dark:text-amber-300" /> رقابة لحظية
                       </span>
                     </div>
-                    <p className="text-gray-400 text-xs font-bold mt-0.5">
+                    <p className="text-slate-500 dark:text-gray-400 text-xs font-bold mt-0.5">
                       تنبؤات دقيقة لمسار الديون، مراقبة معدل الصرف اليومي، كشف الاستنزاف، وضبط نواقص البيت
                     </p>
                   </div>
                 </div>
 
-                <div className="text-right sm:text-left text-[11px] font-bold text-indigo-300 bg-indigo-900/40 px-3 py-1.5 rounded-xl border border-indigo-500/30 shrink-0">
+                <div className="text-right sm:text-left text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/40 px-3 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-500/30 shrink-0">
                   <span>الدورة: {smartFinancialIntelligence.daysElapsed} من {smartFinancialIntelligence.totalCycleDays} يوم ({smartFinancialIntelligence.daysRemaining} متبقٍ)</span>
                 </div>
               </div>
 
               {/* 1. Daily Burn Rate Sentinel Card (معدل حرق الميزانية والسقف الآمن) */}
-              <div className="bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-white/10 space-y-3">
+              <div className="bg-white/80 dark:bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 dark:border-white/10 space-y-3 shadow-sm">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <Flame className="w-4 h-4 text-orange-400" />
-                    <h4 className="text-xs sm:text-sm font-black text-white">سرعة حرق الميزانية اليومي مقابل السقف الآمن</h4>
+                    <Flame className="w-4 h-4 text-orange-500 dark:text-orange-400" />
+                    <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-white">سرعة حرق الميزانية اليومي مقابل السقف الآمن</h4>
                   </div>
-                  <span className="text-[11px] text-gray-400 font-bold">
+                  <span className="text-[11px] text-slate-500 dark:text-gray-400 font-bold">
                     معدل الأيام: {smartFinancialIntelligence.daysElapsed} أيام مضت | {smartFinancialIntelligence.daysRemaining} أيام قادمة
                   </span>
                 </div>
 
                 {/* Progress bar of days */}
-                <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden">
+                <div className="w-full bg-slate-100 dark:bg-white/10 h-2 rounded-full overflow-hidden">
                   <div 
                     className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full transition-all duration-500"
                     style={{ width: `${Math.min(100, (smartFinancialIntelligence.daysElapsed / smartFinancialIntelligence.totalCycleDays) * 100)}%` }}
@@ -3874,45 +3874,45 @@ setEditTrip(null);
 
                 {/* Metrics Box */}
                 <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div className="bg-black/30 rounded-xl p-3 border border-white/5">
-                    <p className="text-[10px] text-gray-400 font-bold mb-1">🔥 معدل صرفك اليومي الحالي</p>
+                  <div className="bg-slate-50 dark:bg-black/30 rounded-xl p-3 border border-slate-200/70 dark:border-white/5">
+                    <p className="text-[10px] text-slate-500 dark:text-gray-400 font-bold mb-1">🔥 معدل صرفك اليومي الحالي</p>
                     <p className={`text-base font-black ${
                       smartFinancialIntelligence.dailyBurnRate > smartFinancialIntelligence.safeDailySpendingLimit && smartFinancialIntelligence.safeDailySpendingLimit > 0
-                        ? "text-rose-400"
-                        : "text-emerald-300"
+                        ? "text-rose-600 dark:text-rose-400"
+                        : "text-emerald-600 dark:text-emerald-300"
                     }`}>
-                      {fmt(smartFinancialIntelligence.dailyBurnRate)} <span className="text-[10px] text-gray-400">د.ع / يوم</span>
+                      {fmt(smartFinancialIntelligence.dailyBurnRate)} <span className="text-[10px] text-slate-400 dark:text-gray-400">د.ع / يوم</span>
                     </p>
                   </div>
 
-                  <div className="bg-black/30 rounded-xl p-3 border border-white/5">
-                    <p className="text-[10px] text-gray-400 font-bold mb-1">🛡️ السقف اليومي الآمن المسموح</p>
-                    <p className="text-base font-black text-cyan-300">
-                      {fmt(smartFinancialIntelligence.safeDailySpendingLimit)} <span className="text-[10px] text-gray-400">د.ع / يوم</span>
+                  <div className="bg-slate-50 dark:bg-black/30 rounded-xl p-3 border border-slate-200/70 dark:border-white/5">
+                    <p className="text-[10px] text-slate-500 dark:text-gray-400 font-bold mb-1">🛡️ السقف اليومي الآمن المسموح</p>
+                    <p className="text-base font-black text-cyan-700 dark:text-cyan-300">
+                      {fmt(smartFinancialIntelligence.safeDailySpendingLimit)} <span className="text-[10px] text-slate-400 dark:text-gray-400">د.ع / يوم</span>
                     </p>
                   </div>
                 </div>
 
                 {/* Dynamic Warning or Health Notice */}
                 {smartFinancialIntelligence.dailyBurnRate > smartFinancialIntelligence.safeDailySpendingLimit && smartFinancialIntelligence.safeDailySpendingLimit > 0 ? (
-                  <div className="bg-rose-500/15 border border-rose-500/30 rounded-xl p-3 flex items-start gap-2.5">
-                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/30 rounded-xl p-3 flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-xs font-black text-rose-300">⚠️ خطر عجز مبكر في الميزانية</p>
-                      <p className="text-[11px] text-rose-200/80 font-bold mt-0.5 leading-relaxed">
+                      <p className="text-xs font-black text-rose-800 dark:text-rose-300">⚠️ خطر عجز مبكر في الميزانية</p>
+                      <p className="text-[11px] text-rose-700/90 dark:text-rose-200/80 font-bold mt-0.5 leading-relaxed">
                         معدل صرفك اليومي الحالي يتجاوز السقف الآمن بـ {fmt(smartFinancialIntelligence.dailyBurnRate - smartFinancialIntelligence.safeDailySpendingLimit)} د.ع يومياً! استمرارك بهذا المعدل سيكلف عجزاً متوقعاً قدره {fmt(Math.abs(smartFinancialIntelligence.projectedDeficitOrSurplus))} د.ع.
-                        <span className="block mt-1 text-white font-black">
+                        <span className="block mt-1 text-slate-900 dark:text-white font-black">
                           👉 خطة التصحيح: اضبط سقف مصروفك اليومي ليكون أقل من {fmt(smartFinancialIntelligence.safeDailySpendingLimit)} د.ع لإنهاء الشهر بأمان.
                         </span>
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-emerald-500/15 border border-emerald-500/30 rounded-xl p-3 flex items-start gap-2.5">
-                    <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 rounded-xl p-3 flex items-start gap-2.5">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-xs font-black text-emerald-300">✨ أداء مالي متزن ومطمئن</p>
-                      <p className="text-[11px] text-emerald-200/80 font-bold mt-0.5">
+                      <p className="text-xs font-black text-emerald-800 dark:text-emerald-300">✨ أداء مالي متزن ومطمئن</p>
+                      <p className="text-[11px] text-emerald-700/90 dark:text-emerald-200/80 font-bold mt-0.5">
                         إنفاقك اليومي منضبط وضمن السقف الآمن. متوقع إنهاء الدورة بفائض قدره {fmt(Math.max(0, smartFinancialIntelligence.projectedDeficitOrSurplus))} د.ع، يُنصح بتوجيه هذا الفائض نحو خطة سحق الديون في الأسفل!
                       </p>
                     </div>
@@ -3921,14 +3921,14 @@ setEditTrip(null);
               </div>
 
               {/* 2. Three Interactive Sentinel Views (Segmented Tabs) */}
-              <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/10 gap-1">
+              <div className="flex bg-slate-100 dark:bg-black/40 p-1.5 rounded-2xl border border-slate-200/80 dark:border-white/10 gap-1">
                 <button
                   type="button"
                   onClick={() => setActiveInsightView("debts")}
                   className={`flex-1 py-2 px-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 ${
                     activeInsightView === "debts"
                       ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25"
-                      : "text-gray-400 hover:text-white"
+                      : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
                   <Target className="w-3.5 h-3.5" />
@@ -3940,7 +3940,7 @@ setEditTrip(null);
                   className={`flex-1 py-2 px-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 ${
                     activeInsightView === "leaks"
                       ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25"
-                      : "text-gray-400 hover:text-white"
+                      : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
                   <ShieldAlert className="w-3.5 h-3.5" />
@@ -3952,7 +3952,7 @@ setEditTrip(null);
                   className={`flex-1 py-2 px-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 ${
                     activeInsightView === "house"
                       ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25"
-                      : "text-gray-400 hover:text-white"
+                      : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
                   <Home className="w-3.5 h-3.5" />
@@ -3965,23 +3965,23 @@ setEditTrip(null);
                 <div className="space-y-4 animate-in fade-in duration-200">
                   {/* Total Debt Burden & Projected Freedom Date */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="bg-gradient-to-br from-rose-950/50 to-purple-950/50 rounded-2xl p-4 border border-rose-500/30">
-                      <p className="text-xs font-bold text-rose-300 mb-1 flex items-center gap-1.5">
-                        <Banknote className="w-4 h-4 text-rose-400" /> إجمالي عبء الديون والالتزامات الكلي
+                    <div className="bg-gradient-to-br from-rose-50 to-purple-50/70 dark:from-rose-950/50 dark:to-purple-950/50 rounded-2xl p-4 border border-rose-200 dark:border-rose-500/30 shadow-sm">
+                      <p className="text-xs font-bold text-rose-800 dark:text-rose-300 mb-1 flex items-center gap-1.5">
+                        <Banknote className="w-4 h-4 text-rose-500 dark:text-rose-400" /> إجمالي عبء الديون والالتزامات الكلي
                       </p>
-                      <p className="text-2xl font-black text-white">
-                        {fmt(smartFinancialIntelligence.totalCombinedDebtBurden)} <span className="text-xs text-rose-300/60 font-bold">د.ع</span>
+                      <p className="text-2xl font-black text-slate-900 dark:text-white">
+                        {fmt(smartFinancialIntelligence.totalCombinedDebtBurden)} <span className="text-xs text-rose-600/70 dark:text-rose-300/60 font-bold">د.ع</span>
                       </p>
-                      <p className="text-[10px] text-gray-400 font-bold mt-1">
+                      <p className="text-[10px] text-slate-500 dark:text-gray-400 font-bold mt-1">
                         يشمل {fmt(smartFinancialIntelligence.totalRemainingDebtsOnMe)} د.ع ديون نقدية + {fmt(smartFinancialIntelligence.totalRemainingInstallments)} د.ع متبقي الأقساط
                       </p>
                     </div>
 
-                    <div className="bg-gradient-to-br from-indigo-950/50 to-blue-950/50 rounded-2xl p-4 border border-indigo-500/30">
-                      <p className="text-xs font-bold text-indigo-300 mb-1 flex items-center gap-1.5">
-                        <Clock className="w-4 h-4 text-indigo-400" /> تاريخ التحرر المتوقع من الديون
+                    <div className="bg-gradient-to-br from-indigo-50 to-blue-50/70 dark:from-indigo-950/50 dark:to-blue-950/50 rounded-2xl p-4 border border-indigo-200 dark:border-indigo-500/30 shadow-sm">
+                      <p className="text-xs font-bold text-indigo-800 dark:text-indigo-300 mb-1 flex items-center gap-1.5">
+                        <Clock className="w-4 h-4 text-indigo-500 dark:text-indigo-400" /> تاريخ التحرر المتوقع من الديون
                       </p>
-                      <p className="text-xl font-black text-cyan-300">
+                      <p className="text-xl font-black text-cyan-700 dark:text-cyan-300">
                         {smartFinancialIntelligence.totalCombinedDebtBurden === 0 ? (
                           "أنت حر مالياً بالكامل! 🎉"
                         ) : smartFinancialIntelligence.monthsToFreedomBase < 99 ? (
@@ -3990,7 +3990,7 @@ setEditTrip(null);
                           "تتطلب تسريع وتيرة السداد"
                         )}
                       </p>
-                      <p className="text-[10px] text-gray-400 font-bold mt-1">
+                      <p className="text-[10px] text-slate-500 dark:text-gray-400 font-bold mt-1">
                         {smartFinancialIntelligence.totalCombinedDebtBurden === 0
                           ? "لا توجد أي ديون أو أقساط متبقية"
                           : `متوقع خلال ${smartFinancialIntelligence.monthsToFreedomBase} شهراً بالوتيرة الحالية`}
@@ -4000,26 +4000,26 @@ setEditTrip(null);
 
                   {/* Snowball Next Target Debt */}
                   {smartFinancialIntelligence.nextTargetToCrush ? (
-                    <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-rose-500/20 rounded-2xl p-4 border border-amber-500/30 space-y-2.5">
+                    <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-rose-50 dark:from-amber-500/20 dark:via-orange-500/20 dark:to-rose-500/20 rounded-2xl p-4 border border-amber-200 dark:border-amber-500/30 space-y-2.5 shadow-sm">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <Target className="w-4 h-4 text-amber-400" />
-                          <h4 className="text-xs sm:text-sm font-black text-amber-200">
+                          <Target className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                          <h4 className="text-xs sm:text-sm font-black text-amber-900 dark:text-amber-200">
                             🎯 الهدف الأول للقضاء عليه (استراتيجية كرة الثلج):
                           </h4>
                         </div>
-                        <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-md">
+                        <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-md shadow-sm">
                           أسرع دين للإنهاء
                         </span>
                       </div>
 
-                      <div className="bg-black/30 rounded-xl p-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border border-white/5">
+                      <div className="bg-white/80 dark:bg-black/30 rounded-xl p-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border border-amber-200/60 dark:border-white/5">
                         <div>
-                          <p className="font-black text-white text-sm">
+                          <p className="font-black text-slate-900 dark:text-white text-sm">
                             {smartFinancialIntelligence.nextTargetToCrush.name} ({smartFinancialIntelligence.nextTargetToCrush.type === "installment" ? "قسط" : "دين نقدي"})
                           </p>
-                          <p className="text-[11px] text-gray-400 font-bold mt-0.5">
-                            المتبقي لإنهاء هذا الدين بالكامل: <span className="text-rose-400 font-black">{fmt(smartFinancialIntelligence.nextTargetToCrush.remaining)} د.ع</span>
+                          <p className="text-[11px] text-slate-500 dark:text-gray-400 font-bold mt-0.5">
+                            المتبقي لإنهاء هذا الدين بالكامل: <span className="text-rose-600 dark:text-rose-400 font-black">{fmt(smartFinancialIntelligence.nextTargetToCrush.remaining)} د.ع</span>
                           </p>
                         </div>
 
@@ -4032,27 +4032,27 @@ setEditTrip(null);
                               setActiveTab("debts");
                             }
                           }}
-                          className="bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black px-3 py-1.5 rounded-xl transition flex items-center gap-1 active:scale-95"
+                          className="bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black px-3 py-1.5 rounded-xl transition flex items-center gap-1 active:scale-95 shadow-sm"
                         >
                           سداد دفعة للدين ‹
                         </button>
                       </div>
 
-                      <p className="text-[11px] text-amber-200/90 font-bold leading-relaxed">
-                        💡 <span className="font-black text-white">الاستفادة المالية الحقيقية:</span> بمجرد تصفية هذا الدين ({smartFinancialIntelligence.nextTargetToCrush.name})، ستتحرر من التزامه فوراً، وتُوجّه ذلك المبلغ الفائض مباشرة لسحق الدين الذي يليه، فتتسارع وتيرة خلاصك المالي ككرة الثلج!
+                      <p className="text-[11px] text-amber-900/90 dark:text-amber-200/90 font-bold leading-relaxed">
+                        💡 <span className="font-black text-slate-900 dark:text-white">الاستفادة المالية الحقيقية:</span> بمجرد تصفية هذا الدين ({smartFinancialIntelligence.nextTargetToCrush.name})، ستتحرر من التزامه فوراً، وتُوجّه ذلك المبلغ الفائض مباشرة لسحق الدين الذي يليه، فتتسارع وتيرة خلاصك المالي ككرة الثلج!
                       </p>
                     </div>
                   ) : (
-                    <div className="bg-emerald-500/15 rounded-2xl p-4 text-center border border-emerald-500/30 text-emerald-300 text-xs font-black">
+                    <div className="bg-emerald-50 dark:bg-emerald-500/15 rounded-2xl p-4 text-center border border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs font-black shadow-sm">
                       الحمد لله، لا توجد ديون أو أقساط متبقية عليك حالياً! 🌟
                     </div>
                   )}
 
                   {/* Interactive Payoff Acceleration Simulator */}
-                  <div className="bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-white/10 space-y-3">
+                  <div className="bg-white/80 dark:bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 dark:border-white/10 space-y-3 shadow-sm">
                     <div className="flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-yellow-400" />
-                      <h4 className="text-xs sm:text-sm font-black text-white">
+                      <Zap className="w-4 h-4 text-amber-500 dark:text-yellow-400" />
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
                         محاكي تسريع الخلاص المالي (ماذا لو وفّرت مبلغاً إضافياً كل شهر؟)
                       </h4>
                     </div>
@@ -4065,8 +4065,8 @@ setEditTrip(null);
                           onClick={() => setSimulatedExtraSavings(amt)}
                           className={`py-2 px-1 rounded-xl text-[11px] font-black transition border text-center ${
                             simulatedExtraSavings === amt
-                              ? "bg-yellow-400 text-slate-950 border-yellow-300 shadow-md shadow-yellow-400/20"
-                              : "bg-white/5 text-gray-300 border-white/10 hover:bg-white/10"
+                              ? "bg-yellow-400 text-slate-950 border-yellow-400 shadow-sm"
+                              : "bg-slate-50 dark:bg-white/5 text-slate-700 dark:text-gray-300 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10"
                           }`}
                         >
                           +{fmt(amt)} د.ع
@@ -4074,9 +4074,9 @@ setEditTrip(null);
                       ))}
                     </div>
 
-                    <div className="bg-gradient-to-r from-yellow-500/15 to-amber-500/15 rounded-xl p-3 border border-yellow-500/30 text-xs font-bold text-yellow-200/90 leading-relaxed">
-                      إذا قمت بترشيد نفقاتك وتوفير <span className="text-white font-black">{fmt(simulatedExtraSavings)} د.ع</span> إضافية شهرياً وضخّها في سداد الديون:
-                      <span className="block mt-1 font-black text-yellow-300 text-sm">
+                    <div className="bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-500/15 dark:to-amber-500/15 rounded-xl p-3 border border-yellow-200 dark:border-yellow-500/30 text-xs font-bold text-amber-900 dark:text-yellow-200/90 leading-relaxed">
+                      إذا قمت بترشيد نفقاتك وتوفير <span className="text-slate-950 dark:text-white font-black">{fmt(simulatedExtraSavings)} د.ع</span> إضافية شهرياً وضخّها في سداد الديون:
+                      <span className="block mt-1 font-black text-amber-800 dark:text-yellow-300 text-sm">
                         🚀 ستتحرر من جميع ديونك أسرع بـ {smartFinancialIntelligence.monthsSaved} شهراً (خلال {smartFinancialIntelligence.monthsToFreedomSimulated} شهراً فقط بدلاً من {smartFinancialIntelligence.monthsToFreedomBase} شهراً)!
                       </span>
                     </div>
@@ -4088,31 +4088,31 @@ setEditTrip(null);
               {activeInsightView === "leaks" && (
                 <div className="space-y-4 animate-in fade-in duration-200">
                   {/* Top Drain Categories */}
-                  <div className="bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-white/10 space-y-3">
+                  <div className="bg-white/80 dark:bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 dark:border-white/10 space-y-3 shadow-sm">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Flame className="w-4 h-4 text-rose-400" />
-                        <h4 className="text-xs sm:text-sm font-black text-white">أعلى تصنيفات تلتهم ميزانيتك هذا الشهر</h4>
+                        <Flame className="w-4 h-4 text-rose-500 dark:text-rose-400" />
+                        <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">أعلى تصنيفات تلتهم ميزانيتك هذا الشهر</h4>
                       </div>
-                      <span className="text-[10px] text-gray-400 font-bold">بناءً على سجل المصاريف</span>
+                      <span className="text-[10px] text-slate-500 dark:text-gray-400 font-bold">بناءً على سجل المصاريف</span>
                     </div>
 
                     {smartFinancialIntelligence.rankedCategories.length === 0 ? (
-                      <p className="text-gray-400 text-xs text-center py-4">لم تسجل أي مصاريف في هذه الدورة بعد.</p>
+                      <p className="text-slate-400 dark:text-gray-400 text-xs text-center py-4">لم تسجل أي مصاريف في هذه الدورة بعد.</p>
                     ) : (
                       <div className="space-y-2.5">
                         {smartFinancialIntelligence.rankedCategories.slice(0, 3).map((cat, idx) => (
                           <div key={cat.category} className="space-y-1">
                             <div className="flex justify-between items-center text-xs">
-                              <span className="font-bold text-white flex items-center gap-1.5">
-                                <span className="text-gray-400 text-[10px]">#{idx + 1}</span>
+                              <span className="font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                                <span className="text-slate-400 dark:text-gray-400 text-[10px]">#{idx + 1}</span>
                                 {cat.category}
                               </span>
-                              <span className="font-black text-rose-400">
+                              <span className="font-black text-rose-600 dark:text-rose-400">
                                 {fmt(cat.amount)} د.ع ({cat.percent}%)
                               </span>
                             </div>
-                            <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                            <div className="w-full bg-slate-100 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
                               <div
                                 className="bg-gradient-to-r from-rose-500 to-amber-500 h-full rounded-full"
                                 style={{ width: `${Math.min(100, cat.percent)}%` }}
@@ -4125,34 +4125,34 @@ setEditTrip(null);
                   </div>
 
                   {/* Micro-Spending Trap Warning */}
-                  <div className="bg-gradient-to-br from-amber-950/40 to-orange-950/40 rounded-2xl p-4 border border-amber-500/30 space-y-2">
+                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 rounded-2xl p-4 border border-amber-200 dark:border-amber-500/30 space-y-2 shadow-sm">
                     <div className="flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-amber-400" />
-                      <h4 className="text-xs sm:text-sm font-black text-amber-200">
+                      <AlertCircle className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                      <h4 className="text-xs sm:text-sm font-black text-amber-900 dark:text-amber-200">
                         كاشف تسريبات "المصروف اليومي الصغير":
                       </h4>
                     </div>
 
-                    <p className="text-xs text-gray-300 font-bold leading-relaxed">
+                    <p className="text-xs text-slate-700 dark:text-gray-300 font-bold leading-relaxed">
                       المشتريات العفوية المتفرقة (الأقل من 10 آلاف د.ع) بلغت هذا الشهر:{" "}
-                      <span className="text-white font-black bg-white/10 px-2 py-0.5 rounded-md">
+                      <span className="text-slate-900 dark:text-white font-black bg-white/80 dark:bg-white/10 px-2 py-0.5 rounded-md border border-amber-200/60 dark:border-transparent">
                         {fmt(smartFinancialIntelligence.smallBuysAmount)} د.ع
                       </span>{" "}
-                      عبر <span className="font-black text-amber-300">{smartFinancialIntelligence.smallBuysCount} عملية شراء متفرقة</span>!
+                      عبر <span className="font-black text-amber-600 dark:text-amber-300">{smartFinancialIntelligence.smallBuysCount} عملية شراء متفرقة</span>!
                     </p>
 
-                    <div className="bg-black/30 rounded-xl p-3 border border-white/5 text-[11px] font-bold text-amber-200/90 leading-relaxed">
-                      🛑 <span className="font-black text-white">الابتعاد عن شنو:</span> المصاريف الصغيرة المتكررة (سناكات، مشتريات عفوية، كافيهات يومية) تلتهم الميزانية بهدوء دون أن تنتبه لها. التوقف عن هذه المشتريات العفوية يوفر لك ما يصل إلى <span className="text-white font-black">{fmt(smartFinancialIntelligence.smallBuysAmount)} د.ع شهرياً</span> تضعها مباشرة في قفل الديون!
+                    <div className="bg-white/80 dark:bg-black/30 rounded-xl p-3 border border-amber-200/60 dark:border-white/5 text-[11px] font-bold text-amber-900/90 dark:text-amber-200/90 leading-relaxed">
+                      🛑 <span className="font-black text-slate-900 dark:text-white">الابتعاد عن شنو:</span> المصاريف الصغيرة المتكررة (سناكات، مشتريات عفوية، كافيهات يومية) تلتهم الميزانية بهدوء دون أن تنتبه لها. التوقف عن هذه المشتريات العفوية يوفر لك ما يصل إلى <span className="text-slate-900 dark:text-white font-black">{fmt(smartFinancialIntelligence.smallBuysAmount)} د.ع شهرياً</span> تضعها مباشرة في قفل الديون!
                     </div>
                   </div>
 
                   {/* Golden Savings Tip */}
                   {smartFinancialIntelligence.topDrainCategory && (
-                    <div className="bg-indigo-500/15 rounded-2xl p-4 border border-indigo-500/30 flex items-start gap-3">
-                      <Lightbulb className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
-                      <div className="text-xs font-bold text-indigo-200 leading-relaxed">
-                        <p className="font-black text-white text-sm mb-1">💡 نصيحة الترشيد الذكية:</p>
-                        لو قمت بترشيد الإنفاق في باب <span className="font-black text-yellow-300">{smartFinancialIntelligence.topDrainCategory.category}</span> بنسبة <span className="font-black text-white">20% فقط</span>، ستكسب تلقائياً وفرة نقدية قدرها <span className="font-black text-emerald-300">{fmt(Math.round(smartFinancialIntelligence.topDrainCategory.amount * 0.2))} د.ع شهرياً</span>، وهو كفيل بتسديد أي التزام معلق خلال أسابيع قليلة!
+                    <div className="bg-indigo-50 dark:bg-indigo-500/15 rounded-2xl p-4 border border-indigo-200 dark:border-indigo-500/30 flex items-start gap-3 shadow-sm">
+                      <Lightbulb className="w-5 h-5 text-amber-500 dark:text-amber-300 shrink-0 mt-0.5" />
+                      <div className="text-xs font-bold text-indigo-900 dark:text-indigo-200 leading-relaxed">
+                        <p className="font-black text-indigo-950 dark:text-white text-sm mb-1">💡 نصيحة الترشيد الذكية:</p>
+                        لو قمت بترشيد الإنفاق في باب <span className="font-black text-amber-600 dark:text-yellow-300">{smartFinancialIntelligence.topDrainCategory.category}</span> بنسبة <span className="font-black text-indigo-950 dark:text-white">20% فقط</span>، ستكسب تلقائياً وفرة نقدية قدرها <span className="font-black text-emerald-600 dark:text-emerald-300">{fmt(Math.round(smartFinancialIntelligence.topDrainCategory.amount * 0.2))} د.ع شهرياً</span>، وهو كفيل بتسديد أي التزام معلق خلال أسابيع قليلة!
                       </div>
                     </div>
                   )}
@@ -4164,34 +4164,34 @@ setEditTrip(null);
                 <div className="space-y-4 animate-in fade-in duration-200">
                   {/* Shortage Radar Grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    <div className="bg-black/30 rounded-2xl p-3 border border-white/10 text-center">
+                    <div className="bg-slate-50 dark:bg-black/30 rounded-2xl p-3 border border-slate-200/80 dark:border-white/10 text-center shadow-sm">
                       <span className="text-xl">💊</span>
-                      <p className="text-[10px] text-gray-400 font-bold mt-1">صيدلية وأدوية</p>
-                      <p className="text-base font-black text-rose-400">
+                      <p className="text-[10px] text-slate-500 dark:text-gray-400 font-bold mt-1">صيدلية وأدوية</p>
+                      <p className="text-base font-black text-rose-600 dark:text-rose-400">
                         {smartFinancialIntelligence.medicineShortages.length} مواد
                       </p>
                     </div>
 
-                    <div className="bg-black/30 rounded-2xl p-3 border border-white/10 text-center">
+                    <div className="bg-slate-50 dark:bg-black/30 rounded-2xl p-3 border border-slate-200/80 dark:border-white/10 text-center shadow-sm">
                       <span className="text-xl">📦</span>
-                      <p className="text-[10px] text-gray-400 font-bold mt-1">مسواك وموجودات البيت</p>
-                      <p className="text-base font-black text-blue-400">
+                      <p className="text-[10px] text-slate-500 dark:text-gray-400 font-bold mt-1">مسواك وموجودات البيت</p>
+                      <p className="text-base font-black text-blue-600 dark:text-blue-400">
                         {smartFinancialIntelligence.groceryShortages.length} مواد
                       </p>
                     </div>
 
-                    <div className="bg-black/30 rounded-2xl p-3 border border-white/10 text-center">
+                    <div className="bg-slate-50 dark:bg-black/30 rounded-2xl p-3 border border-slate-200/80 dark:border-white/10 text-center shadow-sm">
                       <span className="text-xl">🚗</span>
-                      <p className="text-[10px] text-gray-400 font-bold mt-1">صيانة السيارة</p>
-                      <p className="text-base font-black text-amber-400">
+                      <p className="text-[10px] text-slate-500 dark:text-gray-400 font-bold mt-1">صيانة السيارة</p>
+                      <p className="text-base font-black text-amber-600 dark:text-amber-400">
                         {smartFinancialIntelligence.carShortages.length} متطلبات
                       </p>
                     </div>
 
-                    <div className="bg-black/30 rounded-2xl p-3 border border-white/10 text-center">
+                    <div className="bg-slate-50 dark:bg-black/30 rounded-2xl p-3 border border-slate-200/80 dark:border-white/10 text-center shadow-sm">
                       <span className="text-xl">👨‍👩‍👧‍👦</span>
-                      <p className="text-[10px] text-gray-400 font-bold mt-1">طلبات العائلة</p>
-                      <p className="text-base font-black text-pink-400">
+                      <p className="text-[10px] text-slate-500 dark:text-gray-400 font-bold mt-1">طلبات العائلة</p>
+                      <p className="text-base font-black text-pink-600 dark:text-pink-400">
                         {smartFinancialIntelligence.familyShortages.length} واجبات
                       </p>
                     </div>
@@ -4199,18 +4199,18 @@ setEditTrip(null);
 
                   {/* Priority Corrector Notice */}
                   {smartFinancialIntelligence.medicineShortages.length > 0 ? (
-                    <div className="bg-rose-500/20 border border-rose-500/40 rounded-2xl p-4 flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="bg-rose-50 dark:bg-rose-500/20 border border-rose-200 dark:border-rose-500/40 rounded-2xl p-4 flex items-start gap-3 shadow-sm">
+                      <AlertCircle className="w-5 h-5 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-xs sm:text-sm font-black text-rose-200">
+                        <p className="text-xs sm:text-sm font-black text-rose-900 dark:text-rose-200">
                           ⚠️ تصحيح الأولويات: توجد أدوية ضرورية معلقة في صيدلية المنزل!
                         </p>
-                        <p className="text-[11px] text-rose-100/80 font-bold mt-1 leading-relaxed">
+                        <p className="text-[11px] text-rose-700/90 dark:text-rose-100/80 font-bold mt-1 leading-relaxed">
                           يوجد {smartFinancialIntelligence.medicineShortages.length} متطلبات صحية لم يتم شراؤها بعد. يجب تقديم العلاج والصحة دائماً على أي مصاريف كمالية أو ترفيهية أخرى.
                         </p>
                         <div className="flex flex-wrap gap-1 mt-2">
                           {smartFinancialIntelligence.medicineShortages.slice(0, 3).map(m => (
-                            <span key={m.id} className="text-[10px] bg-rose-900/60 text-rose-200 font-bold px-2 py-0.5 rounded-lg border border-rose-500/30">
+                            <span key={m.id} className="text-[10px] bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200 font-bold px-2 py-0.5 rounded-lg border border-rose-200 dark:border-rose-500/30">
                               💊 {m.name}
                             </span>
                           ))}
@@ -4218,19 +4218,19 @@ setEditTrip(null);
                       </div>
                     </div>
                   ) : smartFinancialIntelligence.groceryShortages.length > 0 ? (
-                    <div className="bg-blue-500/20 border border-blue-500/40 rounded-2xl p-4 flex items-start gap-3">
-                      <PackageCheck className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                    <div className="bg-blue-50 dark:bg-blue-500/20 border border-blue-200 dark:border-blue-500/40 rounded-2xl p-4 flex items-start gap-3 shadow-sm">
+                      <PackageCheck className="w-5 h-5 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-xs sm:text-sm font-black text-blue-200">
+                        <p className="text-xs sm:text-sm font-black text-blue-900 dark:text-blue-200">
                           📦 تنبيه التموين والمسواك المنزلي
                         </p>
-                        <p className="text-[11px] text-blue-100/80 font-bold mt-1 leading-relaxed">
+                        <p className="text-[11px] text-blue-700/90 dark:text-blue-100/80 font-bold mt-1 leading-relaxed">
                           يوجد {smartFinancialIntelligence.groceryShortages.length} مواد منزلية نافدة. لتفادي الشراء المتقطع والمكلف، احرص على تجميع المسواك في قائمة موحدة وشراء الاحتياجات دفعة واحدة بسعر الجملة.
                         </p>
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-emerald-500/15 border border-emerald-500/30 rounded-2xl p-4 text-center text-xs font-black text-emerald-300">
+                    <div className="bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 rounded-2xl p-4 text-center text-xs font-black text-emerald-800 dark:text-emerald-300 shadow-sm">
                       مؤونة وصيدلية المنزل في حالة ممتازة، ولا توجد نواقص معلقة! 🏡✨
                     </div>
                   )}
@@ -4239,54 +4239,54 @@ setEditTrip(null);
                   <button
                     type="button"
                     onClick={() => setActiveTab("needs")}
-                    className="w-full bg-white/10 hover:bg-white/15 text-white font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 border border-white/10 transition active:scale-[0.99]"
+                    className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 text-slate-800 dark:text-white font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 border border-slate-200/80 dark:border-white/10 transition active:scale-[0.99] shadow-sm"
                   >
                     <span>فتح قائمة النواقص والموجودات لتحديث الحالة</span>
-                    <ChevronLeft className="w-4 h-4 text-gray-400" />
+                    <ChevronLeft className="w-4 h-4 text-slate-500 dark:text-gray-400" />
                   </button>
                 </div>
               )}
             </div>
 
             {/* UPCOMING OBLIGATIONS SUMMARY */}
-            <div className="bg-gradient-to-br from-gray-900/90 to-black backdrop-blur-xl rounded-[2rem] p-5 border border-white/10 shadow-2xl relative overflow-hidden">
-              <h3 className="text-white font-black mb-4 flex items-center gap-2 text-sm md:text-base border-b border-white/10 pb-3">
-                <AlertCircle className="w-5 h-5 text-purple-400" />
+            <div className="bg-white dark:bg-gradient-to-br dark:from-gray-900/90 dark:to-black backdrop-blur-xl rounded-[2rem] p-5 border border-slate-200/80 dark:border-white/10 shadow-lg dark:shadow-2xl relative overflow-hidden">
+              <h3 className="text-slate-900 dark:text-white font-black mb-4 flex items-center gap-2 text-sm md:text-base border-b border-slate-100 dark:border-white/10 pb-3">
+                <AlertCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 سجل الالتزامات والمصاريف (ديون، فواتير، أقساط، ومصاريف)
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
-                  <span className="text-gray-400 group-hover:text-amber-200 transition-colors text-xs font-bold flex items-center gap-2">
-                    <div className="p-1.5 bg-amber-500/10 rounded-lg"><Receipt className="w-4 h-4 text-amber-400"/></div> فواتير غير مسددة
+                <div className="flex justify-between items-center bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-slate-200/60 dark:border-white/5 shadow-sm group">
+                  <span className="text-slate-600 dark:text-gray-400 group-hover:text-amber-600 dark:group-hover:text-amber-200 transition-colors text-xs font-bold flex items-center gap-2">
+                    <div className="p-1.5 bg-amber-100 dark:bg-amber-500/10 rounded-lg"><Receipt className="w-4 h-4 text-amber-600 dark:text-amber-400"/></div> فواتير غير مسددة
                   </span>
-                  <span className="text-white font-black text-sm">{fmt(unpaidBillsAmt)} <span className="text-[10px] text-gray-500">د.ع</span></span>
+                  <span className="text-slate-900 dark:text-white font-black text-sm">{fmt(unpaidBillsAmt)} <span className="text-[10px] text-slate-400 dark:text-gray-500">د.ع</span></span>
                 </div>
-                <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
-                  <span className="text-gray-400 group-hover:text-indigo-200 transition-colors text-xs font-bold flex items-center gap-2">
-                    <div className="p-1.5 bg-indigo-500/10 rounded-lg"><CreditCard className="w-4 h-4 text-indigo-400"/></div> أقساط مطلوبة الدفع
+                <div className="flex justify-between items-center bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-slate-200/60 dark:border-white/5 shadow-sm group">
+                  <span className="text-slate-600 dark:text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-200 transition-colors text-xs font-bold flex items-center gap-2">
+                    <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/10 rounded-lg"><CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400"/></div> أقساط مطلوبة الدفع
                   </span>
-                  <span className="text-white font-black text-sm">{fmt(unpaidInstallmentsMonthly)} <span className="text-[10px] text-gray-500">د.ع</span></span>
+                  <span className="text-slate-900 dark:text-white font-black text-sm">{fmt(unpaidInstallmentsMonthly)} <span className="text-[10px] text-slate-400 dark:text-gray-500">د.ع</span></span>
                 </div>
-                <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
-                  <span className="text-gray-400 group-hover:text-rose-200 transition-colors text-xs font-bold flex items-center gap-2">
-                    <div className="p-1.5 bg-rose-500/10 rounded-lg"><Banknote className="w-4 h-4 text-rose-400"/></div> ديون عليك (غير مسددة)
+                <div className="flex justify-between items-center bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-slate-200/60 dark:border-white/5 shadow-sm group">
+                  <span className="text-slate-600 dark:text-gray-400 group-hover:text-rose-600 dark:group-hover:text-rose-200 transition-colors text-xs font-bold flex items-center gap-2">
+                    <div className="p-1.5 bg-rose-100 dark:bg-rose-500/10 rounded-lg"><Banknote className="w-4 h-4 text-rose-600 dark:text-rose-400"/></div> ديون عليك (غير مسددة)
                   </span>
-                  <span className="text-white font-black text-sm">{fmt(totalDebtsOnMe)} <span className="text-[10px] text-gray-500">د.ع</span></span>
+                  <span className="text-slate-900 dark:text-white font-black text-sm">{fmt(totalDebtsOnMe)} <span className="text-[10px] text-slate-400 dark:text-gray-500">د.ع</span></span>
                 </div>
-                <div className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-white/5 shadow-sm group">
-                  <span className="text-gray-400 group-hover:text-emerald-200 transition-colors text-xs font-bold flex items-center gap-2">
-                    <div className="p-1.5 bg-emerald-500/10 rounded-lg"><ShoppingCart className="w-4 h-4 text-emerald-400"/></div> مصاريف هذا الشهر
+                <div className="flex justify-between items-center bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors p-3.5 rounded-2xl border border-slate-200/60 dark:border-white/5 shadow-sm group">
+                  <span className="text-slate-600 dark:text-gray-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-200 transition-colors text-xs font-bold flex items-center gap-2">
+                    <div className="p-1.5 bg-emerald-100 dark:bg-emerald-500/10 rounded-lg"><ShoppingCart className="w-4 h-4 text-emerald-600 dark:text-emerald-400"/></div> مصاريف هذا الشهر
                   </span>
-                  <span className="text-white font-black text-sm">{fmt(totalExpensesAmt)} <span className="text-[10px] text-gray-500">د.ع</span></span>
+                  <span className="text-slate-900 dark:text-white font-black text-sm">{fmt(totalExpensesAmt)} <span className="text-[10px] text-slate-400 dark:text-gray-500">د.ع</span></span>
                 </div>
               </div>
-              <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center bg-rose-500/10 -mx-5 -mb-5 px-5 py-4">
-                <span className="text-rose-200 font-black text-sm flex items-center gap-2">
-                  <Target className="w-5 h-5 text-rose-400" />
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/10 flex justify-between items-center bg-rose-50 dark:bg-rose-500/10 -mx-5 -mb-5 px-5 py-4">
+                <span className="text-rose-800 dark:text-rose-200 font-black text-sm flex items-center gap-2">
+                  <Target className="w-5 h-5 text-rose-600 dark:text-rose-400" />
                   المجموع الكلي المطلوب:
                 </span>
-                <span className="text-xl md:text-2xl font-black text-white drop-shadow-md">
-                  {fmt(unpaidBillsAmt + unpaidInstallmentsMonthly + totalDebtsOnMe + totalExpensesAmt)} <span className="text-xs text-rose-300">د.ع</span>
+                <span className="text-xl md:text-2xl font-black text-rose-600 dark:text-white drop-shadow-sm">
+                  {fmt(unpaidBillsAmt + unpaidInstallmentsMonthly + totalDebtsOnMe + totalExpensesAmt)} <span className="text-xs text-rose-500 dark:text-rose-300">د.ع</span>
                 </span>
               </div>
             </div>
