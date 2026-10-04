@@ -45,7 +45,7 @@ export default function QuickEntryExpense({ onSuccess }: { onSuccess: () => void
           <Receipt className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input 
             type="text" value={expTitle} onChange={e => setExpTitle(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-pink-500 outline-none"
             placeholder="مثال: فاتورة كهرباء"
           />
         </div>
@@ -56,7 +56,7 @@ export default function QuickEntryExpense({ onSuccess }: { onSuccess: () => void
           <Tag className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <select 
             value={expCategory} onChange={e => setExpCategory(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none appearance-none"
+            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-pink-500 outline-none appearance-none cursor-pointer"
           >
             {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -69,7 +69,7 @@ export default function QuickEntryExpense({ onSuccess }: { onSuccess: () => void
             <ShoppingBag className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <FormattedNumberInput
               value={expAmount} onChange={setExpAmount} placeholder="المبلغ"
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-left"
+              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-pink-500 outline-none text-left"
             />
           </div>
         </div>
@@ -79,7 +79,7 @@ export default function QuickEntryExpense({ onSuccess }: { onSuccess: () => void
             <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="date" value={expDate} onChange={e => setExpDate(e.target.value)}
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-left"
+              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-pink-500 outline-none text-left"
             />
           </div>
         </div>
@@ -88,7 +88,7 @@ export default function QuickEntryExpense({ onSuccess }: { onSuccess: () => void
         <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">ملاحظات (اختياري)</label>
         <textarea 
           value={expNotes} onChange={e => setExpNotes(e.target.value)} rows={3}
-          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none resize-none"
+          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-pink-500 outline-none resize-none"
           placeholder="أي تفاصيل إضافية..."
         />
       </div>

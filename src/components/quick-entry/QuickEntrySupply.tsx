@@ -93,7 +93,7 @@ export default function QuickEntrySupply({ onSuccess }: { onSuccess: () => void 
           <Tag className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input 
             type="text" value={name} onChange={e => setName(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 outline-none"
             placeholder="اسم المادة"
           />
         </div>
@@ -106,7 +106,7 @@ export default function QuickEntrySupply({ onSuccess }: { onSuccess: () => void 
             <Coins className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="number" value={price} onChange={e => setPrice(e.target.value)}
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-orange-500 outline-none text-left"
+              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 outline-none text-left"
               placeholder="0" dir="ltr"
             />
           </div>
@@ -115,7 +115,7 @@ export default function QuickEntrySupply({ onSuccess }: { onSuccess: () => void 
           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">التصنيف</label>
           <select 
             value={category} onChange={e => setCategory(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-orange-500 outline-none appearance-none"
+            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 outline-none appearance-none cursor-pointer"
           >
             {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>

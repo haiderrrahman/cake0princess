@@ -277,13 +277,13 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 text-gray-900 dark:text-slate-100">
       {/* Upload Image */}
       <div>
-        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">صورة الطلب / الكيكة</label>
+        <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">صورة الطلب / الكيكة</label>
         <div 
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-gray-300 dark:border-zinc-700 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition relative overflow-hidden group"
+          className="border-2 border-dashed border-gray-300 dark:border-zinc-700 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer bg-gray-50/70 dark:bg-zinc-900/50 hover:bg-gray-100 dark:hover:bg-zinc-800/50 transition relative overflow-hidden group"
         >
           {imagePreview ? (
             <div className="absolute inset-0 w-full h-full">
@@ -294,12 +294,12 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
             </div>
           ) : (
             <>
-              <div className="w-14 h-14 bg-pink-50 dark:bg-pink-900/20 rounded-full flex items-center justify-center text-pink-600 dark:text-pink-400">
+              <div className="w-14 h-14 bg-pink-100 dark:bg-pink-900/30 rounded-full flex items-center justify-center text-pink-600 dark:text-pink-400">
                 <Upload className="w-6 h-6" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-black text-gray-800 dark:text-gray-200">التقط صورة للطلب</p>
-                <p className="text-xs text-gray-500 mt-1">اضغط لفتح الكاميرا أو المعرض</p>
+                <p className="text-sm font-black text-gray-900 dark:text-gray-100">التقط صورة للطلب</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">اضغط لفتح الكاميرا أو المعرض</p>
               </div>
             </>
           )}
@@ -309,26 +309,26 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الزبون</label>
+          <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">اسم الزبون</label>
           <div className="relative">
             <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="text" value={customerName} onChange={handleCustomerNameChange}
               onFocus={() => setShowCustomerDropdown(true)}
               onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+              className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 rounded-xl px-4 py-3 pr-10 text-sm font-bold focus:ring-2 focus:ring-pink-500 outline-none shadow-sm"
               placeholder="اسم الزبون"
             />
             {showCustomerDropdown && customerName && (
-              <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-lg max-h-40 overflow-y-auto custom-scrollbar">
+              <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-40 overflow-y-auto custom-scrollbar">
                 {customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase())).map(c => (
                   <li 
                     key={c.id} 
                     onClick={() => selectCustomer(c.name, c.phone, c.address, c.platform, c.locationUrl)}
-                    className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer text-gray-800 dark:text-gray-200 border-b border-gray-50 dark:border-zinc-700/50 last:border-0 flex justify-between items-center"
+                    className="px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-zinc-800 last:border-0 flex justify-between items-center"
                   >
-                    <span>{c.name}</span>
-                    <span className="text-[10px] text-gray-400">{c.platform || "واتساب"}</span>
+                    <span className="font-bold">{c.name}</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{c.platform || "واتساب"}</span>
                   </li>
                 ))}
               </ul>
@@ -336,12 +336,12 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
           </div>
         </div>
         <div>
-          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">منصة الطلب</label>
+          <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">منصة الطلب</label>
           <div className="relative">
             <select
               value={platform}
               onChange={e => setPlatform(e.target.value)}
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none appearance-none font-bold text-gray-700 dark:text-gray-200"
+              className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none appearance-none font-bold shadow-sm"
             >
               {PLATFORMS.map(p => (
                 <option key={p} value={p}>{p}</option>
@@ -354,40 +354,40 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
       {/* الصف الثاني: رقم الهاتف والعنوان */}
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
-          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">رقم الهاتف</label>
+          <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">رقم الهاتف</label>
           <div className="relative">
             <Phone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="tel" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-left"
+              className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 rounded-xl px-4 py-3 pr-10 text-sm font-bold focus:ring-2 focus:ring-pink-500 outline-none text-left shadow-sm"
               placeholder="07..." dir="ltr"
             />
           </div>
         </div>
       </div>
 
-      <div className="col-span-2 border border-gray-200 dark:border-zinc-700 rounded-2xl p-4 space-y-3">
+      <div className="col-span-2 border border-gray-300 dark:border-zinc-700 bg-gray-50/50 dark:bg-zinc-900/30 rounded-2xl p-4 space-y-3 shadow-sm">
         <div className="flex justify-between items-center mb-2">
-          <label className="text-xs font-bold text-gray-700 dark:text-gray-300">العنوان</label>
-          <div className="flex gap-1 bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
+          <label className="text-xs font-bold text-gray-800 dark:text-slate-200">العنوان</label>
+          <div className="flex gap-1 bg-gray-200/80 dark:bg-zinc-800 p-1 rounded-xl border border-gray-200 dark:border-zinc-700">
             <button 
               type="button"
               onClick={() => setDeliveryType("bismayah")}
-              className={`text-[9px] sm:text-[10px] px-2 py-1 font-bold rounded-md transition flex-1 ${deliveryType === "bismayah" ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+              className={`text-[10px] sm:text-xs px-2.5 py-1 font-bold rounded-lg transition flex-1 ${deliveryType === "bismayah" ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}`}
             >
               داخل بسماية
             </button>
             <button 
               type="button"
               onClick={() => setDeliveryType("other")}
-              className={`text-[9px] sm:text-[10px] px-2 py-1 font-bold rounded-md transition flex-1 ${deliveryType === "other" ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+              className={`text-[10px] sm:text-xs px-2.5 py-1 font-bold rounded-lg transition flex-1 ${deliveryType === "other" ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}`}
             >
               مناطق أخرى
             </button>
             <button 
               type="button"
               onClick={() => setDeliveryType("door")}
-              className={`text-[9px] sm:text-[10px] px-2 py-1 font-bold rounded-md transition flex-1 ${deliveryType === "door" ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+              className={`text-[10px] sm:text-xs px-2.5 py-1 font-bold rounded-lg transition flex-1 ${deliveryType === "door" ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}`}
             >
               باب الشقة
             </button>
@@ -396,7 +396,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         
         {deliveryType === "bismayah" ? (
           <div className="grid grid-cols-3 gap-2">
-            <select value={bismayahComplex} onChange={e => setBismayahComplex(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none font-bold">
+            <select value={bismayahComplex} onChange={e => setBismayahComplex(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none font-bold shadow-sm">
               <option value="A">مجمع A</option>
               <option value="B">مجمع B</option>
               <option value="C">مجمع C</option>
@@ -406,11 +406,11 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
               <option value="G">مجمع G</option>
               <option value="H">مجمع H</option>
             </select>
-            <select value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold">
+            <select value={bismayahBuilding} onChange={e => setBismayahBuilding(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold shadow-sm">
               <option value="">عمارة</option>
               {BISMAYAH_BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
-            <select value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold">
+            <select value={bismayahApt} onChange={e => setBismayahApt(e.target.value)} className="bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white rounded-xl px-2 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold shadow-sm">
               <option value="">شقة</option>
               {BISMAYAH_APARTMENTS.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
@@ -420,7 +420,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
             <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="text" value={address} onChange={e => setAddress(e.target.value)}
-              className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+              className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 rounded-xl px-4 py-3 pr-10 text-sm font-bold focus:ring-2 focus:ring-pink-500 outline-none shadow-sm"
               placeholder="المنطقة، الشارع، أقرب دالة..."
             />
           </div>
@@ -428,10 +428,10 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         
         {deliveryType !== "door" && (
           <div>
-            <label className="block text-[10px] font-bold text-gray-500 mb-1">الرابط الجغرافي (Google Maps / Waze)</label>
+            <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-1">الرابط الجغرافي (Google Maps / Waze)</label>
             <input 
               type="text" value={locationUrl} onChange={e => setLocationUrl(e.target.value)}
-              className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-left"
+              className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none text-left shadow-sm"
               placeholder="لصق الرابط هنا..." dir="ltr"
             />
           </div>
@@ -440,12 +440,12 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
 
       {/* الصف الثالث: اسم الكيكة */}
       <div>
-        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الكيكة / المنتج</label>
+        <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">اسم الكيكة / المنتج</label>
         <div className="relative">
           <Tag className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input 
             type="text" value={cakeName} onChange={e => setCakeName(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+            className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 rounded-xl px-4 py-3 pr-10 text-sm font-bold focus:ring-2 focus:ring-pink-500 outline-none shadow-sm"
             placeholder="مثال: كيكة شوكولاتة"
           />
         </div>
@@ -453,58 +453,58 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">سعر البيع</label>
+          <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">سعر البيع</label>
           <div className="relative">
             <Coins className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <FormattedNumberInput
               value={price}
               onChange={setPrice}
               placeholder="السعر"
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-left font-black text-pink-600 dark:text-pink-400"
+              className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-left font-black text-pink-600 dark:text-pink-400 placeholder:text-gray-400 dark:placeholder:text-gray-500 shadow-sm"
             />
           </div>
         </div>
         
         {deliveryType === "bismayah" ? (
           <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل (تلقائي)</label>
-            <div className="w-full bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-black text-center text-gray-600 dark:text-gray-300">
+            <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">تكلفة التوصيل (تلقائي)</label>
+            <div className="w-full bg-gray-100 dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-black text-center text-gray-700 dark:text-gray-300 shadow-sm">
               {bismayahComplex === "A" ? "1,000" : "2,000"} د.ع
             </div>
           </div>
         ) : deliveryType === "other" ? (
           <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل (يدوي)</label>
+            <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">تكلفة التوصيل (يدوي)</label>
             <FormattedNumberInput
               value={manualDeliveryFee}
               onChange={setManualDeliveryFee}
               placeholder="مبلغ التوصيل"
-              className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold"
+              className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500 outline-none text-center font-bold placeholder:text-gray-400 dark:placeholder:text-gray-500 shadow-sm"
             />
           </div>
         ) : (
           <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">تكلفة التوصيل</label>
-            <div className="w-full bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-black text-center text-gray-600 dark:text-gray-300">
+            <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">تكلفة التوصيل</label>
+            <div className="w-full bg-gray-100 dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-black text-center text-gray-700 dark:text-gray-300 shadow-sm">
               بدون توصيل (0 د.ع)
             </div>
           </div>
         )}
       </div>
 
-      <div className="bg-pink-50 dark:bg-pink-900/20 p-4 rounded-xl border border-pink-100 dark:border-pink-900/30">
+      <div className="bg-pink-50 dark:bg-pink-950/40 p-4 rounded-2xl border border-pink-200 dark:border-pink-800/40 shadow-sm">
         <div className="flex justify-between items-center text-sm font-black">
-          <span className="text-gray-700 dark:text-gray-300">
+          <span className="text-gray-800 dark:text-slate-200">
             {(deliveryType === "bismayah" || (Number(manualDeliveryFee.replace(/,/g, '')) || 0) > 0) ? "المبلغ الكلي مع التوصيل:" : "المبلغ الكلي:"}
           </span>
-          <span className="text-pink-600 dark:text-pink-400 text-lg">
+          <span className="text-pink-600 dark:text-pink-400 text-lg font-black">
             {((Number(price.replace(/,/g, '')) || 0) + (deliveryType === "bismayah" ? (bismayahComplex === "A" ? 1000 : 2000) : deliveryType === "door" ? 0 : (Number(manualDeliveryFee.replace(/,/g, '')) || 0))).toLocaleString()} <span className="text-[10px]">د.ع</span>
           </span>
         </div>
       </div>
 
       <div className="z-20 relative">
-        <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">وقت وتاريخ التسليم</label>
+        <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">وقت وتاريخ التسليم</label>
         <div className="relative">
           <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
           <input
@@ -518,17 +518,16 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
                 setDeliveryDate("");
               }
             }}
-            className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm font-black focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500 text-right appearance-none"
+            className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white rounded-xl px-4 py-3 pr-10 text-sm font-black focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500 text-right appearance-none shadow-sm"
             required
           />
         </div>
       </div>
 
-
       <button
         onClick={submitSale}
         disabled={submitting || isOffline}
-        className="w-full bg-gradient-to-l from-[#0D0A1A] to-[#1a0d2e] text-white py-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 mt-4 shadow-lg active:scale-95 transition disabled:opacity-50"
+        className="w-full bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white py-3.5 sm:py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 mt-4 shadow-xl shadow-pink-500/25 active:scale-95 transition disabled:opacity-50"
       >
         {isOffline ? "الإضافة معطلة (مقطوع الانترنت)" : submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "حفظ الطلب"}
       </button>
