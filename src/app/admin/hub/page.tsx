@@ -1193,9 +1193,20 @@ function AdminHubContent() {
 
         <div className="relative z-10 flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Link href="/admin" className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 hover:bg-white/20 transition">
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  router.push("/admin");
+                }
+              }}
+              className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 hover:bg-white/20 transition active:scale-95"
+              aria-label="رجوع"
+            >
               <ArrowRight className="w-5 h-5 text-white" />
-            </Link>
+            </button>
             <div>
               <h1 className="text-xl font-black text-white mb-1">{currentTabInfo.title}</h1>
               <p className="text-xs text-white/70 font-bold">{currentTabInfo.subtitle}</p>

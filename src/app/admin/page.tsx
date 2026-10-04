@@ -13,16 +13,48 @@ import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query,
 import { db } from "@/lib/firebase";
 import AdminQuickEntry from "@/components/AdminQuickEntry";
 
+function BaghdadClock() {
+  const [time, setTime] = useState("");
+  useEffect(() => {
+    const update = () => {
+      setTime(
+        new Date().toLocaleTimeString("ar-IQ", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true,
+        })
+      );
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <span className="font-mono text-cyan-300 font-bold" dir="ltr">{time || "..."}</span>;
+}
+
 export default function AdminDashboard() {
   const { user, isAdmin } = useAuth();
   const [statsLoading, setStatsLoading] = useState(false);
   const [showQuickEntry, setShowQuickEntry] = useState(false);
-  const [currentTime, setCurrentTime] = useState("");
-  const [activeOperationalCounts, setActiveOperationalCounts] = useState({
-    pendingExternal: 0,
-    pendingApp: 0,
-    todayDeliveries: 0,
-    totalExpensesCount: 0
+  const [activeOperationalCounts, setActiveOperationalCounts] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("admin_dashboard_counts_v2");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?._timestamp && Date.now() - parsed._timestamp < 15 * 60 * 1000) {
+            return parsed.data;
+          }
+        }
+      } catch {}
+    }
+    return {
+      pendingExternal: 0,
+      pendingApp: 0,
+      todayDeliveries: 0,
+      totalExpensesCount: 0,
+    };
   });
 
   const [realStats, setRealStats] = useState(() => {
@@ -51,24 +83,6 @@ export default function AdminDashboard() {
       breakdown: { social: 0, appCakes: 0, appAcademy: 0, storeSupplies: 0 },
     };
   });
-
-  // Live Baghdad clock
-  useEffect(() => {
-    const updateClock = () => {
-      const now = new Date();
-      setCurrentTime(
-        now.toLocaleTimeString("ar-IQ", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: true,
-        })
-      );
-    };
-    updateClock();
-    const interval = setInterval(updateClock, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     const today = new Date();
@@ -135,11 +149,12 @@ export default function AdminDashboard() {
           if (rawDate >= thirtyDaysAgo) monthSales += received;
         }
 
-        // Today's delivery check
-        if (o.deliveryDate) {
+        // Today's delivery check: ONLY count active un-delivered orders
+        const isFinished = ["delivered", "completed", "cancelled", "rejected"].includes(o.status);
+        if (o.deliveryDate && !isFinished) {
           const dlDate = new Date(o.deliveryDate);
           dlDate.setHours(0, 0, 0, 0);
-          if (dlDate.getTime() === today.getTime() && o.status !== "cancelled") {
+          if (dlDate.getTime() === today.getTime()) {
             todayDlv++;
           }
         }
@@ -256,15 +271,17 @@ export default function AdminDashboard() {
 
       setRealStats(result);
       setStatsLoading(false);
-      setActiveOperationalCounts({
+      const counts = {
         pendingExternal: pExt,
         pendingApp: pApp,
         todayDeliveries: todayDlv,
         totalExpensesCount: currentExpenses.length,
-      });
+      };
+      setActiveOperationalCounts(counts);
 
       try {
         localStorage.setItem("admin_dashboard_stats_v2", JSON.stringify({ _timestamp: Date.now(), data: result }));
+        localStorage.setItem("admin_dashboard_counts_v2", JSON.stringify({ _timestamp: Date.now(), data: counts }));
       } catch {}
     };
 
@@ -556,10 +573,10 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#07050e] text-slate-100 pb-36 font-sans relative selection:bg-pink-500 selection:text-white">
       {/* Background Holographic Atmosphere */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute -top-40 right-[-10%] w-[500px] h-[500px] bg-pink-600/15 rounded-full blur-[140px]" />
-        <div className="absolute top-1/3 left-[-15%] w-[450px] h-[450px] bg-indigo-600/15 rounded-full blur-[140px]" />
-        <div className="absolute bottom-10 right-1/4 w-[400px] h-[400px] bg-emerald-600/10 rounded-full blur-[140px]" />
-        <div className="absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] opacity-40" />
+        <div className="absolute -top-40 right-[-10%] w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-pink-600/10 rounded-full blur-[60px] sm:blur-[120px] will-change-transform" />
+        <div className="absolute top-1/3 left-[-15%] w-[300px] sm:w-[450px] h-[300px] sm:h-[450px] bg-indigo-600/10 rounded-full blur-[60px] sm:blur-[120px] will-change-transform" />
+        <div className="absolute bottom-10 right-1/4 w-[280px] sm:w-[400px] h-[280px] sm:h-[400px] bg-emerald-600/10 rounded-full blur-[60px] sm:blur-[120px] will-change-transform" />
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] opacity-30" />
       </div>
 
       <div className="relative z-10">
@@ -589,7 +606,7 @@ export default function AdminDashboard() {
                   </div>
                   <p className="text-xs text-pink-300/80 font-bold mt-0.5">
                     مرحباً {user?.displayName?.split(" ")[0] || "مديرة كيك الأميرة"} ✨ | توقيت بغداد:{" "}
-                    <span className="font-mono text-cyan-300 font-bold" dir="ltr">{currentTime || "..."}</span>
+                    <BaghdadClock />
                   </p>
                 </div>
               </div>

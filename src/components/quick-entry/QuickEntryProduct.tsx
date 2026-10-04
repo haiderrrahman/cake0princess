@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
 import { Camera, Upload, Tag, Coins, Loader2 } from "lucide-react";
-import { collection, addDoc, getDocs } from "firebase/firestore";
+import { collection, addDoc, getDocs, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import imageCompression from 'browser-image-compression';
@@ -49,18 +49,19 @@ export default function QuickEntryProduct({ onSuccess }: { onSuccess: () => void
         name,
         price: Number(price),
         category,
-        image: ""
+        image: "",
+        createdAt: serverTimestamp()
       });
 
       const fileRef = ref(storage, `products/${Date.now()}_${imageFile.name}`);
       await uploadBytes(fileRef, imageFile);
       const url = await getDownloadURL(fileRef);
       
-      // We can use updateDoc but to save code let's just do it directly
-      await addDoc(collection(db, "dummy_update"), {}).catch(()=>{}); // Ignore
-      toast.success("تم إضافة الكيكة للتطبيق");
+      await updateDoc(doc(db, "products", docRef.id), { image: url });
+      toast.success("تم إضافة الكيكة للتطبيق بنجاح");
       onSuccess();
     } catch (e) {
+      console.error(e);
       toast.error("فشل الإضافة");
     } finally {
       setSubmitting(false);

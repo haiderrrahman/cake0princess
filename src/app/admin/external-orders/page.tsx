@@ -3,6 +3,7 @@ import { customConfirm } from '@/lib/customConfirm';
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plus, Search, MapPin, Navigation, Edit3, CheckCircle, Clock, Trash2, ShieldCheck, User, Loader2, ArrowRight, Smartphone, Camera, FileImage, Image as ImageIcon, Phone, Calendar, Calculator } from 'lucide-react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit, onSnapshot } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -52,6 +53,7 @@ const setFreshCache = (key: string, data: any) => {
 };
 
 export default function ExternalOrdersAdmin() {
+  const router = useRouter();
   const [orders, setOrders] = useState<any[]>(() => {
     return getFreshCache("cache_external_orders_v2") || [];
   });
@@ -454,9 +456,20 @@ export default function ExternalOrdersAdmin() {
         
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Link href="/admin" className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 hover:bg-white/20 transition">
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  router.push("/admin");
+                }
+              }}
+              className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 hover:bg-white/20 transition active:scale-95"
+              aria-label="رجوع"
+            >
               <ArrowRight className="w-5 h-5 text-white" />
-            </Link>
+            </button>
             <div>
               <h1 className="text-xl font-black text-white mb-1">الطلبات الخارجية (السوشيال)</h1>
               <p className="text-xs text-emerald-200 font-bold">طلبات انستغرام، واتساب، والمكالمات</p>

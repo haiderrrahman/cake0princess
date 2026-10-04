@@ -241,6 +241,7 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
       const newOrderRef = await addDoc(collection(db, "external_orders"), {
         customerId, customerName, customerPhone, address: computedAddress, platform, cakeName,
         price: numPrice, cost: numCost, profit,
+        status: "pending",
         isBismayah: deliveryType === "bismayah", bismayahComplex, bismayahBuilding, bismayahApt, deliveryType,
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,      // حقل موحد مع باقي التطبيق
