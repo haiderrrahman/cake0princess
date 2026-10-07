@@ -8,30 +8,13 @@ import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AdminQuickEntry from "./AdminQuickEntry";
 
-export default function AdminDashboard() {
-  const CACHE_KEY = 'admin_quick_dashboard_v2';
+import { calculateFinancesStats, getCachedFinancesStats, persistFinancesStats, FinancesStats } from "@/lib/financesSync";
 
-  const [data, setData] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem(CACHE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed?._timestamp && (Date.now() - parsed._timestamp < 15 * 60 * 1000)) {
-            return parsed.data;
-          }
-          localStorage.removeItem(CACHE_KEY);
-        }
-      } catch {}
-    }
-    return {
-      todaySales: 0, weekSales: 0, monthSales: 0,
-      totalRevenue: 0, netProfit: 0, totalExpenses: 0,
-      totalSalaryDebt: 0, cakeMaterialsExpense: 0,
-      breakdown: { social: 0, appCakes: 0, appAcademy: 0, storeSupplies: 0 },
-    };
+export default function AdminDashboard() {
+  const [data, setData] = useState<FinancesStats>(() => {
+    return getCachedFinancesStats();
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showEntry, setShowEntry] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -39,131 +22,20 @@ export default function AdminDashboard() {
     setLoading(true);
     try {
       const [ordersSnap, extSnap, expSnap, storeSnap] = await Promise.all([
-        getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(100))).catch(() => getDocs(collection(db, "orders"))),
-        getDocs(query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100))).catch(() => getDocs(collection(db, "external_orders"))),
-        getDocs(query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(100))).catch(() => getDocs(collection(db, "expenses"))),
-        getDocs(query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100))).catch(() => getDocs(collection(db, "store_sales"))),
+        getDocs(collection(db, "orders")).catch(() => ({ docs: [] })),
+        getDocs(collection(db, "external_orders")).catch(() => ({ docs: [] })),
+        getDocs(collection(db, "expenses")).catch(() => ({ docs: [] })),
+        getDocs(collection(db, "store_sales")).catch(() => ({ docs: [] })),
       ]);
 
-      const orders = ordersSnap.docs.map(d => d.data());
-      const externalOrders = extSnap.docs.map(d => d.data());
-      const expenses = expSnap.docs.map(d => d.data());
-      const storeSales = storeSnap.docs.map(d => d.data());
+      const orders = ordersSnap.docs.map((d: any) => d.data());
+      const externalOrders = extSnap.docs.map((d: any) => d.data());
+      const expenses = expSnap.docs.map((d: any) => d.data());
+      const storeSales = storeSnap.docs.map((d: any) => d.data());
 
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      let todaySales = 0, weekSales = 0, monthSales = 0, totalRevenue = 0, totalProfit = 0;
-      let social = 0, appCakes = 0, appAcademy = 0, storeSupplies = 0;
-
-      let socialReceived = 0, appReceived = 0, suppliesReceived = 0;
-
-      // ── External Orders (Social) ──
-      externalOrders.forEach(o => {
-        const isDelivered = o.status === 'delivered' || o.status === 'completed';
-        if (!isDelivered) return;
-
-        const price = Number(o.price || 0);
-        const paid = Number(o.paidAmount ?? price);
-        const isDebt = o.paidAmount !== undefined && paid !== price && !o.isDebtSettled;
-
-        let received = price;
-        if (isDebt) {
-          const diff = price - paid;
-          if (diff > 0) received = paid; // Customer owes us
-          else received = price; // We owe customer
-        }
-
-        socialReceived += received;
-        social += received; // Use received for breakdown
-        totalProfit += Number(o.profit || 0);
-
-        const rawDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
-        const d = new Date(rawDate);
-        d.setHours(0, 0, 0, 0);
-        if (d.getTime() === today.getTime()) todaySales += received;
-        if (d >= weekAgo) weekSales += received;
-        if (rawDate >= thirtyDaysAgo) monthSales += received;
-      });
-
-      // ── App Orders (orders) ──
-      orders.forEach(o => {
-        const isDelivered = o.status === 'delivered' || o.status === 'completed';
-        if (!isDelivered) return;
-
-        const hasSupplies = o.items?.some((i: any) => i.isSupply || i.category === 'supplies' || i.id?.includes('supply'));
-        const hasCourses = o.items?.some((i: any) => i.type === 'course');
-
-        const total = Number(o.total || o.toPayNow || 0);
-        const isDebt = o.isDebt === true;
-        const debtAmount = Number(o.debtAmount || 0);
-        const weOwe = o.customerOwesUs === false;
-
-        let received = total;
-        if (isDebt && debtAmount > 0) {
-          if (weOwe) received = total;
-          else received = total - debtAmount;
-        }
-
-        appReceived += received;
-        if (hasCourses && !hasSupplies && o.items?.length === 1) {
-          appAcademy += received;
-        } else {
-          appCakes += received;
-        }
-
-        totalProfit += (total * 0.3); // App profit estimate
-
-        const rawDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
-        const d = new Date(rawDate);
-        d.setHours(0, 0, 0, 0);
-        if (d.getTime() === today.getTime()) todaySales += received;
-        if (d >= weekAgo) weekSales += received;
-        if (rawDate >= thirtyDaysAgo) monthSales += received;
-      });
-
-      // ── Store Sales (store_sales) ──
-      storeSales.forEach(o => {
-        if (["rejected", "cancelled"].includes(o.status)) return;
-        const amt = Number(o.price || 0);
-        const profit = Number(o.profit || 0);
-        
-        suppliesReceived += amt;
-        storeSupplies += amt;
-        totalProfit += profit;
-
-        const rawDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || o.date || 0);
-        const d = new Date(rawDate);
-        d.setHours(0, 0, 0, 0);
-        if (d.getTime() === today.getTime()) todaySales += amt;
-        if (d >= weekAgo) weekSales += amt;
-        if (rawDate >= thirtyDaysAgo) monthSales += amt;
-      });
-
-      totalRevenue = socialReceived + appReceived + suppliesReceived;
-
-      const totalExpenses = expenses.filter((e: any) => !e.isDebt).reduce((sum, e: any) => sum + (Number(e.amount) || 0), 0);
-      const totalSalaryDebt = expenses.filter((e: any) => e.isDebt).reduce((s, e: any) => s + (Number(e.amount) || 0), 0);
-      const cakeMaterialsExpense = expenses.filter((e: any) => {
-        const cat = e.category || "";
-        const desc = e.description || e.title || "";
-        return cat === "مشتريات مخزنية" || cat === "مواد الكيك" || cat === "مواد كيك" || cat === "المواد الأولية (كيك وكريمة)" || 
-               desc.includes("المخزن") || desc.includes("مادة") || desc.includes("مواد");
-      }).reduce((s, e: any) => s + (Number(e.amount) || 0), 0);
-      const netProfit = totalRevenue - totalExpenses - totalSalaryDebt;
-
-      const result = { 
-        todaySales, weekSales, monthSales, 
-        totalRevenue, netProfit, totalExpenses, 
-        totalSalaryDebt, cakeMaterialsExpense,
-        breakdown: { social, appCakes, appAcademy, storeSupplies } 
-      };
+      const result = calculateFinancesStats(orders, externalOrders, storeSales, expenses);
       setData(result);
-      try { 
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ _timestamp: Date.now(), data: result })); 
-      } catch {}
+      persistFinancesStats(result);
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     }

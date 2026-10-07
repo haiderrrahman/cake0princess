@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Camera, Upload, Phone, User, Calendar, Tag, Coins, Loader2, MapPin } from "lucide-react";
+import { Camera, Upload, Phone, User, Calendar, Tag, Coins, Loader2, MapPin, Calculator, Sparkles, ChefHat } from "lucide-react";
 import { collection, addDoc, updateDoc, serverTimestamp, getDocs, doc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -11,6 +11,8 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { ar } from "date-fns/locale/ar";
 import { BISMAYAH_BUILDINGS, BISMAYAH_APARTMENTS } from "../BismayahData";
+import CakeCostBreakdownModal from "@/components/CakeCostBreakdownModal";
+import { CakeCostBreakdown } from "@/lib/cakeCostCalculator";
 
 const PLATFORMS = ["إنستجرام", "واتساب", "فيسبوك", "تيك توك", "هاتف", "أخرى"];
 
@@ -31,6 +33,8 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
   const [cakeName, setCakeName] = useState("");
   const [price, setPrice] = useState("");
   const [cost, setCost] = useState("");
+  const [costBreakdown, setCostBreakdown] = useState<CakeCostBreakdown | null>(null);
+  const [showCostCalculator, setShowCostCalculator] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState<string>(new Date().toISOString());
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
@@ -240,7 +244,9 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
 
       const newOrderRef = await addDoc(collection(db, "external_orders"), {
         customerId, customerName, customerPhone, address: computedAddress, platform, cakeName,
-        price: numPrice, cost: numCost, profit,
+        price: numPrice, cost: numCost,
+        costBreakdown: costBreakdown ? JSON.parse(JSON.stringify(costBreakdown)) : null,
+        profit,
         status: "pending",
         isBismayah: deliveryType === "bismayah", bismayahComplex, bismayahBuilding, bismayahApt, deliveryType,
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
@@ -248,6 +254,12 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         deliveryTime: deliveryDate, // توافق مع السجلات القديمة
         imageUrl: "", tempImageUrl: tempImageUrl, createdAt: serverTimestamp(),
       });
+
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("cache_external_orders_v2");
+        } catch {}
+      }
 
       if (imageFile) {
         if (navigator.onLine) {
@@ -451,6 +463,68 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         </div>
       </div>
 
+      {/* بطاقة تكلفة الكيكة بالمقادير والأوزان والمصاريف التشغيلية */}
+      <div className="border border-pink-200 dark:border-pink-900/60 bg-gradient-to-br from-pink-50/80 via-white to-purple-50/60 dark:from-pink-950/20 dark:via-zinc-900 dark:to-purple-950/20 rounded-2xl p-3.5 space-y-2.5 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-pink-500/10 dark:bg-pink-500/20 text-pink-600 dark:text-pink-400 rounded-xl">
+              <ChefHat className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs font-black text-gray-900 dark:text-white block">تكلفة الكيكة (المقادير ومصاريف الصنع)</span>
+              <span className="text-[10px] text-gray-500 dark:text-gray-400 block">حساب مفصل بالغرام والسعر + تعب يد + كهرباء وطباعة</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowCostCalculator(true)}
+            className="flex items-center gap-1.5 bg-gradient-to-r from-pink-600 via-rose-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white px-3 py-1.5 rounded-xl text-xs font-black shadow-md shadow-pink-500/20 active:scale-95 transition"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{costBreakdown ? "تعديل تفاصيل المقادير" : "حساب المقادير والتكلفة"}</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <div>
+            <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-1">إجمالي التكلفة (د.ع)</label>
+            <FormattedNumberInput
+              value={cost}
+              onChange={(val) => {
+                setCost(val);
+                if (!val) setCostBreakdown(null);
+              }}
+              placeholder="0"
+              className="w-full bg-white dark:bg-zinc-900 border border-pink-200 dark:border-pink-900/60 rounded-xl px-3 py-2 text-xs font-black text-pink-700 dark:text-pink-300 outline-none focus:ring-2 focus:ring-pink-500 shadow-sm text-left"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 mb-1">الربح الصافي التقديري</label>
+            <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-black text-emerald-600 dark:text-emerald-400 flex items-center justify-between shadow-sm min-h-[34px]">
+              <span>{((Number(price.replace(/,/g, '')) || 0) - (Number(cost.replace(/,/g, '')) || 0)).toLocaleString()} د.ع</span>
+              {Number(price.replace(/,/g, '')) > 0 && Number(cost.replace(/,/g, '')) > 0 && (
+                <span className="text-[9px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-black">
+                  {Math.round((((Number(price.replace(/,/g, '')) || 0) - (Number(cost.replace(/,/g, '')) || 0)) / (Number(price.replace(/,/g, '')) || 1)) * 100)}%
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {costBreakdown && (
+          <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-pink-100 dark:border-pink-950/40 text-[10px] font-bold text-gray-600 dark:text-gray-400">
+            <span className="bg-pink-100 dark:bg-pink-900/40 text-pink-700 dark:text-pink-300 px-2 py-0.5 rounded-md font-black">
+              ✓ تم تفصيل {costBreakdown.ingredients.length} مادة
+            </span>
+            <span>مواد: {costBreakdown.totalIngredientsCost.toLocaleString()} د.ع</span>
+            <span>+</span>
+            <span>تشغيل وتعب: {costBreakdown.totalOverheadCost.toLocaleString()} د.ع</span>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">سعر البيع</label>
@@ -531,6 +605,19 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
       >
         {isOffline ? "الإضافة معطلة (مقطوع الانترنت)" : submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "حفظ الطلب"}
       </button>
+
+      {/* مودال تفصيل المقادير وتكلفة الكيكة */}
+      <CakeCostBreakdownModal
+        isOpen={showCostCalculator}
+        onClose={() => setShowCostCalculator(false)}
+        cakeName={cakeName}
+        initialSellingPrice={parseIqdInput(price)}
+        initialBreakdown={costBreakdown}
+        onApplyCost={(totalCost, breakdown) => {
+          setCost(totalCost.toString());
+          setCostBreakdown(breakdown);
+        }}
+      />
     </div>
   );
 }

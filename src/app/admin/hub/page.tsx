@@ -22,6 +22,7 @@ import ScanCakeInvoiceModal from "@/components/ScanCakeInvoiceModal";
 import ManualCakePurchaseModal from "@/components/ManualCakePurchaseModal";
 import CakeMaterialTimelineModal from "@/components/CakeMaterialTimelineModal";
 import EditCakeInvoiceModal from "@/components/EditCakeInvoiceModal";
+import CakeCostBreakdownModal from "@/components/CakeCostBreakdownModal";
 import { CakeMaterialPurchase, calculateItemConsumption } from "@/lib/cakeMaterialPurchases";
 import { customConfirm } from '@/lib/customConfirm';
 
@@ -70,7 +71,8 @@ export default function AdminHub() {
 }
 
 // Safe TTL cache helper: ensures we NEVER display stale ghost orders from weeks/months ago
-const getFreshCache = (key: string, maxAgeMs = 15 * 60 * 1000) => {
+// Default TTL is 30 seconds for immediate freshness upon navigation
+const getFreshCache = (key: string, maxAgeMs = 30 * 1000) => {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(key);
@@ -108,6 +110,7 @@ function AdminHubContent() {
   const [extOrdersLoaded, setExtOrdersLoaded] = useState(false);
   const [ordersLoaded, setOrdersLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isRefreshingExt, setIsRefreshingExt] = useState(false);
 
   const [orders, setOrders] = useState<any[]>(() => {
     return getFreshCache('cache_orders_v2') || [];
@@ -133,11 +136,47 @@ function AdminHubContent() {
   const [settleSalaryAmount, setSettleSalaryAmount] = useState<string>("");
   const [cancelOrder, setCancelOrder] = useState<any>(null);
   const [cancelReason, setCancelReason] = useState<string>("");
+  const [viewingCostOrder, setViewingCostOrder] = useState<any | null>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
   const rawTab = searchParams.get('tab') as string;
   const defaultTab = rawTab || "external";
   const activeTab = (defaultTab === "stats" ? "audit" : defaultTab) as "orders" | "external" | "supplies_orders" | "courses" | "inventory" | "audit";
+
+  const handleRefreshExternal = async () => {
+    setIsRefreshingExt(true);
+    try {
+      const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
+      const snap = await getDocs(qExt);
+      const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      setExternalOrders(allExt);
+      setExtOrdersLoaded(true);
+      try {
+        const cleanExt = allExt.slice(0, 100).map(o => {
+          const clean = { ...o };
+          delete clean.tempImageUrl;
+          return clean;
+        });
+        setFreshCache("cache_external_orders_v2", cleanExt);
+      } catch {}
+      toast.success("تم تحديث طلبات السوشيال بنجاح 🔄");
+    } catch (e) {
+      console.error("Refresh error:", e);
+      // Fallback
+      try {
+        const snap = await getDocs(collection(db, "external_orders"));
+        let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
+        setExternalOrders(allExt.slice(0, 100));
+        setExtOrdersLoaded(true);
+        toast.success("تم تحديث طلبات السوشيال بنجاح 🔄");
+      } catch (err) {
+        toast.error("فشل تحديث البيانات، يرجى إعادة المحاولة");
+      }
+    } finally {
+      setIsRefreshingExt(false);
+    }
+  };
 
   const setActiveTab = (tab: "orders" | "external" | "supplies_orders" | "courses" | "inventory" | "audit") => {
     router.replace(`/admin/hub?tab=${tab}`, { scroll: false });
@@ -215,17 +254,17 @@ function AdminHubContent() {
 
   useEffect(() => {
     try {
-      const cleanOrders = orders.slice(0, 30).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
+      const cleanOrders = orders.slice(0, 50).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
       setFreshCache("cache_orders_v2", cleanOrders);
       
-      const cleanExt = externalOrders.slice(0, 30).map(o => {
+      const cleanExt = externalOrders.slice(0, 100).map(o => {
         const clean = { ...o };
         delete clean.tempImageUrl;
         return clean;
       });
       setFreshCache("cache_external_orders_v2", cleanExt);
       
-      const cleanSales = storeSales.slice(0, 30);
+      const cleanSales = storeSales.slice(0, 50);
       setFreshCache("cache_store_sales_v2", cleanSales);
     } catch (e) {
       console.error("Cache error:", e);
@@ -335,6 +374,25 @@ function AdminHubContent() {
   // Real-time listeners for orders, external_orders, and store_sales with limits
   useEffect(() => {
     const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
+
+    // Parallel instant fetch for zero delay on mount
+    getDocs(qExt).then((snap) => {
+      if (!snap.empty) {
+        const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        setExternalOrders(allExt);
+        setExtOrdersLoaded(true);
+        setLoading(false);
+      }
+    }).catch(() => {
+      getDocs(collection(db, "external_orders")).then(snap => {
+        let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
+        setExternalOrders(allExt.slice(0, 100));
+        setExtOrdersLoaded(true);
+        setLoading(false);
+      }).catch(() => {});
+    });
+
     const unsubExt = onSnapshot(qExt, (snap) => {
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setExternalOrders(allExt);
@@ -1214,9 +1272,22 @@ function AdminHubContent() {
           </div>
           <div className="flex items-center gap-2">
             {activeTab === "external" && (
-              <button onClick={() => setShowAddSocial(true)} className="bg-white text-emerald-950 rounded-xl px-3.5 py-2 flex items-center gap-1.5 text-xs font-black shadow-md hover:bg-gray-100 transition active:scale-95">
-                <Plus className="w-4 h-4 text-emerald-600" /> إضافة سوشيال
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRefreshExternal}
+                  disabled={isRefreshingExt}
+                  className="bg-white/15 hover:bg-white/25 text-white rounded-xl px-2.5 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black backdrop-blur-md transition active:scale-95 border border-white/20 disabled:opacity-50"
+                  title="تحديث فوري من قاعدة البيانات مباشرة"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingExt ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">{isRefreshingExt ? "جاري التحديث..." : "تحديث فوري"}</span>
+                  <span className="sm:hidden">تحديث</span>
+                </button>
+                <button onClick={() => setShowAddSocial(true)} className="bg-white text-emerald-950 rounded-xl px-3.5 py-2 flex items-center gap-1.5 text-xs font-black shadow-md hover:bg-gray-100 transition active:scale-95">
+                  <Plus className="w-4 h-4 text-emerald-600" /> إضافة سوشيال
+                </button>
+              </div>
             )}
             {activeTab === "inventory" && (
               <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1680,6 +1751,19 @@ function AdminHubContent() {
                       <Filter className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
                   </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={handleRefreshExternal}
+                      disabled={isRefreshingExt}
+                      className="bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-xl px-3 py-2 text-xs font-black flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50"
+                      title="تحديث فوري من قاعدة البيانات مباشرة"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingExt ? 'animate-spin' : ''}`} />
+                      <span>{isRefreshingExt ? "جاري التحديث..." : "تحديث فوري"}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {!extOrdersLoaded && externalOrders.length === 0 ? (
@@ -1796,6 +1880,31 @@ function AdminHubContent() {
                                   <span className="font-black text-sm sm:text-lg text-emerald-600 dark:text-emerald-400">{Number(order.totalPriceWithDelivery || order.price || 0).toLocaleString()} د.ع</span>
                                 </div>
                               </div>
+                              {(order.cost !== undefined && order.cost !== null && order.cost !== "" && Number(order.cost) > 0) ? (
+                                <div className="flex justify-between items-center text-[10px] bg-pink-50/70 dark:bg-pink-950/20 px-2 py-1 rounded-lg border border-pink-100 dark:border-pink-900/30">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-gray-500 dark:text-gray-400 font-bold">التكلفة:</span>
+                                    <span className="font-black text-gray-800 dark:text-gray-200">{Number(order.cost).toLocaleString()} د.ع</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingCostOrder(order)}
+                                    className="text-[9px] bg-pink-100 hover:bg-pink-200 dark:bg-pink-900/50 text-pink-700 dark:text-pink-300 px-1.5 py-0.5 rounded font-black transition flex items-center gap-0.5"
+                                  >
+                                    📋 {order.costBreakdown ? `${order.costBreakdown.ingredients?.length || 12} مادة` : "المقادير"}
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingCostOrder(order)}
+                                    className="text-[9px] text-pink-600 dark:text-pink-400 hover:underline font-bold"
+                                  >
+                                    + حساب تكلفة المقادير
+                                  </button>
+                                </div>
+                              )}
                               {isDebt && (
                                 <div className="flex flex-col gap-1.5 mt-1">
                                   <div className={`flex justify-between items-center text-[10px] font-black px-2 py-1.5 rounded-lg ${customerOwesUs ? 'bg-rose-100/50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-blue-100/50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
@@ -3206,6 +3315,39 @@ function AdminHubContent() {
           invoice={editingCakeInvoice}
           onSuccess={() => {
             setEditingCakeInvoice(null);
+          }}
+        />
+      )}
+
+      {/* Cake Cost Breakdown Viewer & Editor Modal */}
+      {viewingCostOrder && (
+        <CakeCostBreakdownModal
+          isOpen={!!viewingCostOrder}
+          onClose={() => setViewingCostOrder(null)}
+          cakeName={viewingCostOrder.cakeName || "كيكة"}
+          initialSellingPrice={Number(viewingCostOrder.price) || 0}
+          initialBreakdown={viewingCostOrder.costBreakdown}
+          onApplyCost={async (totalCost, breakdown) => {
+            try {
+              const numCost = totalCost;
+              const numPrice = Number(viewingCostOrder.price) || 0;
+              const profit = numCost > 0 ? numPrice - numCost : numPrice;
+              await updateDoc(doc(db, "external_orders", viewingCostOrder.id), {
+                cost: numCost,
+                costBreakdown: JSON.parse(JSON.stringify(breakdown)),
+                profit
+              });
+              setExternalOrders(prev => prev.map(o => o.id === viewingCostOrder.id ? {
+                ...o,
+                cost: numCost,
+                costBreakdown: breakdown,
+                profit
+              } : o));
+              toast.success("تم تحديث تكلفة الكيكة والمقادير بنجاح ✔");
+            } catch (err) {
+              toast.error("فشل تحديث التكلفة");
+            }
+            setViewingCostOrder(null);
           }}
         />
       )}

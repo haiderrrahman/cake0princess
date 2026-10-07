@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, MapPin, Navigation, Edit3, CheckCircle, Clock, Trash2, ShieldCheck, User, Loader2, ArrowRight, Smartphone, Camera, FileImage, Image as ImageIcon, Phone, Calendar, Calculator } from 'lucide-react';
+import { Plus, Search, MapPin, Navigation, Edit3, CheckCircle, Clock, Trash2, ShieldCheck, User, Loader2, ArrowRight, Smartphone, Camera, FileImage, Image as ImageIcon, Phone, Calendar, Calculator, RefreshCw, Sparkles } from 'lucide-react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit, onSnapshot } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -17,9 +17,12 @@ import { ar } from "date-fns/locale/ar";
 import "react-datepicker/dist/react-datepicker.css";
 import CustomerProfileModal from "@/components/CustomerProfileModal";
 import MapLink from "@/components/MapLink";
+import CakeCostBreakdownModal from "@/components/CakeCostBreakdownModal";
+import { CakeCostBreakdown } from "@/lib/cakeCostCalculator";
 
 // Safe TTL cache helper: ensures we NEVER display stale ghost orders from weeks/months ago
-const getFreshCache = (key: string, maxAgeMs = 15 * 60 * 1000) => {
+// Default TTL is 30 seconds for immediate freshness
+const getFreshCache = (key: string, maxAgeMs = 30 * 1000) => {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(key);
@@ -58,6 +61,7 @@ export default function ExternalOrdersAdmin() {
     return getFreshCache("cache_external_orders_v2") || [];
   });
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<"orders" | "debts">("orders");
@@ -77,6 +81,9 @@ export default function ExternalOrdersAdmin() {
   const [cakeName, setCakeName] = useState("");
   const [price, setPrice] = useState("");
   const [cost, setCost] = useState("");
+  const [costBreakdown, setCostBreakdown] = useState<CakeCostBreakdown | null>(null);
+  const [showCostCalculator, setShowCostCalculator] = useState(false);
+  const [viewingCostOrder, setViewingCostOrder] = useState<any | null>(null);
   const [deliveryDate, setDeliveryDate] = useState<string>(new Date().toISOString());
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -88,15 +95,58 @@ export default function ExternalOrdersAdmin() {
   const [customers, setCustomers] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleRefreshOrders = async () => {
+    setIsRefreshing(true);
+    try {
+      const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
+      const snap = await getDocs(q);
+      const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+      setOrders(fetchedOrders);
+      setLoading(false);
+      try {
+        const cleanExt = fetchedOrders.slice(0, 100).map(o => {
+          const clean = { ...o };
+          delete clean.tempImageUrl;
+          return clean;
+        });
+        setFreshCache("cache_external_orders_v2", cleanExt);
+      } catch {}
+      toast.success("تم تحديث الطلبات بنجاح 🔄");
+    } catch (e) {
+      // Fallback
+      try {
+        const snap = await getDocs(collection(db, "external_orders"));
+        let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime());
+        setOrders(fetchedOrders.slice(0, 100));
+        setLoading(false);
+        toast.success("تم تحديث الطلبات بنجاح 🔄");
+      } catch (err) {
+        toast.error("فشل تحديث البيانات، يرجى المحاولة لاحقاً");
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    // 1. Fast network query with onSnapshot for real-time
+    // 1. Fast parallel network query for instant fresh display
     const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
+    
+    getDocs(q).then((snap) => {
+      if (!snap.empty) {
+        const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+        setOrders(fetchedOrders);
+        setLoading(false);
+      }
+    }).catch(() => {});
+
     const unsubscribe = onSnapshot(q, (snap) => {
       const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
       setOrders(fetchedOrders);
       setLoading(false);
       try {
-        const cleanExt = fetchedOrders.slice(0, 30).map(o => {
+        const cleanExt = fetchedOrders.slice(0, 100).map(o => {
           const clean = { ...o };
           delete clean.tempImageUrl;
           return clean;
@@ -165,6 +215,7 @@ export default function ExternalOrdersAdmin() {
     setCakeName(order.cakeName || "");
     setPrice(order.price ? String(order.price) : "");
     setCost(order.cost ? String(order.cost) : "");
+    setCostBreakdown(order.costBreakdown || null);
     setDeliveryDate(order.deliveryDate || new Date().toISOString());
     setImagePreview(order.imageUrl || null);
     setImageFile(null);
@@ -260,6 +311,7 @@ export default function ExternalOrdersAdmin() {
         cakeName,
         price: numPrice,
         cost: numCost,
+        costBreakdown: costBreakdown ? JSON.parse(JSON.stringify(costBreakdown)) : null,
         profit,
         deliveryDate,
         ...(extractedLocationUrl && { locationUrl: extractedLocationUrl }),
@@ -316,6 +368,7 @@ export default function ExternalOrdersAdmin() {
       setCakeName("");
       setPrice("");
       setCost("");
+      setCostBreakdown(null);
       setDeliveryDate(new Date().toISOString());
       setAddress("");
       setImageFile(null);
@@ -413,7 +466,11 @@ export default function ExternalOrdersAdmin() {
     if (await customConfirm("هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.")) {
       try {
         await deleteDoc(doc(db, "external_orders", id));
-        // onSnapshot will update the list automatically – no manual filter needed
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem("cache_external_orders_v2");
+          } catch {}
+        }
       } catch (error) {
         console.error("Error deleting order:", error);
         toast.error("حدث خطأ أثناء الحذف");
@@ -489,6 +546,17 @@ export default function ExternalOrdersAdmin() {
               />
             </div>
             <button 
+              type="button"
+              onClick={handleRefreshOrders}
+              disabled={isRefreshing}
+              className="bg-white/15 hover:bg-white/25 text-white rounded-xl px-3 py-2 flex items-center gap-1.5 text-xs font-black backdrop-blur-md transition active:scale-95 border border-white/20 disabled:opacity-50 flex-shrink-0"
+              title="تحديث فوري من قاعدة البيانات مباشرة"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isRefreshing ? "جاري التحديث..." : "تحديث فوري"}</span>
+              <span className="sm:hidden">تحديث</span>
+            </button>
+            <button 
               onClick={() => {
                 setIsEditMode(false);
                 setEditOrderId(null);
@@ -497,6 +565,7 @@ export default function ExternalOrdersAdmin() {
                 setCakeName("");
                 setPrice("");
                 setCost("");
+                setCostBreakdown(null);
                 setDeliveryDate(new Date().toISOString());
                 setImageFile(null);
                 setImagePreview(null);
@@ -812,7 +881,28 @@ export default function ExternalOrdersAdmin() {
                     </span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-gray-400 font-bold">التكلفة</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-gray-400 font-bold">التكلفة</span>
+                      {order.costBreakdown ? (
+                        <button
+                          type="button"
+                          onClick={() => setViewingCostOrder(order)}
+                          className="text-[9px] bg-pink-100 dark:bg-pink-900/50 hover:bg-pink-200 dark:hover:bg-pink-900 text-pink-700 dark:text-pink-300 px-1.5 py-0.2 rounded font-black transition flex items-center gap-0.5"
+                          title="عرض تفاصيل المقادير والمصاريف التشغيلية"
+                        >
+                          📋 {order.costBreakdown.ingredients?.length || 12} مادة
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setViewingCostOrder(order)}
+                          className="text-[9px] text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 underline font-bold transition"
+                          title="حساب وتفصيل المقادير"
+                        >
+                          + تفصيل
+                        </button>
+                      )}
+                    </div>
                     <span className="text-xs font-black text-gray-700 dark:text-gray-300">{Number(order.cost).toLocaleString()} د.ع</span>
                   </div>
                   <div className="flex flex-col">
@@ -1040,8 +1130,31 @@ export default function ExternalOrdersAdmin() {
                   <FormattedNumberInput required value={price} onChange={val => setPrice(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: 55" />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-2 text-emerald-800 dark:text-emerald-200">تكلفة الصنع (د.ع) - اختياري</label>
-                  <FormattedNumberInput value={cost} onChange={val => setCost(val)} className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: 20" />
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-bold text-emerald-800 dark:text-emerald-200">تكلفة الصنع (د.ع)</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowCostCalculator(true)}
+                      className="text-xs bg-pink-600 hover:bg-pink-700 text-white font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-sm transition active:scale-95"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>{costBreakdown ? "تعديل المقادير" : "حساب المقادير"}</span>
+                    </button>
+                  </div>
+                  <FormattedNumberInput
+                    value={cost}
+                    onChange={val => {
+                      setCost(val);
+                      if (!val) setCostBreakdown(null);
+                    }}
+                    className="w-full bg-white dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none"
+                    placeholder="مثال: 20"
+                  />
+                  {costBreakdown && (
+                    <div className="mt-1 text-xs text-pink-700 dark:text-pink-300 font-bold">
+                      ✓ تفصيل {costBreakdown.ingredients?.length || 12} مادة + مصاريف
+                    </div>
+                  )}
                 </div>
                 
                 {price && (
@@ -1117,6 +1230,52 @@ export default function ExternalOrdersAdmin() {
           }}
           customerName={selectedCustomerForProfile.name}
           customerPhone={selectedCustomerForProfile.phone}
+        />
+      )}
+
+      {/* مودال تفصيل وحساب تكلفة الكيكة بالمقادير (للإضافة والتعديل) */}
+      <CakeCostBreakdownModal
+        isOpen={showCostCalculator}
+        onClose={() => setShowCostCalculator(false)}
+        cakeName={cakeName}
+        initialSellingPrice={Number(price) || 0}
+        initialBreakdown={costBreakdown}
+        onApplyCost={(totalCost, breakdown) => {
+          setCost(totalCost.toString());
+          setCostBreakdown(breakdown);
+        }}
+      />
+
+      {/* مودال استعراض وتحديث تكلفة الكيكة من البطاقة مباشرة */}
+      {viewingCostOrder && (
+        <CakeCostBreakdownModal
+          isOpen={!!viewingCostOrder}
+          onClose={() => setViewingCostOrder(null)}
+          cakeName={viewingCostOrder.cakeName || "كيكة"}
+          initialSellingPrice={Number(viewingCostOrder.price) || 0}
+          initialBreakdown={viewingCostOrder.costBreakdown}
+          onApplyCost={async (totalCost, breakdown) => {
+            try {
+              const numCost = totalCost;
+              const numPrice = Number(viewingCostOrder.price) || 0;
+              const profit = numCost > 0 ? numPrice - numCost : numPrice;
+              await updateDoc(doc(db, "external_orders", viewingCostOrder.id), {
+                cost: numCost,
+                costBreakdown: JSON.parse(JSON.stringify(breakdown)),
+                profit
+              });
+              setOrders(prev => prev.map(o => o.id === viewingCostOrder.id ? {
+                ...o,
+                cost: numCost,
+                costBreakdown: breakdown,
+                profit
+              } : o));
+              toast.success("تم تحديث تكلفة الكيكة والمقادير بنجاح ✔");
+            } catch (err) {
+              toast.error("فشل تحديث التكلفة");
+            }
+            setViewingCostOrder(null);
+          }}
         />
       )}
     </div>

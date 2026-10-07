@@ -9,6 +9,8 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import ScanCakeInvoiceModal from "@/components/ScanCakeInvoiceModal";
 
+import { getCachedFinancesStats, persistFinancesStats } from "@/lib/financesSync";
+
 const EXPENSE_CATEGORIES = [
   "المواد الأولية (كيك وكريمة)",
   "أدوات التغليف والزينة",
@@ -30,20 +32,8 @@ export default function FinancesAdmin() {
     }
     return [];
   });
-  const [stats, setStats] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('finances_stats');
-      if (saved) return JSON.parse(saved);
-    }
-    return { 
-      totalRevenue: 0, 
-      totalExpenses: 0, 
-      netProfit: 0,
-      totalSalaryDebt: 0,
-      cakeMaterialsExpense: 0,
-      monthRevenue: 0,
-      breakdown: { social: 0, storeSupplies: 0, appSupplies: 0, appAcademy: 0, appCakes: 0 }
-    };
+  const [stats, setStats] = useState<any>(() => {
+    return getCachedFinancesStats();
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
@@ -215,15 +205,21 @@ export default function FinancesAdmin() {
     }).reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const netProfit = revenueData.totalRevenue - totalExpenses - totalSalaryDebt; // Profit based on Revenue - Expenses - Debt
     
-    setStats({
+    const newStats = {
       totalRevenue: revenueData.totalRevenue,
       totalExpenses,
       netProfit,
       totalSalaryDebt,
       cakeMaterialsExpense,
       monthRevenue: revenueData.monthRevenue,
+      monthSales: revenueData.monthRevenue || 0,
       breakdown: revenueData.breakdown,
-    });
+      todaySales: 0,
+      weekSales: 0,
+    };
+
+    setStats(newStats);
+    persistFinancesStats(newStats);
   }, [expenses, revenueData]);
 
   const handleAddExpense = async (e: React.FormEvent) => {

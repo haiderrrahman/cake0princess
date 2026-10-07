@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Check, Loader2, Camera, Upload, Phone, User, Calendar, Tag, Coins, MapPin } from "lucide-react";
+import { X, Check, Loader2, Camera, Upload, Phone, User, Calendar, Tag, Coins, MapPin, Sparkles, ChefHat } from "lucide-react";
 import { doc, updateDoc, collection, getDocs, addDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -8,6 +8,8 @@ import FormattedNumberInput from "@/components/FormattedNumberInput";
 import { toast } from "sonner";
 import "react-datepicker/dist/react-datepicker.css";
 import { BISMAYAH_BUILDINGS, BISMAYAH_APARTMENTS } from "./BismayahData";
+import CakeCostBreakdownModal from "@/components/CakeCostBreakdownModal";
+import { CakeCostBreakdown } from "@/lib/cakeCostCalculator";
 
 const PLATFORMS = ["إنستجرام", "واتساب", "فيسبوك", "تيك توك", "هاتف", "أخرى"];
 
@@ -37,6 +39,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
   const [price, setPrice] = useState("");
   const [paidAmount, setPaidAmount] = useState<string | number>("");
   const [cost, setCost] = useState("");
+  const [costBreakdown, setCostBreakdown] = useState<CakeCostBreakdown | null>(null);
+  const [showCostCalculator, setShowCostCalculator] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -70,6 +74,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       setPrice(order.price || "");
       setPaidAmount(order.paidAmount !== undefined ? order.paidAmount : (order.price || ""));
       setCost(order.cost || "");
+      setCostBreakdown(order.costBreakdown || null);
       setDeliveryDate(order.deliveryDate || "");
       setImagePreview(order.imageUrl || null);
       
@@ -227,6 +232,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         paidAmount: numPaidAmount,
         isDebtSettled,
         cost: numCost,
+        costBreakdown: costBreakdown ? JSON.parse(JSON.stringify(costBreakdown)) : (order.costBreakdown || null),
         profit: numCost > 0 ? numPrice - numCost : numPrice,
         isBismayah: deliveryType === "bismayah", bismayahComplex, bismayahBuilding, bismayahApt, deliveryType,
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
@@ -235,6 +241,12 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         ...(!imageFile && order.imageUrl ? { imageUrl: order.imageUrl } : {}),
         ...(tempImageUrl ? { tempImageUrl } : {})
       });
+
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("cache_external_orders_v2");
+        } catch {}
+      }
 
       // Update customer profile
       const existingCustomer = customers.find(c => c.name === customerName);
@@ -520,16 +532,34 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">التكلفة</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">التكلفة (د.ع)</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowCostCalculator(true)}
+                    className="flex items-center gap-1 text-[11px] font-black text-pink-600 dark:text-pink-400 hover:text-pink-700 bg-pink-50 dark:bg-pink-950/40 px-2 py-0.5 rounded-lg border border-pink-200 dark:border-pink-800/40 transition"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>{costBreakdown ? "تفاصيل المقادير (مفصل)" : "حساب المقادير"}</span>
+                  </button>
+                </div>
                 <div className="relative">
                   <Coins className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <FormattedNumberInput
                     value={cost}
-                    onChange={setCost}
+                    onChange={(val) => {
+                      setCost(val);
+                      if (!val) setCostBreakdown(null);
+                    }}
                     placeholder="التكلفة"
-                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-left"
+                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-left font-black"
                   />
                 </div>
+                {costBreakdown && (
+                  <div className="mt-1 text-[10px] text-pink-600 dark:text-pink-400 font-bold flex items-center gap-1">
+                    <span>✓ {costBreakdown.ingredients.length} مادة + مصاريف تشغيل</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -600,6 +630,19 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
           </form>
         </div>
       </div>
+
+      {/* مودال تفصيل وحساب تكلفة الكيكة بالمقادير */}
+      <CakeCostBreakdownModal
+        isOpen={showCostCalculator}
+        onClose={() => setShowCostCalculator(false)}
+        cakeName={cakeName}
+        initialSellingPrice={Number(price) || 0}
+        initialBreakdown={costBreakdown}
+        onApplyCost={(totalCost, breakdown) => {
+          setCost(totalCost.toString());
+          setCostBreakdown(breakdown);
+        }}
+      />
     </div>
   );
 }

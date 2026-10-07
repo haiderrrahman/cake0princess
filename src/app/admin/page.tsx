@@ -12,6 +12,7 @@ import { useEffect, useState, useMemo } from "react";
 import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AdminQuickEntry from "@/components/AdminQuickEntry";
+import { calculateFinancesStats, getCachedFinancesStats, persistFinancesStats } from "@/lib/financesSync";
 
 function BaghdadClock() {
   const [time, setTime] = useState("");
@@ -43,7 +44,7 @@ export default function AdminDashboard() {
         const raw = localStorage.getItem("admin_dashboard_counts_v2");
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed?._timestamp && Date.now() - parsed._timestamp < 15 * 60 * 1000) {
+          if (parsed?._timestamp && (Date.now() - parsed._timestamp < 15 * 60 * 1000)) {
             return parsed.data;
           }
         }
@@ -58,38 +59,12 @@ export default function AdminDashboard() {
   });
 
   const [realStats, setRealStats] = useState(() => {
-    // Load from cache for instant display if fresh (< 15 mins)
-    if (typeof window !== "undefined") {
-      try {
-        const raw = localStorage.getItem("admin_dashboard_stats_v2");
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed?._timestamp && (Date.now() - parsed._timestamp < 15 * 60 * 1000)) {
-            return parsed.data;
-          }
-          localStorage.removeItem("admin_dashboard_stats_v2");
-        }
-      } catch {}
-    }
-    return {
-      todaySales: 0,
-      weekSales: 0,
-      monthSales: 0,
-      totalRevenue: 0,
-      netProfit: 0,
-      totalExpenses: 0,
-      totalSalaryDebt: 0,
-      cakeMaterialsExpense: 0,
-      breakdown: { social: 0, appCakes: 0, appAcademy: 0, storeSupplies: 0 },
-    };
+    return getCachedFinancesStats();
   });
 
   useEffect(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     let currentOrders: any[] = [];
     let currentExtOrders: any[] = [];
@@ -97,20 +72,6 @@ export default function AdminDashboard() {
     let currentStoreSales: any[] = [];
 
     const calculateStats = () => {
-      let todaySales = 0,
-        weekSales = 0,
-        monthSales = 0,
-        totalRevenue = 0,
-        totalProfit = 0;
-      let social = 0,
-        appCakes = 0,
-        appAcademy = 0,
-        storeSupplies = 0;
-
-      let socialReceived = 0,
-        appReceived = 0,
-        suppliesReceived = 0;
-
       let pExt = 0;
       let todayDlv = 0;
 
@@ -118,35 +79,6 @@ export default function AdminDashboard() {
         const isDelivered = o.status === "delivered" || o.status === "completed";
         if (!isDelivered && o.status !== "cancelled" && o.status !== "rejected") {
           pExt++;
-        }
-
-        const price = Number(o.price || 0);
-        const paid = Number(o.paidAmount ?? price);
-        const isDebt = o.paidAmount !== undefined && paid !== price && !o.isDebtSettled;
-
-        let received = price;
-        if (isDebt) {
-          const diff = price - paid;
-          if (diff > 0) received = paid;
-          else received = price;
-        }
-
-        if (isDelivered) {
-          socialReceived += received;
-          social += received;
-          totalProfit += Number(o.profit || 0);
-
-          const rawDate = o.deliveryDate
-            ? new Date(o.deliveryDate)
-            : o.createdAt?.toDate
-            ? o.createdAt.toDate()
-            : new Date(o.createdAt || 0);
-
-          const d = new Date(rawDate);
-          d.setHours(0, 0, 0, 0);
-          if (d.getTime() === today.getTime()) todaySales += received;
-          if (d >= weekAgo) weekSales += received;
-          if (rawDate >= thirtyDaysAgo) monthSales += received;
         }
 
         // Today's delivery check: ONLY count active un-delivered orders
@@ -161,113 +93,18 @@ export default function AdminDashboard() {
       });
 
       let pApp = 0;
-      // ── App Orders (orders) ──
       currentOrders.forEach((o) => {
         if (["pending", "processing", "delivering"].includes(o.status)) {
           pApp++;
         }
-
-        const isDelivered = o.status === "delivered" || o.status === "completed";
-        if (!isDelivered) return;
-
-        const hasSupplies = o.items?.some(
-          (i: any) => i.isSupply || i.category === "supplies" || i.id?.includes("supply")
-        );
-        const hasCourses = o.items?.some((i: any) => i.type === "course");
-
-        const total = Number(o.total || o.toPayNow || 0);
-        const isDebt = o.isDebt === true;
-        const debtAmount = Number(o.debtAmount || 0);
-        const weOwe = o.customerOwesUs === false;
-
-        let received = total;
-        if (isDebt && debtAmount > 0) {
-          if (weOwe) received = total;
-          else received = total - debtAmount;
-        }
-
-        appReceived += received;
-        if (hasCourses && !hasSupplies && o.items?.length === 1) {
-          appAcademy += received;
-        } else if (hasSupplies) {
-          appCakes += received;
-        } else {
-          appCakes += received;
-        }
-
-        totalProfit += total * 0.3;
-
-        const rawDate = o.deliveryDate
-          ? new Date(o.deliveryDate)
-          : o.createdAt?.toDate
-          ? o.createdAt.toDate()
-          : new Date(o.createdAt || 0);
-
-        const d = new Date(rawDate);
-        d.setHours(0, 0, 0, 0);
-        if (d.getTime() === today.getTime()) todaySales += received;
-        if (d >= weekAgo) weekSales += received;
-        if (rawDate >= thirtyDaysAgo) monthSales += received;
       });
 
-      // ── Store Sales (store_sales) ──
-      currentStoreSales.forEach((o) => {
-        if (["rejected", "cancelled"].includes(o.status)) return;
-        const amt = Number(o.price || 0);
-        const profit = Number(o.profit || 0);
-
-        suppliesReceived += amt;
-        storeSupplies += amt;
-        totalProfit += profit;
-
-        const rawDate = o.createdAt?.toDate
-          ? o.createdAt.toDate()
-          : new Date(o.createdAt || o.date || 0);
-
-        const d = new Date(rawDate);
-        d.setHours(0, 0, 0, 0);
-        if (d.getTime() === today.getTime()) todaySales += amt;
-        if (d >= weekAgo) weekSales += amt;
-        if (rawDate >= thirtyDaysAgo) monthSales += amt;
-      });
-
-      totalRevenue = socialReceived + appReceived + suppliesReceived;
-
-      const totalExpenses = currentExpenses
-        .filter((e) => !e.isDebt)
-        .reduce((s, e) => s + (Number(e.amount) || 0), 0);
-      const totalSalaryDebt = currentExpenses
-        .filter((e) => e.isDebt)
-        .reduce((s, e) => s + (Number(e.amount) || 0), 0);
-      const cakeMaterialsExpense = currentExpenses
-        .filter((e) => {
-          const cat = e.category || "";
-          const desc = e.description || e.title || "";
-          return (
-            cat === "مشتريات مخزنية" ||
-            cat === "مواد الكيك" ||
-            cat === "مواد كيك" ||
-            cat === "المواد الأولية (كيك وكريمة)" ||
-            desc.includes("المخزن") ||
-            desc.includes("مادة") ||
-            desc.includes("مواد")
-          );
-        })
-        .reduce((s, e) => s + (Number(e.amount) || 0), 0);
-
-      const netProfit = totalRevenue - totalExpenses - totalSalaryDebt;
-
-      const result = {
-        todaySales,
-        weekSales,
-        monthSales,
-        totalRevenue,
-        netProfit,
-        totalExpenses,
-        totalSalaryDebt,
-        cakeMaterialsExpense,
-        breakdown: { social, appCakes, appAcademy, storeSupplies },
-      };
+      const result = calculateFinancesStats(
+        currentOrders,
+        currentExtOrders,
+        currentStoreSales,
+        currentExpenses
+      );
 
       setRealStats(result);
       setStatsLoading(false);
@@ -279,16 +116,19 @@ export default function AdminDashboard() {
       };
       setActiveOperationalCounts(counts);
 
+      persistFinancesStats(result);
       try {
-        localStorage.setItem("admin_dashboard_stats_v2", JSON.stringify({ _timestamp: Date.now(), data: result }));
-        localStorage.setItem("admin_dashboard_counts_v2", JSON.stringify({ _timestamp: Date.now(), data: counts }));
+        localStorage.setItem(
+          "admin_dashboard_counts_v2",
+          JSON.stringify({ _timestamp: Date.now(), data: counts })
+        );
       } catch {}
     };
 
-    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(100));
-    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
-    const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(100));
-    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100));
+    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
+    const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"));
+    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"));
 
     const unsubOrders = onSnapshot(qOrders, (snap) => {
       currentOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));

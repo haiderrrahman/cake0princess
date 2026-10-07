@@ -5538,7 +5538,7 @@ setEditTrip(null);
                 <p className="text-gray-400 font-bold text-sm">لا توجد ديون أو فائض مسجل</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {[...effectiveDebts].sort((a, b) => b.date.localeCompare(a.date)).map(debt => {
                   const isVirtualCake = debt.id === "virtual-cake-debt";
                   
@@ -5550,13 +5550,6 @@ setEditTrip(null);
                     .filter(p => p.type === "دين لي" || (!p.type && debt.type === "دين لي"))
                     .reduce((s, p) => s + p.amount, 0);
 
-                  // Net calculation:
-                  // For "دين علي": I started owing debt.amount.
-                  // I paid `paidOnMe`. He paid/offset `paidForMe`.
-                  // Net remaining on me = (debt.amount - paidOnMe) - paidForMe.
-                  // For "دين لي": He started owing me debt.amount.
-                  // He paid `paidForMe`. I paid/offset `paidOnMe`.
-                  // Net remaining for me = (debt.amount - paidForMe) - paidOnMe.
                   const net = debt.type === "دين علي"
                     ? (debt.amount - paidOnMe) - paidForMe
                     : (debt.amount - paidForMe) - paidOnMe;
@@ -5568,75 +5561,59 @@ setEditTrip(null);
                     : { bg: "bg-rose-500", text: "text-rose-500", border: "border-rose-200 dark:border-rose-800/50", lightBg: "bg-rose-50 dark:bg-rose-900/20" };
                   
                   return (
-                    <div key={debt.id} className={`bg-white dark:bg-zinc-900 rounded-3xl p-4 border ${isPaid ? "border-gray-200/80 dark:border-zinc-800 opacity-80" : c.border} shadow-sm overflow-hidden relative flex flex-col justify-between transition-all`}>
+                    <div key={debt.id} className={`bg-white dark:bg-zinc-900 rounded-3xl p-3 sm:p-4 border ${isPaid ? "border-gray-200/80 dark:border-zinc-800 opacity-85" : c.border} shadow-sm overflow-hidden relative flex flex-col justify-between transition-all min-h-[260px]`}>
                       <div>
                         {/* Header */}
                         <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`text-[10px] font-black px-2.5 py-1 rounded-xl ${c.lightBg} ${c.text}`}>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg ${c.lightBg} ${c.text}`}>
                               {debt.type === "دين لي" ? "دين لي (أطلب)" : "دين عليّ (مطلوب)"}
                             </span>
                             {isPaid && (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400">
-                                خالص ومسدد ✅
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+                                خالص ✅
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] text-gray-400 font-bold">{new Date(debt.date).toLocaleDateString("ar-IQ")}</span>
+                          <span className="text-[9px] text-gray-400 font-bold">{new Date(debt.date).toLocaleDateString("ar-IQ")}</span>
                         </div>
 
                         {/* Person & Initial Amount */}
-                        <div className="flex items-baseline justify-between mb-3">
-                          <h3 className="font-black text-gray-900 dark:text-white text-base truncate max-w-[65%]">{debt.person}</h3>
-                          <div className="text-left">
-                            <span className="text-[9px] text-gray-400 block font-bold">المبلغ الأساسي</span>
-                            <span className="font-black text-sm text-gray-700 dark:text-gray-200">{fmt(debt.amount)} <span className="text-[9px] text-gray-400">د.ع</span></span>
+                        <div className="mb-2">
+                          <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base truncate" title={debt.person}>{debt.person}</h3>
+                          <div className="flex items-center justify-between mt-0.5">
+                            <span className="text-[9px] text-gray-400 font-bold">المبلغ الأساسي:</span>
+                            <span className="font-black text-xs text-gray-700 dark:text-gray-200">{fmt(debt.amount)} <span className="text-[8px] text-gray-400">د.ع</span></span>
                           </div>
                         </div>
 
-                        {/* Stats / Financial Balance */}
+                        {/* Center Box: Financial Balance in Compact Square format */}
                         {!!debt.monthlyInstallment && !!debt.totalMonths ? (
-                          <div className="grid grid-cols-2 gap-2 mb-3">
-                            <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-2xl p-2.5 text-center">
-                              <div className="text-[9px] text-gray-500 font-bold mb-0.5">القسط الشهري</div>
-                              <div className="font-black text-gray-700 dark:text-gray-300 text-xs">{fmt(debt.monthlyInstallment)}</div>
+                          <div className="grid grid-cols-2 gap-1.5 mb-2.5">
+                            <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-xl p-1.5 text-center">
+                              <div className="text-[8px] text-gray-500 font-bold">القسط</div>
+                              <div className="font-black text-gray-700 dark:text-gray-300 text-[10px] sm:text-xs">{fmt(debt.monthlyInstallment)}</div>
                             </div>
-                            <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl p-2.5 text-center">
-                              <div className="text-[9px] text-emerald-600 dark:text-emerald-500 font-bold mb-0.5">المسدد</div>
-                              <div className="font-black text-emerald-600 dark:text-emerald-500 text-xs">{fmt(paidOnMe + paidForMe)}</div>
+                            <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-1.5 text-center">
+                              <div className="text-[8px] text-emerald-600 dark:text-emerald-500 font-bold">المسدد</div>
+                              <div className="font-black text-emerald-600 dark:text-emerald-500 text-[10px] sm:text-xs">{fmt(paidOnMe + paidForMe)}</div>
                             </div>
-                            <div className="bg-rose-50 dark:bg-rose-900/10 rounded-2xl p-2.5 text-center">
-                              <div className="text-[9px] text-rose-600 dark:text-rose-500 font-bold mb-0.5">المتبقي</div>
-                              <div className="font-black text-rose-600 dark:text-rose-500 text-xs">{fmt(Math.max(0, net))}</div>
-                            </div>
-                            <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-2xl p-2.5 text-center">
-                              <div className="text-[9px] text-gray-500 font-bold mb-0.5">باقي أشهر</div>
-                              <div className="font-black text-gray-700 dark:text-gray-300 text-xs">{Math.ceil(Math.max(0, net) / debt.monthlyInstallment)}</div>
+                            <div className="bg-rose-50 dark:bg-rose-900/10 rounded-xl p-1.5 text-center col-span-2">
+                              <div className="text-[8px] text-rose-600 dark:text-rose-500 font-bold">المتبقي الصافي</div>
+                              <div className="font-black text-rose-600 dark:text-rose-500 text-xs sm:text-sm">{fmt(Math.max(0, net))} د.ع</div>
                             </div>
                           </div>
                         ) : (
-                          <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-2xl p-2.5 mb-3 border border-gray-100 dark:border-zinc-800/80">
-                            <div className="grid grid-cols-2 gap-2 text-center pb-2 mb-2 border-b border-gray-200/60 dark:border-zinc-700/60">
-                              <div className="text-right">
-                                <div className="text-[9px] text-rose-500 font-bold mb-0.5 flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                                  <span>مدفوع (سداد عليّ)</span>
-                                </div>
-                                <div className="font-black text-gray-800 dark:text-gray-200 text-xs">{fmt(paidOnMe)} <span className="text-[9px] text-gray-400">د.ع</span></div>
-                              </div>
-                              <div className="text-left">
-                                <div className="text-[9px] text-emerald-600 font-bold mb-0.5 flex items-center justify-end gap-1">
-                                  <span>مقبوض (سداد لي)</span>
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                </div>
-                                <div className="font-black text-gray-800 dark:text-gray-200 text-xs">{fmt(paidForMe)} <span className="text-[9px] text-gray-400">د.ع</span></div>
-                              </div>
+                          <div className="bg-gray-50/80 dark:bg-zinc-800/50 rounded-2xl p-2 mb-2.5 border border-gray-100 dark:border-zinc-800/80">
+                            <div className="flex justify-between items-center text-[9px] pb-1.5 mb-1.5 border-b border-gray-200/50 dark:border-zinc-700/50">
+                              <span className="text-gray-500 dark:text-gray-400 font-bold">المسدد الإجمالي:</span>
+                              <span className="font-black text-gray-800 dark:text-gray-200 text-[10px]">{fmt(paidOnMe + paidForMe)} د.ع</span>
                             </div>
                             
                             {/* Net Balance Status */}
-                            <div className="flex justify-between items-center text-xs px-1">
-                              <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">صافي الحساب:</span>
-                              <div className="font-black">
+                            <div className="text-center pt-0.5">
+                              <span className="text-[8px] font-bold text-gray-400 block mb-0.5">صافي الحساب:</span>
+                              <div className="font-black text-xs leading-tight">
                                 {net > 0 ? (
                                   debt.type === "دين علي" ? (
                                     <span className="text-rose-600 dark:text-rose-400">بذمتك له: {fmt(net)} د.ع</span>
@@ -5644,12 +5621,12 @@ setEditTrip(null);
                                     <span className="text-emerald-600 dark:text-emerald-400">بذمته لك: {fmt(net)} د.ع</span>
                                   )
                                 ) : net === 0 ? (
-                                  <span className="text-emerald-500 dark:text-emerald-400">خالص تماماً (0 د.ع) ✅</span>
+                                  <span className="text-emerald-500 dark:text-emerald-400 text-[11px]">خالص تماماً (0 د.ع) ✅</span>
                                 ) : (
                                   debt.type === "دين علي" ? (
-                                    <span className="text-emerald-600 dark:text-emerald-400">أنت تطلبه بالصافي: {fmt(Math.abs(net))} د.ع 🟢</span>
+                                    <span className="text-emerald-600 dark:text-emerald-400 text-[11px]">تطلبه بالصافي: {fmt(Math.abs(net))} 🟢</span>
                                   ) : (
-                                    <span className="text-rose-600 dark:text-rose-400">هو يطلبك بالصافي: {fmt(Math.abs(net))} د.ع 🔴</span>
+                                    <span className="text-rose-600 dark:text-rose-400 text-[11px]">يطلبك بالصافي: {fmt(Math.abs(net))} 🔴</span>
                                   )
                                 )}
                               </div>
@@ -5658,62 +5635,60 @@ setEditTrip(null);
                         )}
                       </div>
                       
-                      {/* Dual Settlement Buttons: سداد دين علي وسداد دين لي في كل خانة */}
+                      {/* Dual Settlement Buttons */}
                       <div>
                         {isVirtualCake ? (
                           !isPaid && (
                             <button onClick={() => handlePayDebt(debt)}
-                              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black py-2.5 rounded-xl active:scale-95 transition shadow-sm flex items-center justify-center gap-1.5">
+                              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-black py-2 rounded-xl active:scale-95 transition shadow-sm flex items-center justify-center gap-1">
                               <Check className="w-3.5 h-3.5" /> تسديد دين الكيك
                             </button>
                           )
                         ) : (
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100 dark:border-zinc-800">
+                          <div className="grid grid-cols-2 gap-1.5 pt-1.5 border-t border-gray-100 dark:border-zinc-800">
                             <button 
                               type="button"
                               onClick={() => handlePayDebt(debt, "دين علي")}
-                              className="w-full bg-rose-500 hover:bg-rose-600 active:scale-95 text-white text-[11px] font-black py-2 px-2 rounded-xl transition shadow-sm flex items-center justify-center gap-1.5"
+                              className="w-full bg-rose-500 hover:bg-rose-600 active:scale-95 text-white text-[10px] font-black py-1.5 px-1 rounded-xl transition shadow-xs flex items-center justify-center gap-1"
                               title="تسديد دين عليّ (دفع نقود من جيبي - يُسجل كمصروف)"
                             >
-                              <span className="w-2 h-2 rounded-full bg-white shadow-xs" />
-                              <span>تسديد عليّ (دفع)</span>
+                              <span>دفع (عليّ)</span>
                             </button>
 
                             <button 
                               type="button"
                               onClick={() => handlePayDebt(debt, "دين لي")}
-                              className="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-[11px] font-black py-2 px-2 rounded-xl transition shadow-sm flex items-center justify-center gap-1.5"
+                              className="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-[10px] font-black py-1.5 px-1 rounded-xl transition shadow-xs flex items-center justify-center gap-1"
                               title="تسديد دين لي (استلام نقود في جيبي - يُسجل كدخل)"
                             >
-                              <span className="w-2 h-2 rounded-full bg-white shadow-xs" />
-                              <span>تسديد لي (قبض)</span>
+                              <span>قبض (لي)</span>
                             </button>
                           </div>
                         )}
 
                         {/* Bottom Actions Bar */}
-                        <div className="flex items-center justify-between pt-2 mt-2 border-t border-gray-100 dark:border-zinc-800 text-[10px]">
+                        <div className="flex items-center justify-between pt-1.5 mt-1.5 border-t border-gray-100 dark:border-zinc-800 text-[9px]">
                           <div className="flex items-center gap-1">
                             {!isVirtualCake && (
                               <>
-                                <button onClick={() => { setEditDebt(debt); setShowDebtModal(true); }} className="p-1.5 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition text-gray-500" title="تعديل">
-                                  <Edit2 className="w-3 h-3" />
+                                <button onClick={() => { setEditDebt(debt); setShowDebtModal(true); }} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition text-gray-500" title="تعديل">
+                                  <Edit2 className="w-2.5 h-2.5" />
                                 </button>
-                                <button onClick={() => handleDeleteDebt(debt.id)} className="p-1.5 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition text-gray-500" title="حذف">
-                                  <Trash2 className="w-3 h-3" />
+                                <button onClick={() => handleDeleteDebt(debt.id)} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition text-gray-500" title="حذف">
+                                  <Trash2 className="w-2.5 h-2.5" />
                                 </button>
                               </>
                             )}
                             {debt.payments.length > 0 && (
-                              <button onClick={() => setShowDebtHistory(showDebtHistory === debt.id ? null : debt.id)} className="px-2 py-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition text-gray-600 dark:text-gray-300 font-bold text-[10px]">
-                                {showDebtHistory === debt.id ? "إخفاء السجل" : `السجل (${debt.payments.length})`}
+                              <button onClick={() => setShowDebtHistory(showDebtHistory === debt.id ? null : debt.id)} className="px-1.5 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition text-gray-600 dark:text-gray-300 font-bold text-[9px]">
+                                {showDebtHistory === debt.id ? "إخفاء" : `سجل (${debt.payments.length})`}
                               </button>
                             )}
                           </div>
 
                           {debt.payments.length > 0 && !isVirtualCake && (
                             <button onClick={() => handleUndoDebtPayment(debt)}
-                              className="bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[10px] font-bold px-2 py-1 rounded-lg active:scale-95 transition"
+                              className="bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[9px] font-bold px-1.5 py-0.5 rounded-lg active:scale-95 transition"
                               title="تراجع عن آخر دفعة">
                               تراجع ↩️
                             </button>
@@ -5723,19 +5698,19 @@ setEditTrip(null);
                       
                       {/* Payment History Expandable List */}
                       {showDebtHistory === debt.id && debt.payments.length > 0 && (
-                        <div className="mt-3 rounded-2xl p-2.5 bg-gray-50 dark:bg-zinc-800/80 max-h-36 overflow-y-auto space-y-1.5 border border-gray-100 dark:border-zinc-800">
-                          <div className="text-[10px] font-bold text-gray-500 mb-1 px-1">سجل التسديدات ({debt.payments.length}):</div>
+                        <div className="mt-2 rounded-xl p-2 bg-gray-50 dark:bg-zinc-800/80 max-h-32 overflow-y-auto space-y-1 border border-gray-100 dark:border-zinc-800">
+                          <div className="text-[9px] font-bold text-gray-500 mb-0.5 px-0.5">سجل التسديدات ({debt.payments.length}):</div>
                           {[...debt.payments].reverse().map((pay, pi) => {
                             const isPayForMe = pay.type ? pay.type === "دين لي" : debt.type === "دين لي";
                             return (
-                              <div key={pi} className="flex justify-between items-center text-[10px] bg-white dark:bg-zinc-900 rounded-xl px-2.5 py-1.5 border border-gray-100 dark:border-zinc-800 shadow-xs">
-                                <div className="flex items-center gap-1.5 font-bold">
-                                  <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black ${isPayForMe ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400'}`}>
-                                    {isPayForMe ? 'استلام (لي)' : 'دفع (عليّ)'}
+                              <div key={pi} className="flex justify-between items-center text-[9px] bg-white dark:bg-zinc-900 rounded-lg px-2 py-1 border border-gray-100 dark:border-zinc-800 shadow-xs">
+                                <div className="flex items-center gap-1 font-bold">
+                                  <span className={`px-1 py-0.2 rounded text-[7px] font-black ${isPayForMe ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400'}`}>
+                                    {isPayForMe ? 'قبض' : 'دفع'}
                                   </span>
                                   <span className="text-gray-800 dark:text-gray-200">{fmt(pay.amount)} د.ع</span>
                                 </div>
-                                <span className="text-gray-400 text-[9px]">{new Date(pay.date).toLocaleDateString("ar-IQ")}</span>
+                                <span className="text-gray-400 text-[8px]">{new Date(pay.date).toLocaleDateString("ar-IQ")}</span>
                               </div>
                             );
                           })}
