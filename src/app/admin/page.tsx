@@ -197,16 +197,18 @@ export default function AdminDashboard() {
 
   // Performance calculations
   const profitMargin = useMemo(() => {
-    if (!realStats.totalRevenue || realStats.totalRevenue <= 0) return 0;
-    return Math.round((realStats.netProfit / realStats.totalRevenue) * 100);
+    const rev = Number(realStats?.totalRevenue) || 0;
+    if (rev <= 0) return 0;
+    return Math.round(((Number(realStats?.netProfit) || 0) / rev) * 100);
   }, [realStats]);
 
   const debtRatio = useMemo(() => {
-    if (!realStats.totalRevenue || realStats.totalRevenue <= 0) return 0;
-    return Math.round((realStats.totalSalaryDebt / realStats.totalRevenue) * 100);
+    const rev = Number(realStats?.totalRevenue) || 0;
+    if (rev <= 0) return 0;
+    return Math.round(((Number(realStats?.totalSalaryDebt) || 0) / rev) * 100);
   }, [realStats]);
 
-  const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+  const fmt = (n: number | undefined | null) => Math.round(Number(n) || 0).toLocaleString("en-US");
 
   if (!isAdmin) {
     return (
@@ -645,52 +647,52 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between text-[11px] text-emerald-600 dark:text-emerald-400 font-bold mb-1">
                     <span>📱 سوشيال</span>
                     <span className="font-mono">
-                      {realStats.totalRevenue > 0
-                        ? Math.round((realStats.breakdown.social / realStats.totalRevenue) * 100)
+                      {(Number(realStats?.totalRevenue) || 0) > 0
+                        ? Math.round(((Number(realStats?.breakdown?.social) || 0) / Number(realStats?.totalRevenue)) * 100)
                         : 0}
                       %
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats.breakdown.social)} د.ع</p>
+                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats?.breakdown?.social)} د.ع</p>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-black/30 rounded-xl p-2.5 border border-slate-200/60 dark:border-white/5">
                   <div className="flex items-center justify-between text-[11px] text-pink-600 dark:text-pink-400 font-bold mb-1">
                     <span>🛒 كيك التطبيق</span>
                     <span className="font-mono">
-                      {realStats.totalRevenue > 0
-                        ? Math.round((realStats.breakdown.appCakes / realStats.totalRevenue) * 100)
+                      {(Number(realStats?.totalRevenue) || 0) > 0
+                        ? Math.round(((Number(realStats?.breakdown?.appCakes) || 0) / Number(realStats?.totalRevenue)) * 100)
                         : 0}
                       %
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats.breakdown.appCakes)} د.ع</p>
+                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats?.breakdown?.appCakes)} د.ع</p>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-black/30 rounded-xl p-2.5 border border-slate-200/60 dark:border-white/5">
                   <div className="flex items-center justify-between text-[11px] text-cyan-600 dark:text-cyan-400 font-bold mb-1">
                     <span>🎓 الأكاديمية</span>
                     <span className="font-mono">
-                      {realStats.totalRevenue > 0
-                        ? Math.round((realStats.breakdown.appAcademy / realStats.totalRevenue) * 100)
+                      {(Number(realStats?.totalRevenue) || 0) > 0
+                        ? Math.round(((Number(realStats?.breakdown?.appAcademy) || 0) / Number(realStats?.totalRevenue)) * 100)
                         : 0}
                       %
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats.breakdown.appAcademy)} د.ع</p>
+                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats?.breakdown?.appAcademy)} د.ع</p>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-black/30 rounded-xl p-2.5 border border-slate-200/60 dark:border-white/5">
                   <div className="flex items-center justify-between text-[11px] text-amber-600 dark:text-amber-400 font-bold mb-1">
                     <span>🧂 مستلزمات ومواد</span>
                     <span className="font-mono">
-                      {realStats.totalRevenue > 0
-                        ? Math.round((realStats.breakdown.storeSupplies / realStats.totalRevenue) * 100)
+                      {(Number(realStats?.totalRevenue) || 0) > 0
+                        ? Math.round(((Number(realStats?.breakdown?.storeSupplies) || 0) / Number(realStats?.totalRevenue)) * 100)
                         : 0}
                       %
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats.breakdown.storeSupplies)} د.ع</p>
+                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats?.breakdown?.storeSupplies)} د.ع</p>
                 </div>
               </div>
             </div>

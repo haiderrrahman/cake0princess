@@ -78,5 +78,11 @@ service cloud.firestore {
     match /store_sales/{saleId} {
       allow read, write: if true;
     }
+    match /cake_recipe_templates/{templateId} {
+      allow read, write: if true;
+    }
+    match /finances_stats/{docId} {
+      allow read, write: if true;
+    }
   }
 }

@@ -218,34 +218,46 @@ export function calculateFinancesStats(
 }
 
 /**
- * Save synchronized stats to localStorage and Firestore
+ * Save synchronized stats to localStorage
  */
 export function persistFinancesStats(stats: FinancesStats) {
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem("finances_stats", JSON.stringify(stats));
+      const sanitized: FinancesStats = {
+        todaySales: Number(stats?.todaySales) || 0,
+        weekSales: Number(stats?.weekSales) || 0,
+        monthSales: Number(stats?.monthSales) || 0,
+        totalRevenue: Number(stats?.totalRevenue) || 0,
+        netProfit: Number(stats?.netProfit) || 0,
+        totalExpenses: Number(stats?.totalExpenses) || 0,
+        totalSalaryDebt: Number(stats?.totalSalaryDebt) || 0,
+        cakeMaterialsExpense: Number(stats?.cakeMaterialsExpense) || 0,
+        breakdown: {
+          social: Number(stats?.breakdown?.social) || 0,
+          appCakes: Number(stats?.breakdown?.appCakes) || 0,
+          appAcademy: Number(stats?.breakdown?.appAcademy) || 0,
+          storeSupplies: Number(stats?.breakdown?.storeSupplies) || 0,
+          appSupplies: Number(stats?.breakdown?.appSupplies) || 0,
+        },
+      };
+      localStorage.setItem("finances_stats", JSON.stringify(sanitized));
       localStorage.setItem(
         "admin_dashboard_stats_v2",
-        JSON.stringify({ _timestamp: Date.now(), data: stats })
+        JSON.stringify({ _timestamp: Date.now(), data: sanitized })
       );
       localStorage.setItem(
         "admin_quick_dashboard_v2",
-        JSON.stringify({ _timestamp: Date.now(), data: stats })
+        JSON.stringify({ _timestamp: Date.now(), data: sanitized })
       );
     } catch (e) {
       console.warn("Error caching finances_stats:", e);
     }
   }
-
-  // Also sync to Firestore doc asynchronously for cross-device consistency
-  setDoc(doc(db, "finances_stats", "summary"), {
-    ...stats,
-    updatedAt: new Date().toISOString(),
-  }).catch(() => {});
 }
 
 /**
  * Load initial stats from localStorage for instant 0-second render
+ * Always guarantees every property is a valid number to prevent runtime crashes.
  */
 export function getCachedFinancesStats(): FinancesStats {
   if (typeof window === "undefined") return DEFAULT_FINANCES_STATS;
@@ -253,8 +265,24 @@ export function getCachedFinancesStats(): FinancesStats {
     const raw = localStorage.getItem("finances_stats");
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.totalRevenue === "number") {
-        return parsed;
+      if (parsed && typeof parsed === "object") {
+        return {
+          todaySales: Number(parsed.todaySales) || 0,
+          weekSales: Number(parsed.weekSales) || 0,
+          monthSales: Number(parsed.monthSales ?? parsed.monthRevenue) || 0,
+          totalRevenue: Number(parsed.totalRevenue) || 0,
+          netProfit: Number(parsed.netProfit) || 0,
+          totalExpenses: Number(parsed.totalExpenses) || 0,
+          totalSalaryDebt: Number(parsed.totalSalaryDebt) || 0,
+          cakeMaterialsExpense: Number(parsed.cakeMaterialsExpense) || 0,
+          breakdown: {
+            social: Number(parsed.breakdown?.social) || 0,
+            appCakes: Number(parsed.breakdown?.appCakes) || 0,
+            appAcademy: Number(parsed.breakdown?.appAcademy) || 0,
+            storeSupplies: Number(parsed.breakdown?.storeSupplies) || 0,
+            appSupplies: Number(parsed.breakdown?.appSupplies) || 0,
+          },
+        };
       }
     }
   } catch {}

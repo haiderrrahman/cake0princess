@@ -103,17 +103,17 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-3 gap-2 mb-4">
             <div className="bg-gray-50 dark:bg-zinc-800 rounded-2xl p-3 text-center border border-gray-100 dark:border-zinc-700 flex flex-col justify-center">
               <p className="text-gray-500 dark:text-gray-400 text-[10px] font-bold mb-1">المبيعات الشهرية</p>
-              <p className="text-blue-600 dark:text-blue-400 font-black text-sm">{loading ? "..." : data.monthSales.toLocaleString()}</p>
+              <p className="text-blue-600 dark:text-blue-400 font-black text-sm">{loading ? "..." : (data?.monthSales ?? 0).toLocaleString()}</p>
             </div>
             <div className="bg-gray-50 dark:bg-zinc-800 rounded-2xl p-3 text-center flex flex-col justify-center border border-emerald-100 dark:border-emerald-800/30">
               <p className="text-gray-500 dark:text-gray-400 text-[10px] font-bold mb-1">مبيعات الأسبوع</p>
               <p className="text-emerald-600 dark:text-emerald-400 font-black text-sm">
-                {loading ? "..." : data.weekSales.toLocaleString()}
+                {loading ? "..." : (data?.weekSales ?? 0).toLocaleString()}
               </p>
             </div>
             <div className="bg-gray-50 dark:bg-zinc-800 rounded-2xl p-3 text-center border border-gray-100 dark:border-zinc-700 flex flex-col justify-center">
               <p className="text-gray-500 dark:text-gray-400 text-[10px] font-bold mb-1">مبيعات اليوم</p>
-              <p className="text-pink-600 dark:text-pink-400 font-black text-sm">{loading ? "..." : data.todaySales.toLocaleString()}</p>
+              <p className="text-pink-600 dark:text-pink-400 font-black text-sm">{loading ? "..." : (data?.todaySales ?? 0).toLocaleString()}</p>
             </div>
           </div>
 
@@ -148,18 +148,18 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <div className="bg-purple-50 dark:bg-purple-900/10 rounded-2xl p-3 border border-purple-100 dark:border-purple-800/20">
                   <p className="text-[9px] font-bold text-purple-600 dark:text-purple-400 mb-0.5 flex items-center gap-1"><DollarSign className="w-3 h-3"/> الإيرادات</p>
-                  <p className="text-sm font-black text-purple-700 dark:text-purple-300">{loading ? "..." : data.totalRevenue.toLocaleString()} <span className="text-[8px]">د.ع</span></p>
+                  <p className="text-sm font-black text-purple-700 dark:text-purple-300">{loading ? "..." : (data?.totalRevenue ?? 0).toLocaleString()} <span className="text-[8px]">د.ع</span></p>
                 </div>
                 <div className="bg-red-50 dark:bg-red-900/10 rounded-2xl p-3 border border-red-100 dark:border-red-800/20">
                   <p className="text-[9px] font-bold text-red-600 dark:text-red-400 mb-0.5 flex items-center gap-1"><TrendingDown className="w-3 h-3"/> أموال الكيك</p>
-                  <p className="text-sm font-black text-red-700 dark:text-red-300">{loading ? "..." : data.totalExpenses.toLocaleString()} <span className="text-[8px]">د.ع</span></p>
+                  <p className="text-sm font-black text-red-700 dark:text-red-300">{loading ? "..." : (data?.totalExpenses ?? 0).toLocaleString()} <span className="text-[8px]">د.ع</span></p>
                 </div>
               </div>
               
               <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl p-3 mb-2 border border-emerald-100 dark:border-emerald-800/20 flex justify-between items-center">
                 <div>
                   <p className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 mb-0.5 flex items-center gap-1"><TrendingUp className="w-3 h-3"/> صافي الربح التقديري (بعد المصاريف)</p>
-                  <p className="text-base font-black text-emerald-700 dark:text-emerald-300">{loading ? "..." : data.netProfit.toLocaleString()} <span className="text-[8px]">د.ع</span></p>
+                  <p className="text-base font-black text-emerald-700 dark:text-emerald-300">{loading ? "..." : (data?.netProfit ?? 0).toLocaleString()} <span className="text-[8px]">د.ع</span></p>
                 </div>
               </div>
 
@@ -168,7 +168,7 @@ export default function AdminDashboard() {
                   <span className="text-lg">👤</span>
                   <div>
                     <p className="text-[9px] font-bold text-orange-600 dark:text-orange-400 mb-0.5">دين مستحق (الراتب)</p>
-                    <p className="text-sm font-black text-orange-700 dark:text-orange-300">{loading ? "..." : data.totalSalaryDebt.toLocaleString()} <span className="text-[8px]">د.ع</span></p>
+                    <p className="text-sm font-black text-orange-700 dark:text-orange-300">{loading ? "..." : (data?.totalSalaryDebt ?? 0).toLocaleString()} <span className="text-[8px]">د.ع</span></p>
                   </div>
                 </div>
                 <Link href="/admin/finances" className="bg-orange-500 hover:bg-orange-600 text-white font-black text-[9px] px-2.5 py-1.5 rounded-lg transition shadow-sm whitespace-nowrap">
@@ -179,19 +179,19 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-4 gap-1">
                 <div className="bg-gray-50 dark:bg-zinc-800 rounded-xl p-2 text-center">
                    <p className="text-[8px] text-gray-500 dark:text-gray-400 mb-0.5">سوشيال</p>
-                   <p className="text-[10px] font-black text-gray-800 dark:text-gray-200">{loading ? "..." : data.breakdown.social.toLocaleString()}</p>
+                   <p className="text-[10px] font-black text-gray-800 dark:text-gray-200">{loading ? "..." : (data?.breakdown?.social ?? 0).toLocaleString()}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-zinc-800 rounded-xl p-2 text-center">
                    <p className="text-[8px] text-gray-500 dark:text-gray-400 mb-0.5">مواد كيك</p>
-                   <p className="text-[10px] font-black text-gray-800 dark:text-gray-200">{loading ? "..." : data.breakdown.storeSupplies.toLocaleString()}</p>
+                   <p className="text-[10px] font-black text-gray-800 dark:text-gray-200">{loading ? "..." : (data?.breakdown?.storeSupplies ?? 0).toLocaleString()}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-zinc-800 rounded-xl p-2 text-center">
                    <p className="text-[8px] text-gray-500 dark:text-gray-400 mb-0.5">أكاديمية</p>
-                   <p className="text-[10px] font-black text-gray-800 dark:text-gray-200">{loading ? "..." : data.breakdown.appAcademy.toLocaleString()}</p>
+                   <p className="text-[10px] font-black text-gray-800 dark:text-gray-200">{loading ? "..." : (data?.breakdown?.appAcademy ?? 0).toLocaleString()}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-zinc-800 rounded-xl p-2 text-center">
                    <p className="text-[8px] text-gray-500 dark:text-gray-400 mb-0.5">تطبيق</p>
-                   <p className="text-[10px] font-black text-gray-800 dark:text-gray-200">{loading ? "..." : data.breakdown.appCakes.toLocaleString()}</p>
+                   <p className="text-[10px] font-black text-gray-800 dark:text-gray-200">{loading ? "..." : (data?.breakdown?.appCakes ?? 0).toLocaleString()}</p>
                 </div>
               </div>
             </div>

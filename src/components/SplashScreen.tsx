@@ -3,6 +3,21 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 
+const PARTICLES = [
+  { size: 16, x: 70, y: -90, scale: 1.2, duration: 1.2 },
+  { size: 22, x: -80, y: 60, scale: 0.9, duration: 1.4 },
+  { size: 14, x: 100, y: 80, scale: 1.4, duration: 1.1 },
+  { size: 18, x: -120, y: -70, scale: 0.8, duration: 1.3 },
+  { size: 24, x: 140, y: -50, scale: 1.1, duration: 1.5 },
+  { size: 12, x: -100, y: 120, scale: 1.3, duration: 1.2 },
+  { size: 20, x: 50, y: 140, scale: 0.7, duration: 1.0 },
+  { size: 15, x: -140, y: -40, scale: 1.0, duration: 1.4 },
+  { size: 22, x: 110, y: -130, scale: 1.2, duration: 1.3 },
+  { size: 13, x: -60, y: -140, scale: 0.9, duration: 1.1 },
+  { size: 17, x: 130, y: 90, scale: 1.3, duration: 1.4 },
+  { size: 21, x: -130, y: 100, scale: 1.1, duration: 1.2 },
+];
+
 export default function SplashScreen() {
   const [show, setShow] = useState(true);
 
@@ -38,25 +53,25 @@ export default function SplashScreen() {
           />
 
           {/* Pink Cream Splashes */}
-          {[...Array(12)].map((_, i) => (
+          {PARTICLES.map((p, i) => (
             <motion.div
               key={`cream-${i}`}
               className={`absolute rounded-full ${i % 2 === 0 ? "bg-[#e8456b]" : "bg-[#ff8da6]"}`}
               initial={{ opacity: 0, scale: 0, x: 0, y: 0 }}
               animate={{
                 opacity: [0, 1, 0],
-                scale: [0, Math.random() * 1.5 + 0.5, 0],
-                x: (Math.random() - 0.5) * (typeof window !== 'undefined' ? window.innerWidth * 0.8 : 300),
-                y: (Math.random() - 0.5) * (typeof window !== 'undefined' ? window.innerHeight * 0.8 : 300),
+                scale: [0, p.scale, 0],
+                x: p.x,
+                y: p.y,
               }}
               transition={{
-                duration: 1 + Math.random() * 0.5,
+                duration: p.duration,
                 delay: 0.2, // Explode outwards
                 ease: "easeOut"
               }}
               style={{
-                width: `${Math.random() * 15 + 10}px`,
-                height: `${Math.random() * 15 + 10}px`,
+                width: `${p.size}px`,
+                height: `${p.size}px`,
                 filter: "drop-shadow(0px 4px 6px rgba(232, 69, 107, 0.3))"
               }}
             />
