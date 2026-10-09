@@ -740,36 +740,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* HOME FINANCE VIP CARD */}
-          <div>
-            <Link
-              href="/admin/home-finance"
-              prefetch={true}
-              className="bg-gradient-to-r from-rose-500 via-pink-600 to-purple-600 dark:from-rose-900/90 dark:via-red-900/80 dark:to-purple-950/90 border border-pink-400/30 dark:border-rose-500/30 rounded-3xl p-5 sm:p-6 flex items-center justify-between shadow-xl shadow-pink-500/15 dark:shadow-2xl text-white relative overflow-hidden group hover:scale-[1.01] transition-all"
-            >
-              <div className="absolute right-0 top-0 w-48 h-48 bg-white/20 dark:bg-rose-500/15 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
-              <div className="relative z-10 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-white/25 border border-white/30 text-[10px] font-black tracking-wider text-white">
-                    قسم مستقل VIP
-                  </span>
-                  <span className="text-xs text-pink-100 dark:text-rose-200/80 font-bold">ميزانية المنزل والعائلة</span>
-                </div>
-                <h2 className="text-lg sm:text-xl font-black tracking-tight text-white flex items-center gap-2">
-                  <Home className="w-5 h-5 text-pink-200 dark:text-rose-300" />
-                  إدارة المنزل والميزانية العائلية المتكاملة
-                </h2>
-                <p className="text-xs text-pink-100/90 dark:text-rose-200/70 font-bold max-w-xl">
-                  مستقل كلياً عن صندوق الكيك: إدارة رواتب الأسرة، المصاريف الشهرية، المرصد التنبؤي، وخطة القضاء على الديون.
-                </p>
-              </div>
-
-              <div className="w-14 h-14 rounded-2xl bg-white/20 dark:bg-white/10 border border-white/30 dark:border-white/20 flex items-center justify-center backdrop-blur-md shrink-0 group-hover:scale-110 transition-transform shadow-md">
-                <span className="text-3xl">🏠</span>
-              </div>
-            </Link>
-          </div>
-
           {/* STRATEGIC SECTIONS MATRIX */}
           <div className="space-y-6">
             {commandSections.map((sec, secIdx) => (
