@@ -39,7 +39,7 @@ import { db } from "@/lib/firebase";
 interface ScanCakeInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  inventoryItems: any[];
+  inventoryItems?: any[];
   onSuccess: () => void;
   initialMode?: "scan" | "manual";
 }
@@ -47,10 +47,12 @@ interface ScanCakeInvoiceModalProps {
 export default function ScanCakeInvoiceModal({
   isOpen,
   onClose,
-  inventoryItems,
+  inventoryItems = [],
   onSuccess,
   initialMode = "scan"
 }: ScanCakeInvoiceModalProps) {
+  const safeInventory = Array.isArray(inventoryItems) ? inventoryItems.filter(i => i && typeof i === "object") : [];
+
   // Attached Images / Files
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [attachedImagePreview, setAttachedImagePreview] = useState<string | null>(null);
@@ -216,7 +218,8 @@ export default function ScanCakeInvoiceModal({
       // Match extracted items with existing inventory
       const matched = extracted.items.map((item) => {
         const normName = normalizeArabicText(item.name);
-        const directMatch = inventoryItems.find((inv) => {
+        const directMatch = safeInventory.find((inv) => {
+          if (!inv || !inv.name) return false;
           const invNorm = normalizeArabicText(inv.name);
           return invNorm === normName || invNorm.includes(normName) || normName.includes(invNorm);
         });
@@ -346,7 +349,8 @@ export default function ScanCakeInvoiceModal({
 
       // Match inventory
       const normName = normalizeArabicText(name);
-      const directMatch = inventoryItems.find((inv) => {
+      const directMatch = safeInventory.find((inv) => {
+        if (!inv || !inv.name) return false;
         const invNorm = normalizeArabicText(inv.name);
         return invNorm === normName || invNorm.includes(normName) || normName.includes(invNorm);
       });
@@ -841,7 +845,7 @@ export default function ScanCakeInvoiceModal({
                             handleUpdateItem(idx, { name: val });
                             // Auto check inventory match
                             const norm = normalizeArabicText(val);
-                            const found = inventoryItems.find((inv) => normalizeArabicText(inv.name) === norm);
+                            const found = safeInventory.find((inv) => inv && inv.name && normalizeArabicText(inv.name) === norm);
                             if (found) {
                               handleUpdateItem(idx, {
                                 matchedInventoryId: found.id,
@@ -879,7 +883,7 @@ export default function ScanCakeInvoiceModal({
                                 isNewItem: true
                               });
                             } else {
-                              const found = inventoryItems.find((inv) => inv.id === val);
+                              const found = safeInventory.find((inv) => inv && inv.id === val);
                               handleUpdateItem(idx, {
                                 matchedInventoryId: val,
                                 matchedInventoryName: found?.name,
@@ -896,7 +900,7 @@ export default function ScanCakeInvoiceModal({
                           }`}
                         >
                           <option value="new">✨ مادة جديدة (ستُضاف للمخزن)</option>
-                          {inventoryItems.map((inv) => (
+                          {safeInventory.map((inv) => (
                             <option key={inv.id} value={inv.id}>
                               📦 {inv.name} (متوفر: {inv.quantity} {inv.unit})
                             </option>

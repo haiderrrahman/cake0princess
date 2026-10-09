@@ -1587,7 +1587,7 @@ function AdminHubContent() {
           fetchAll();
           setIsScanCakeInvoiceOpen(false);
         }}
-        inventoryItems={inventory}
+        inventoryItems={inventory || []}
       />
 
       <ManualCakePurchaseModal
