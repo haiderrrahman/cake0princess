@@ -142,6 +142,15 @@ export default function ScanCakeInvoiceModal({
     }
   }, [isOpen, initialMode]);
 
+  const totalCalculated = items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
+
+  // Auto-fill split debt default to 50%
+  useEffect(() => {
+    if (isOpen && paymentSource === "split" && (!splitDebtAmount || Number(splitDebtAmount) === 0) && totalCalculated > 0) {
+      setSplitDebtAmount(String(Math.round(totalCalculated / 2)));
+    }
+  }, [isOpen, paymentSource, totalCalculated]);
+
   if (!isOpen) return null;
 
   // Fast client-side image compression for Gemini AI
@@ -378,15 +387,6 @@ export default function ScanCakeInvoiceModal({
       toast.error("لم يتم العثور على أسطر صالحة");
     }
   };
-
-  const totalCalculated = items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
-
-  // Auto-fill split debt default to 50%
-  useEffect(() => {
-    if (paymentSource === "split" && (!splitDebtAmount || Number(splitDebtAmount) === 0) && totalCalculated > 0) {
-      setSplitDebtAmount(String(Math.round(totalCalculated / 2)));
-    }
-  }, [paymentSource, totalCalculated]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
