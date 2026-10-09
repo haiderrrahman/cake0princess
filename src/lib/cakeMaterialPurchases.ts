@@ -310,6 +310,8 @@ export async function recordSingleCakePurchase(data: {
           description: `شراء مواد كيك (${invoiceTag}): ${quantity} ${unit} ${itemName}${storeTag} (دين من الراتب)`,
           month,
           purchaseId: purchaseDoc.id,
+          imageUrl: invoiceImageUrl || "",
+          receiptImages: invoiceImageUrl ? [invoiceImageUrl] : [],
           createdAt: serverTimestamp(),
           isDebt: true
         });
@@ -321,6 +323,8 @@ export async function recordSingleCakePurchase(data: {
           description: `شراء مواد كيك (${invoiceTag}): ${quantity} ${unit} ${itemName}${storeTag} (أموال الكيك)`,
           month,
           purchaseId: purchaseDoc.id,
+          imageUrl: invoiceImageUrl || "",
+          receiptImages: invoiceImageUrl ? [invoiceImageUrl] : [],
           createdAt: serverTimestamp(),
           isDebt: false
         });
@@ -332,6 +336,8 @@ export async function recordSingleCakePurchase(data: {
         description: `شراء مواد كيك (${invoiceTag}): ${quantity} ${unit} ${itemName}${storeTag}`,
         month,
         purchaseId: purchaseDoc.id,
+        imageUrl: invoiceImageUrl || "",
+        receiptImages: invoiceImageUrl ? [invoiceImageUrl] : [],
         createdAt: serverTimestamp(),
         isDebt: paymentSource === "salary"
       });
@@ -381,7 +387,7 @@ export async function recordCakeInvoiceBatch(data: {
     invoiceNumber: invoiceNumber || "",
     totalAmount: Number(totalAmount) || 0,
     itemCount: items.length,
-    imageUrl: "", // No invoice image attached as requested
+    imageUrl: imageUrl || "",
     paymentSource: paymentSource || "cake",
     splitDebtAmount: Number(splitDebtAmount) || 0,
     items: items.map((i) => ({
@@ -453,7 +459,7 @@ export async function recordCakeInvoiceBatch(data: {
       hasInvoice: true,
       invoiceId,
       invoiceNumber: invoiceNumber || "",
-      invoiceImageUrl: "",
+      invoiceImageUrl: imageUrl || "",
       storeName: storeName || "",
       paymentSource: paymentSource || "cake",
       createdAt: serverTimestamp()
@@ -492,6 +498,8 @@ export async function recordCakeInvoiceBatch(data: {
           storeName: storeName || "",
           itemCount: items.length,
           items: mappedItems,
+          imageUrl: imageUrl || "",
+          receiptImages: imageUrl ? [imageUrl] : [],
           isInventoryExpense: true,
           createdAt: serverTimestamp(),
           isDebt: true
@@ -510,6 +518,8 @@ export async function recordCakeInvoiceBatch(data: {
           storeName: storeName || "",
           itemCount: items.length,
           items: mappedItems,
+          imageUrl: imageUrl || "",
+          receiptImages: imageUrl ? [imageUrl] : [],
           isInventoryExpense: true,
           createdAt: serverTimestamp(),
           isDebt: false
@@ -528,6 +538,8 @@ export async function recordCakeInvoiceBatch(data: {
         storeName: storeName || "",
         itemCount: items.length,
         items: mappedItems,
+        imageUrl: imageUrl || "",
+        receiptImages: imageUrl ? [imageUrl] : [],
         isInventoryExpense: true,
         createdAt: serverTimestamp(),
         isDebt: paymentSource === "salary"

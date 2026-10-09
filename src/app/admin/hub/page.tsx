@@ -7,7 +7,7 @@ import {
   DollarSign, AlertTriangle, TrendingUp, Smartphone, Receipt,
   BarChart3, RefreshCw, ChevronRight, User, Phone, MapPin,
   Calendar, ArrowRight, Search, Filter, Edit, ChevronDown, GraduationCap, PlayCircle, Image as ImageIcon, Check, MessageCircle, Sparkles, PackageCheck, Banknote,
-  Trash2, ExternalLink, ShoppingCart, Store, ChevronUp, Layers, Copy, ChevronLeft, X
+  Trash2, ExternalLink, ShoppingCart, Store, ChevronUp, Layers, Copy, ChevronLeft, X, Camera
 } from "lucide-react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, query, orderBy, limit, onSnapshot, increment, where } from "firebase/firestore";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ import ManualCakePurchaseModal from "@/components/ManualCakePurchaseModal";
 import CakeMaterialTimelineModal from "@/components/CakeMaterialTimelineModal";
 import EditCakeInvoiceModal from "@/components/EditCakeInvoiceModal";
 import CakeCostBreakdownModal from "@/components/CakeCostBreakdownModal";
+import MaterialPurchaseHistoryModal from "@/components/MaterialPurchaseHistoryModal";
 import { CakeMaterialPurchase, calculateItemConsumption } from "@/lib/cakeMaterialPurchases";
 import { customConfirm } from '@/lib/customConfirm';
 
@@ -215,6 +216,9 @@ function AdminHubContent() {
   const [viewingInvoice, setViewingInvoice] = useState<any | null>(null);
   const [editingCakeInvoice, setEditingCakeInvoice] = useState<any | null>(null);
   const [invoiceItemFilter, setInvoiceItemFilter] = useState("");
+  const [isMaterialHistoryModalOpen, setIsMaterialHistoryModalOpen] = useState(false);
+  const [selectedHistoryItemName, setSelectedHistoryItemName] = useState("");
+  const [previewZoomImageUrl, setPreviewZoomImageUrl] = useState<{ url: string; title: string } | null>(null);
 
   const toggleExpandInvoice = (invId: string) => {
     setExpandedInvoiceIds(prev => ({
@@ -986,6 +990,7 @@ function AdminHubContent() {
       paymentSource: "none" | "cake" | "salary" | "split";
       splitDebtAmount?: number;
       totalAmount: number;
+      imageUrl?: string;
       items: CakeMaterialPurchase[];
     }> = {};
 
@@ -1010,6 +1015,7 @@ function AdminHubContent() {
           paymentSource: p.paymentSource || "cake",
           splitDebtAmount: p.splitDebtAmount || 0,
           totalAmount: 0,
+          imageUrl: p.invoiceImageUrl || "",
           items: []
         };
       }
@@ -1018,6 +1024,7 @@ function AdminHubContent() {
       groups[key].totalAmount += Number(p.totalPrice || 0);
       if (!groups[key].storeName && p.storeName) groups[key].storeName = p.storeName;
       if (!groups[key].invoiceNumber && p.invoiceNumber) groups[key].invoiceNumber = p.invoiceNumber;
+      if (!groups[key].imageUrl && p.invoiceImageUrl) groups[key].imageUrl = p.invoiceImageUrl;
     });
 
     return Object.values(groups).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -1294,11 +1301,23 @@ function AdminHubContent() {
                 <button
                   type="button"
                   onClick={() => setIsScanCakeInvoiceOpen(true)}
-                  className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 text-slate-950 rounded-xl px-2.5 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black shadow-md active:scale-95 transition"
+                  className="bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 text-slate-950 rounded-xl px-2.5 sm:px-3.5 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black shadow-md active:scale-95 transition"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-950" />
-                  <span className="hidden sm:inline">📸 فاتورة بالـ AI</span>
-                  <span className="sm:hidden">📸 فاتورة</span>
+                  <Receipt className="w-3.5 h-3.5 text-amber-950" />
+                  <span className="hidden sm:inline">🧾 إضافة فاتورة مواد</span>
+                  <span className="sm:hidden">🧾 إضافة فاتورة</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedHistoryItemName("");
+                    setIsMaterialHistoryModalOpen(true);
+                  }}
+                  className="bg-white/15 hover:bg-white/25 text-white rounded-xl px-2.5 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black backdrop-blur-md transition active:scale-95 border border-white/20"
+                >
+                  <Search className="w-3.5 h-3.5 text-amber-300" />
+                  <span className="hidden sm:inline">شوكت ومنين اشتريت؟</span>
+                  <span className="sm:hidden">كاشف الشراء</span>
                 </button>
                 <button
                   type="button"
@@ -1306,11 +1325,10 @@ function AdminHubContent() {
                     setManualPurchaseInitialItem(null);
                     setIsManualCakePurchaseOpen(true);
                   }}
-                  className="bg-white/15 hover:bg-white/25 text-white rounded-xl px-2.5 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black backdrop-blur-md transition active:scale-95 border border-white/20"
+                  className="bg-white/10 hover:bg-white/20 text-white rounded-xl px-2.5 sm:px-3 py-2 flex items-center gap-1 sm:gap-1.5 text-xs font-black backdrop-blur-md transition active:scale-95 border border-white/15 hidden md:flex"
                 >
                   <ShoppingCart className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">تسجيل شراء</span>
-                  <span className="sm:hidden">شراء</span>
+                  <span>شراء مفرد</span>
                 </button>
                 <button
                   type="button"
@@ -1598,6 +1616,25 @@ function AdminHubContent() {
           setIsManualCakePurchaseOpen(true);
         }}
         onDeletePurchase={handleDeletePurchase}
+      />
+
+      <MaterialPurchaseHistoryModal
+        isOpen={isMaterialHistoryModalOpen}
+        onClose={() => {
+          setIsMaterialHistoryModalOpen(false);
+          setSelectedHistoryItemName("");
+        }}
+        initialItemName={selectedHistoryItemName}
+        purchases={purchases}
+        inventoryItems={inventory}
+        onViewImage={(url: string, title: string) => setPreviewZoomImageUrl({ url, title })}
+        onOpenInvoiceDetails={(inv: any) => setViewingInvoice(inv)}
+        onOpenManualPurchase={(itemName: string) => {
+          setIsMaterialHistoryModalOpen(false);
+          const found = inventory.find((i: any) => i.name.trim().toLowerCase() === itemName.trim().toLowerCase());
+          setManualPurchaseInitialItem(found || { name: itemName });
+          setIsManualCakePurchaseOpen(true);
+        }}
       />
 
       <div className="p-5">
@@ -2163,6 +2200,35 @@ function AdminHubContent() {
                       />
                     </div>
 
+                    {/* Quick Material Purchase Lookup Card ("شوكت ومنين اشتريت؟") */}
+                    <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-purple-500/10 dark:from-amber-950/20 dark:via-orange-950/20 dark:to-purple-950/20 border border-amber-200/70 dark:border-amber-800/40 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                          <Search className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
+                            <span>كاشف تاريخ ومحلات الشراء</span>
+                            <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">شوكت ومنين؟</span>
+                          </h4>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 font-bold mt-0.5">
+                            ابحث عن أي مادة مخزنية لمعرفة متى اشتريتها آخر مرة، من أي متجر، مقارنة الأسعار، وسجل الفواتير السابقة.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedHistoryItemName("");
+                          setIsMaterialHistoryModalOpen(true);
+                        }}
+                        className="bg-amber-500 hover:bg-amber-600 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 transition active:scale-95 shrink-0"
+                      >
+                        <Search className="w-3.5 h-3.5" />
+                        <span>فتح كاشف المشتريات</span>
+                      </button>
+                    </div>
+
                     {lowStockItems.length > 0 && (
                       <div className="rounded-3xl overflow-hidden shadow-lg border border-orange-200 dark:border-orange-800/40">
                         {/* Header */}
@@ -2252,6 +2318,17 @@ function AdminHubContent() {
                                           className="flex-1 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 text-gray-700 dark:text-gray-200 text-[10px] font-bold py-1 rounded-lg transition text-center"
                                         >
                                           🛒 شراء بتفاصيل
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedHistoryItemName(i.name);
+                                            setIsMaterialHistoryModalOpen(true);
+                                          }}
+                                          className="w-7 h-7 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-700 dark:text-amber-300 rounded-lg flex items-center justify-center shrink-0 transition"
+                                          title="شوكت ومنين اشتريت هذه المادة؟"
+                                        >
+                                          <Search className="w-3.5 h-3.5" />
                                         </button>
                                         <button
                                           type="button"
@@ -2349,6 +2426,17 @@ function AdminHubContent() {
                                           >
                                             <ShoppingCart className="w-3 h-3" />
                                             <span>شراء</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedHistoryItemName(item.name);
+                                              setIsMaterialHistoryModalOpen(true);
+                                            }}
+                                            className="w-6 h-6 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 flex items-center justify-center shrink-0 transition"
+                                            title="شوكت ومنين اشتريت هذه المادة؟"
+                                          >
+                                            <Search className="w-3 h-3" />
                                           </button>
                                           <button
                                             type="button"
@@ -2704,6 +2792,16 @@ function AdminHubContent() {
                                   <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
                                     🎂 أموال الكيك
                                   </span>
+                                )}
+
+                                {inv.imageUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewZoomImageUrl({ url: inv.imageUrl!, title: `وصل فاتورة: ${inv.storeName}` })}
+                                    className="text-[10px] font-black px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50 hover:bg-blue-100 transition flex items-center gap-1 active:scale-95"
+                                  >
+                                    <Camera className="w-3 h-3" /> صورة الوصل
+                                  </button>
                                 )}
                               </div>
 
@@ -3194,6 +3292,34 @@ function AdminHubContent() {
               </button>
             </div>
 
+            {/* Attached receipt photo preview if exists */}
+            {viewingInvoice.imageUrl && (
+              <div className="mb-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-zinc-900 dark:to-zinc-800/80 rounded-2xl border border-blue-100 dark:border-zinc-700 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <img 
+                    src={viewingInvoice.imageUrl} 
+                    alt="صورة الوصل" 
+                    className="w-12 h-12 object-cover rounded-xl border border-blue-200 dark:border-zinc-700 shadow-sm cursor-pointer hover:opacity-90 transition"
+                    onClick={() => setPreviewZoomImageUrl({ url: viewingInvoice.imageUrl, title: `وصل: ${viewingInvoice.storeName}` })}
+                  />
+                  <div>
+                    <p className="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1">
+                      <Camera className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>صورة الوصل / الفاتورة مرفقة</span>
+                    </p>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold">انقر على الصورة للمعاينة والتكبير بالحجم الكامل</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewZoomImageUrl({ url: viewingInvoice.imageUrl, title: `وصل: ${viewingInvoice.storeName}` })}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm active:scale-95 shrink-0"
+                >
+                  تكبير الصورة 🔍
+                </button>
+              </div>
+            )}
+
             {/* Search inside invoice items */}
             <div className="relative mb-3">
               <input
@@ -3350,6 +3476,50 @@ function AdminHubContent() {
             setViewingCostOrder(null);
           }}
         />
+      )}
+
+      {/* Receipt Photo Fullscreen Lightbox Modal */}
+      {previewZoomImageUrl && (
+        <div 
+          className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200"
+          onClick={() => setPreviewZoomImageUrl(null)}
+        >
+          <div 
+            className="relative max-w-3xl w-full max-h-[92vh] bg-zinc-950 rounded-3xl overflow-hidden border border-zinc-800 shadow-2xl flex flex-col animate-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/90 text-white">
+              <div className="flex items-center gap-2 min-w-0">
+                <Receipt className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="font-bold text-sm truncate">{previewZoomImageUrl.title || "معاينة صورة الفاتورة"}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a 
+                  href={previewZoomImageUrl.url} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="text-xs bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-xl text-zinc-200 font-bold transition flex items-center gap-1"
+                >
+                  فتح بالحجم الكامل ↗
+                </a>
+                <button 
+                  type="button" 
+                  onClick={() => setPreviewZoomImageUrl(null)}
+                  className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-full text-zinc-300 hover:text-white transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-3 flex items-center justify-center bg-black/50 min-h-[250px]">
+              <img 
+                src={previewZoomImageUrl.url} 
+                alt={previewZoomImageUrl.title} 
+                className="max-h-[78vh] w-auto max-w-full object-contain rounded-xl shadow-lg"
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

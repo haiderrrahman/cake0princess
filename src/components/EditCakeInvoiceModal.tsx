@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   Check,
@@ -11,12 +11,17 @@ import {
   Plus,
   AlertCircle,
   Banknote,
-  DollarSign
+  DollarSign,
+  Camera,
+  Upload,
+  Eye,
+  Image as ImageIcon
 } from "lucide-react";
 import { collection, getDocs, updateDoc, deleteDoc, addDoc, doc, query, where, limit, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { toast } from "sonner";
 import { CakeMaterialPurchase } from "@/lib/cakeMaterialPurchases";
+import { uploadImageResiliently } from "@/lib/hfImageStore";
 
 interface EditCakeInvoiceModalProps {
   isOpen: boolean;
@@ -31,6 +36,7 @@ interface EditCakeInvoiceModalProps {
     paymentSource?: "none" | "cake" | "salary" | "split";
     splitDebtAmount?: number;
     totalAmount: number;
+    imageUrl?: string;
     items: CakeMaterialPurchase[];
   } | null;
   onSuccess: () => void;
@@ -49,7 +55,13 @@ export default function EditCakeInvoiceModal({
   const [splitDebtAmount, setSplitDebtAmount] = useState("");
   const [items, setItems] = useState<CakeMaterialPurchase[]>([]);
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([]);
+  const [imageUrl, setImageUrl] = useState("");
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isPhotoZoomed, setIsPhotoZoomed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (invoice && isOpen) {
@@ -59,6 +71,7 @@ export default function EditCakeInvoiceModal({
       setPaymentSource(invoice.paymentSource || "cake");
       setSplitDebtAmount(invoice.splitDebtAmount ? String(invoice.splitDebtAmount) : "");
       setItems(invoice.items ? JSON.parse(JSON.stringify(invoice.items)) : []);
+      setImageUrl(invoice.imageUrl || invoice.items?.[0]?.invoiceImageUrl || "");
 
       // Load store suggestions
       const fetchStores = async () => {
@@ -110,6 +123,23 @@ export default function EditCakeInvoiceModal({
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleImageFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingImage(true);
+    const toastId = toast.loading("جاري رفع صورة الوصل وحفظها بأمان...");
+    try {
+      const url = await uploadImageResiliently("receipts", `edit_${Date.now()}`, file);
+      setImageUrl(url);
+      toast.success("تم إرفاق صورة الوصل بنجاح 📸", { id: toastId });
+    } catch (err) {
+      toast.error("فشل رفع صورة الوصل", { id: toastId });
+    } finally {
+      setIsUploadingImage(false);
+      if (e.target) e.target.value = "";
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!storeName.trim()) {
@@ -131,6 +161,7 @@ export default function EditCakeInvoiceModal({
             purchaseDate: date,
             paymentSource,
             splitDebtAmount: debtAmountNum,
+            invoiceImageUrl: imageUrl || "",
             itemName: item.itemName,
             quantity: Number(item.quantity) || 1,
             unitPrice: Number(item.unitPrice) || 0,
@@ -157,6 +188,7 @@ export default function EditCakeInvoiceModal({
             date,
             paymentSource,
             splitDebtAmount: debtAmountNum,
+            imageUrl: imageUrl || "",
             totalAmount: effectiveTotal,
             lastUpdated: serverTimestamp()
           });
@@ -210,6 +242,8 @@ export default function EditCakeInvoiceModal({
           invoiceNumber: invoiceNumber.trim(),
           storeName: storeName.trim(),
           itemCount: items.length,
+          imageUrl: imageUrl || "",
+          receiptImages: imageUrl ? [imageUrl] : [],
           isInventoryExpense: true,
           createdAt: serverTimestamp(),
           isDebt: false
@@ -231,6 +265,8 @@ export default function EditCakeInvoiceModal({
           invoiceNumber: invoiceNumber.trim(),
           storeName: storeName.trim(),
           itemCount: items.length,
+          imageUrl: imageUrl || "",
+          receiptImages: imageUrl ? [imageUrl] : [],
           isInventoryExpense: true,
           createdAt: serverTimestamp(),
           isDebt: true
@@ -253,6 +289,8 @@ export default function EditCakeInvoiceModal({
             invoiceNumber: invoiceNumber.trim(),
             storeName: storeName.trim(),
             itemCount: items.length,
+            imageUrl: imageUrl || "",
+            receiptImages: imageUrl ? [imageUrl] : [],
             isInventoryExpense: true,
             createdAt: serverTimestamp(),
             isDebt: true
@@ -270,6 +308,8 @@ export default function EditCakeInvoiceModal({
             invoiceNumber: invoiceNumber.trim(),
             storeName: storeName.trim(),
             itemCount: items.length,
+            imageUrl: imageUrl || "",
+            receiptImages: imageUrl ? [imageUrl] : [],
             isInventoryExpense: true,
             createdAt: serverTimestamp(),
             isDebt: false
@@ -415,6 +455,103 @@ export default function EditCakeInvoiceModal({
                     placeholder="أدخل مبلغ الدين"
                     className="w-full bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold focus:border-indigo-500 focus:outline-none"
                   />
+                </div>
+              )}
+            </div>
+
+            {/* Attached Receipt Photo Section */}
+            <div className="bg-gray-50 dark:bg-zinc-800/60 p-3.5 rounded-2xl border border-gray-200 dark:border-zinc-700/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                  <Camera className="w-4 h-4 text-blue-500" />
+                  صورة الوصل / الفاتورة (مرفق)
+                </label>
+                {imageUrl && (
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40">
+                    تم إرفاق صورة ✔
+                  </span>
+                )}
+              </div>
+
+              {/* Hidden file inputs */}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageFilePicked}
+                className="hidden"
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageFilePicked}
+                className="hidden"
+              />
+
+              {imageUrl ? (
+                <div className="flex items-center gap-3 p-2.5 bg-white dark:bg-zinc-800 rounded-xl border border-gray-200 dark:border-zinc-700">
+                  <div 
+                    onClick={() => setIsPhotoZoomed(true)}
+                    className="relative w-16 h-16 rounded-xl overflow-hidden bg-gray-100 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 cursor-pointer group shrink-0"
+                  >
+                    <img src={imageUrl} alt="صورة الفاتورة" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                      <Eye className="w-4 h-4" />
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">صورة الوصل محفوظة</p>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">انقر على المصغّر لتكبير الصورة</p>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsPhotoZoomed(true)}
+                        className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                      >
+                        <Eye className="w-3 h-3" /> تكبير
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploadingImage}
+                        className="text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
+                      >
+                        <Upload className="w-3 h-3" /> تغيير الصورة
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageUrl("")}
+                        className="text-[10px] font-bold text-red-500 hover:underline flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" /> حذف الصورة
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={isUploadingImage}
+                    className="flex-1 py-2 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95"
+                  >
+                    {isUploadingImage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5 text-blue-500" />}
+                    <span>التقاط بالكاميرا</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingImage}
+                    className="flex-1 py-2 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95"
+                  >
+                    {isUploadingImage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-purple-500" />}
+                    <span>اختيار من الاستوديو</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -583,6 +720,47 @@ export default function EditCakeInvoiceModal({
           </div>
         </form>
       </div>
+
+      {/* Fullscreen Photo Lightbox Modal */}
+      {isPhotoZoomed && imageUrl && (
+        <div 
+          className="fixed inset-0 z-[280] bg-black/90 backdrop-blur-md flex items-center justify-center p-3 animate-in fade-in duration-200"
+          onClick={() => setIsPhotoZoomed(false)}
+        >
+          <div 
+            className="relative max-w-2xl w-full max-h-[90vh] bg-zinc-950 rounded-3xl overflow-hidden border border-zinc-800 shadow-2xl flex flex-col animate-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-900/90 text-white">
+              <span className="font-bold text-xs truncate">صورة الوصل: {storeName || "فاتورة مواد"}</span>
+              <div className="flex items-center gap-2">
+                <a 
+                  href={imageUrl} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="text-xs bg-zinc-800 hover:bg-zinc-700 px-2.5 py-1 rounded-lg text-zinc-200 font-bold transition"
+                >
+                  فتح ↗
+                </a>
+                <button 
+                  type="button" 
+                  onClick={() => setIsPhotoZoomed(false)}
+                  className="p-1 bg-zinc-800 hover:bg-zinc-700 rounded-full text-zinc-300 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-2 flex items-center justify-center bg-black/40">
+              <img 
+                src={imageUrl} 
+                alt="معاينة الوصل" 
+                className="max-h-[75vh] w-auto max-w-full object-contain rounded-xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
