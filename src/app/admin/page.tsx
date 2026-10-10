@@ -229,6 +229,7 @@ export default function AdminDashboard() {
       subtitle: "واتساب وانستغرام",
       icon: "📱",
       href: "/admin/hub?tab=external",
+      label: "المبيعات",
       amount: statsLoading ? "…" : `${fmt(realStats?.breakdown?.social)} د.ع`,
       badge: activeOperationalCounts.pendingExternal > 0 ? `${activeOperationalCounts.pendingExternal} قيد التنفيذ` : null,
       gradient: "from-emerald-500 to-teal-700",
@@ -240,6 +241,7 @@ export default function AdminDashboard() {
       subtitle: "متجر الزبائن",
       icon: "🛒",
       href: "/admin/hub?tab=orders",
+      label: "المبيعات",
       amount: statsLoading ? "…" : `${fmt(realStats?.breakdown?.appCakes)} د.ع`,
       badge: activeOperationalCounts.pendingApp > 0 ? `${activeOperationalCounts.pendingApp} طلب نشط` : null,
       gradient: "from-pink-500 to-rose-700",
@@ -251,6 +253,7 @@ export default function AdminDashboard() {
       subtitle: "جرد ومتابعة المواد",
       icon: "📦",
       href: "/admin/hub?tab=inventory",
+      label: "المواد الخام",
       amount: statsLoading ? "…" : `${fmt(realStats?.cakeMaterialsExpense)} د.ع`,
       badge: "مخزون ومواد",
       gradient: "from-cyan-500 to-blue-700",
@@ -262,6 +265,7 @@ export default function AdminDashboard() {
       subtitle: "المشتريات وتتبع النفاد",
       icon: "🧂",
       href: "/admin/hub?tab=supplies_orders",
+      label: "المصروفات",
       amount: statsLoading ? "…" : `${fmt(realStats?.totalExpenses)} د.ع`,
       badge: activeOperationalCounts.totalExpensesCount > 0 ? `${activeOperationalCounts.totalExpensesCount} فواتير` : null,
       gradient: "from-amber-500 to-orange-700",
@@ -303,12 +307,12 @@ export default function AdminDashboard() {
         },
         {
           title: "الجرد المالي السريع",
-          subtitle: `إيرادات: ${fmt(realStats?.totalRevenue)} د.ع`,
+          subtitle: `إيرادات: ${fmt(realStats?.totalRevenue)} د.ع | شهري: ${fmt(realStats?.monthSales)} د.ع`,
           icon: "💰",
           href: "/admin/finances",
           bg: "from-teal-600 to-emerald-800",
           glow: "shadow-teal-600/30",
-          badge: "أرباح",
+          badge: profitMargin > 0 ? `${profitMargin}% هامش` : "أرباح",
           amount: statsLoading ? "…" : `صافي الربح: ${fmt(realStats?.netProfit)} د.ع`,
         },
         {
@@ -416,6 +420,9 @@ export default function AdminDashboard() {
           bg: "from-cyan-600 to-teal-800",
           glow: "shadow-cyan-600/30",
           badge: null,
+          amount: (realStats?.breakdown?.appAcademy && realStats.breakdown.appAcademy > 0)
+            ? `مبيعات: ${fmt(realStats.breakdown.appAcademy)} د.ع`
+            : null,
         },
         {
           title: "الطلبات العامة",
@@ -527,14 +534,18 @@ export default function AdminDashboard() {
                     )}
                   </div>
 
-                  <div className="mt-2.5">
+                  <div className="mt-3">
+                    <h3 className="font-black text-xs sm:text-sm tracking-tight text-white mb-0.5">{item.title}</h3>
+                    <p className="text-[10px] text-white/80 font-bold mb-2">{item.subtitle}</p>
+
                     {item.amount && (
-                      <div className="text-base sm:text-lg font-black tracking-tight text-white mb-0.5 leading-tight drop-shadow-xs">
-                        {item.amount}
+                      <div className="bg-black/20 dark:bg-black/35 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-white/20 flex items-baseline justify-between gap-1 shadow-inner">
+                        <span className="text-[9px] sm:text-[10px] text-white/80 font-bold">{item.label}:</span>
+                        <span className="text-xs sm:text-sm font-black font-mono tracking-tight text-white">
+                          {item.amount}
+                        </span>
                       </div>
                     )}
-                    <h3 className="font-black text-xs sm:text-sm tracking-tight text-white mb-0.5">{item.title}</h3>
-                    <p className="text-[10px] text-white/80 font-bold">{item.subtitle}</p>
                   </div>
                 </Link>
               ))}
@@ -554,7 +565,7 @@ export default function AdminDashboard() {
                     <Link
                       key={i}
                       href={item.href}
-                      className={`bg-gradient-to-br ${item.bg} rounded-3xl p-4 sm:p-5 flex flex-col justify-between shadow-md dark:shadow-lg ${item.glow} hover:-translate-y-1 active:scale-95 transition-all text-white relative overflow-hidden group min-h-[135px] border border-white/20 dark:border-white/10`}
+                      className={`bg-gradient-to-br ${item.bg} rounded-3xl p-4 sm:p-5 flex flex-col justify-between shadow-md dark:shadow-lg ${item.glow} hover:-translate-y-1 active:scale-95 transition-all text-white relative overflow-hidden group min-h-[145px] border border-white/20 dark:border-white/10`}
                     >
                       <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full blur-xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
 
@@ -567,16 +578,17 @@ export default function AdminDashboard() {
                         )}
                       </div>
 
-                      <div className="mt-2.5">
-                        {item.amount && (
-                          <div className="text-xs sm:text-sm font-black tracking-tight text-white mb-0.5 leading-tight drop-shadow-xs">
-                            {item.amount}
-                          </div>
-                        )}
+                      <div className="mt-3">
                         <h4 className="font-black text-xs sm:text-sm tracking-tight text-white leading-tight">
                           {item.title}
                         </h4>
-                        <p className="text-[10px] text-white/75 font-bold mt-0.5">{item.subtitle}</p>
+                        <p className="text-[10px] text-white/75 font-bold mt-0.5 mb-2 leading-tight">{item.subtitle}</p>
+
+                        {item.amount && (
+                          <div className="bg-black/20 dark:bg-black/35 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-white/20 text-[11px] sm:text-xs font-black font-mono tracking-tight text-white shadow-inner">
+                            {item.amount}
+                          </div>
+                        )}
                       </div>
                     </Link>
                   ))}
