@@ -19,7 +19,7 @@ import { db, storage } from "@/lib/firebase";
 import FamilyCompetition from "./FamilyCompetition";
 import FamilyCompetitionOverview from "./FamilyCompetitionOverview";
 import LottoTracker from "./LottoTracker";
-import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
 import { uploadImageResiliently, compressToTinyThumbnail } from "@/lib/hfImageStore";
@@ -697,9 +697,17 @@ export default function HomeFinanceDashboard() {
         name: e.description || "دين اموال الكيك",
         category: "ديون",
         amount: Number(e.amount) || 0,
-        date: e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : new Date().toISOString(),
-        createdAt: e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : new Date().toISOString(),
-        isFromCake: true
+        date: e.date || (e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : new Date().toISOString()),
+        createdAt: e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : (e.date || new Date().toISOString()),
+        isFromCake: true,
+        originDocId: e._id,
+        items: e.items || [],
+        itemCount: e.itemCount || (e.items ? e.items.length : 0),
+        invoiceId: e.invoiceId || "",
+        invoiceNumber: e.invoiceNumber || "",
+        storeName: e.storeName || "",
+        receiptImages: e.receiptImages || (e.imageUrl ? [e.imageUrl] : []),
+        imageUrl: e.imageUrl || ""
       } as any));
       setCakeDebtExpenses(convertedCakeExps);
 
@@ -1757,8 +1765,24 @@ setEditFuturePlan(null);
     setEditExpense(null);
   };
 
-  const handleDeleteExpense = async (id: string) => {
+  const handleDeleteExpense = async (id: string, originDocId?: string) => {
     if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
+    
+    // Check if this expense is from cake material debt
+    const isCakeDebt = originDocId || cakeDebtExpenses.some(c => c.id === id);
+    if (isCakeDebt) {
+      const docId = originDocId || id;
+      try {
+        await deleteDoc(doc(db, "expenses", docId));
+        setCakeDebtExpenses(prev => prev.filter(x => x.id !== id && (x as any).originDocId !== docId));
+        toast.success("تم حذف قيد دين فاتورة الكيك بنجاح 🗑️");
+      } catch (err) {
+        console.error("Error deleting cake debt expense:", err);
+        toast.error("حدث خطأ أثناء حذف قيد دين الكيك");
+      }
+      return;
+    }
+
     const updated = expenses.filter(x => x.id !== id);
     setExpenses(updated);
     syncToFirebase("expenses", updated);
@@ -4707,16 +4731,26 @@ setEditTrip(null);
                           <div className={`w-10 h-10 bg-gradient-to-br ${cat?.color || 'from-gray-400 to-gray-500'} rounded-xl flex items-center justify-center text-lg flex-shrink-0 shadow-sm`}>
                             {cat?.icon || '📦'}
                           </div>
-                          {!(exp as any).isFromCake && (
-                            <div className="flex gap-1">
-                              <button onClick={() => { setEditExpense(exp); setShowExpenseModal(true); }} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition">
-                                <Edit2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                          <div className="flex gap-1">
+                            {!(exp as any).isFromCake ? (
+                              <>
+                                <button onClick={() => { setEditExpense(exp); setShowExpenseModal(true); }} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition">
+                                  <Edit2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                                </button>
+                                <button onClick={() => handleDeleteExpense(exp.id)} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition">
+                                  <Trash2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => handleDeleteExpense(exp.id, (exp as any).originDocId || exp.id)}
+                                className="p-1 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/60 transition"
+                                title="حذف دين فاتورة الكيك"
+                              >
+                                <Trash2 className="w-3 h-3" />
                               </button>
-                              <button onClick={() => handleDeleteExpense(exp.id)} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition">
-                                <Trash2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                              </button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                         {/* Name */}
                         <div className="font-black text-gray-800 dark:text-gray-100 text-xs leading-tight line-clamp-2">{exp.name}</div>

@@ -5,16 +5,16 @@ import {
   X, Sparkles, Trophy, Calendar, Ticket, Plus, CheckCircle2,
   AlertCircle, Copy, Check, BarChart2, Flame, Snowflake, RotateCcw,
   Clock, Hash, DollarSign, ExternalLink, Search, Volume2, VolumeX,
-  PartyPopper, Trash2, Camera, Loader2
+  PartyPopper, Trash2, Camera, Loader2, Lock, Unlock, Sliders, CheckCheck
 } from "lucide-react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { toast } from "sonner";
 import { scanLottoWithGemini } from "@/lib/scanLottoClient";
 import {
-  LottoGameType, LottoDraw, LottoTicket,
+  LottoGameType, LottoDraw, LottoTicket, SavedPrediction, PredictionAnalysis,
   GAME_DETAILS, INITIAL_SUPER_KEY_DRAWS, INITIAL_IRAQ_LOTTO_DRAWS,
-  getNextDrawDate, calculateLottoStats, predictNextNumbers, checkTicketMatch
+  getNextDrawDate, calculateLottoStats, predictNextNumbers, analyzeCombination, checkTicketMatch
 } from "./lottoTypes";
 
 const getTodayStr = () => {
@@ -133,10 +133,22 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   // Archive search filter
   const [archiveSearchQuery, setArchiveSearchQuery] = useState("");
 
-  // Prediction state
-  const [predictionStrategy, setPredictionStrategy] = useState<"balanced" | "hot" | "cold" | "random">("balanced");
+  // Prediction state & persistence ("ثابت على الرقم اله اختار")
+  const [predictionStrategy, setPredictionStrategy] = useState<"balanced" | "hot" | "cold" | "ai_hybrid">("balanced");
   const [suggestedNumbers, setSuggestedNumbers] = useState<number[]>([]);
   const [suggestedLucky, setSuggestedLucky] = useState<number | undefined>();
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [predictionAnalysis, setPredictionAnalysis] = useState<PredictionAnalysis | null>(null);
+  const [showCustomPicker, setShowCustomPicker] = useState<boolean>(false);
+  const [savedPredictions, setSavedPredictions] = useState<Record<string, SavedPrediction>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = localStorage.getItem("cache_lotto_predictions");
+        if (c) return JSON.parse(c);
+      } catch (e) {}
+    }
+    return {};
+  });
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -144,7 +156,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   const [theatricalTicket, setTheatricalTicket] = useState<LottoTicket | null>(null);
   const [theatricalCopied, setTheatricalCopied] = useState(false);
 
-  // New ticket modal state - Prices: Super Key = 2,650 IQD | Iraq Lotto = 1,500 IQD
+  // New ticket modal state - Prices: Super Key = 2,350 IQD (محدث) | Iraq Lotto = 1,500 IQD
   const [showAddTicketModal, setShowAddTicketModal] = useState(false);
   const [newTicketNumbers, setNewTicketNumbers] = useState<number[]>([]);
   const [newTicketLucky, setNewTicketLucky] = useState<number | undefined>();
@@ -227,7 +239,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     }
   };
 
-  // 1. Subscribe to Firestore
+  // 1. Subscribe to Firestore & Sync without overwriting
   useEffect(() => {
     if (!isOpen) return;
 
@@ -248,7 +260,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
           }, { merge: true }).catch(e => console.error("SuperKey sync error:", e));
         }
 
-        // 2. Iraq Lotto sync & auto-upgrade to all 128 draws
+        // 2. Iraq Lotto sync & auto-upgrade
         if (data.iraqLottoDraws && data.iraqLottoDraws.length >= INITIAL_IRAQ_LOTTO_DRAWS.length) {
           setIraqLottoDraws(data.iraqLottoDraws);
         } else {
@@ -261,15 +273,28 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
           }, { merge: true }).catch(e => console.error("IraqLotto sync error:", e));
         }
 
+        // 3. Saved Predictions sync
+        if (data.savedPredictions) {
+          setSavedPredictions(data.savedPredictions);
+          try {
+            localStorage.setItem("cache_lotto_predictions", JSON.stringify(data.savedPredictions));
+          } catch (e) {}
+        }
+
+        // 4. Tickets sync & auto-evaluation
         if (data.tickets && Array.isArray(data.tickets)) {
           setTickets(data.tickets);
+          try {
+            localStorage.setItem("cache_lotto_tickets", JSON.stringify(data.tickets));
+          } catch (e) {}
         }
       } else {
         // Initialize document with complete sets
         setDoc(doc(db, "home_finance", "lotto_hub"), {
           superKeyDraws: JSON.parse(JSON.stringify(INITIAL_SUPER_KEY_DRAWS)),
           iraqLottoDraws: JSON.parse(JSON.stringify(INITIAL_IRAQ_LOTTO_DRAWS)),
-          tickets: []
+          tickets: [],
+          savedPredictions: {}
         }).catch(e => console.error("Init lotto_hub error:", e));
       }
       setLoading(false);
@@ -307,6 +332,229 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     return getNextDrawDate(selectedGame);
   }, [selectedGame]);
 
+  // Synchronize or load prediction for current game WITHOUT randomizing on refresh
+  useEffect(() => {
+    const saved = savedPredictions[selectedGame];
+    if (saved && saved.numbers && saved.numbers.length === 6) {
+      setSuggestedNumbers(saved.numbers);
+      setSuggestedLucky(saved.luckyNumber);
+      setIsLocked(!!saved.isLocked);
+      if (saved.strategy && saved.strategy !== "custom") setPredictionStrategy(saved.strategy as any);
+      setPredictionAnalysis(saved.analysis || null);
+    } else {
+      // Generate initial prediction once if none ever existed
+      const pred = predictNextNumbers(currentDraws, selectedGame, predictionStrategy);
+      setSuggestedNumbers(pred.numbers);
+      setSuggestedLucky(pred.luckyNumber);
+      setPredictionAnalysis(pred.analysis);
+      setIsLocked(false);
+      
+      const newSaved: SavedPrediction = {
+        game: selectedGame,
+        numbers: pred.numbers,
+        luckyNumber: pred.luckyNumber,
+        isLocked: false,
+        strategy: predictionStrategy,
+        confidenceScore: pred.analysis.confidenceScore,
+        analysis: pred.analysis,
+        updatedAt: new Date().toISOString()
+      };
+      const updatedAll = { ...savedPredictions, [selectedGame]: newSaved };
+      setSavedPredictions(updatedAll);
+      try {
+        localStorage.setItem("cache_lotto_predictions", JSON.stringify(updatedAll));
+      } catch (e) {}
+      setDoc(doc(db, "home_finance", "lotto_hub"), {
+        savedPredictions: updatedAll
+      }, { merge: true }).catch(e => console.error("Save prediction error:", e));
+    }
+  }, [selectedGame]);
+
+  // Explicit prediction generator (only when user clicks generate or switches strategy)
+  const handleGeneratePrediction = (forcedStrategy?: "balanced" | "hot" | "cold" | "ai_hybrid") => {
+    setIsGenerating(true);
+    const strat = forcedStrategy || predictionStrategy;
+    setTimeout(() => {
+      // If user has locked numbers, pass them to be preserved!
+      const lockedPool = isLocked ? suggestedNumbers : [];
+      const lockedLuckyPool = isLocked ? suggestedLucky : undefined;
+      const pred = predictNextNumbers(currentDraws, selectedGame, strat, lockedPool, lockedLuckyPool);
+      setSuggestedNumbers(pred.numbers);
+      setSuggestedLucky(pred.luckyNumber);
+      setPredictionAnalysis(pred.analysis);
+      setIsGenerating(false);
+
+      const newSaved: SavedPrediction = {
+        game: selectedGame,
+        numbers: pred.numbers,
+        luckyNumber: pred.luckyNumber,
+        isLocked,
+        strategy: strat,
+        confidenceScore: pred.analysis.confidenceScore,
+        analysis: pred.analysis,
+        updatedAt: new Date().toISOString()
+      };
+      const updatedAll = { ...savedPredictions, [selectedGame]: newSaved };
+      setSavedPredictions(updatedAll);
+      try {
+        localStorage.setItem("cache_lotto_predictions", JSON.stringify(updatedAll));
+      } catch (e) {}
+      setDoc(doc(db, "home_finance", "lotto_hub"), {
+        savedPredictions: updatedAll
+      }, { merge: true }).catch(e => console.error("Save prediction error:", e));
+      toast.success("تم تحديث التنبؤ الإحصائي وحفظه بنجاح 🎯");
+    }, 200);
+  };
+
+  // Toggle lock on user chosen numbers ("ثابت على الرقم اله اختار")
+  const handleToggleLock = () => {
+    const nextLocked = !isLocked;
+    setIsLocked(nextLocked);
+    const currentAnalysis = predictionAnalysis || analyzeCombination(suggestedNumbers, selectedGame, stats);
+    const newSaved: SavedPrediction = {
+      game: selectedGame,
+      numbers: suggestedNumbers,
+      luckyNumber: suggestedLucky,
+      isLocked: nextLocked,
+      strategy: predictionStrategy,
+      confidenceScore: currentAnalysis.confidenceScore,
+      analysis: currentAnalysis,
+      updatedAt: new Date().toISOString()
+    };
+    const updatedAll = { ...savedPredictions, [selectedGame]: newSaved };
+    setSavedPredictions(updatedAll);
+    try {
+      localStorage.setItem("cache_lotto_predictions", JSON.stringify(updatedAll));
+    } catch (e) {}
+    setDoc(doc(db, "home_finance", "lotto_hub"), {
+      savedPredictions: updatedAll
+    }, { merge: true }).catch(e => console.error("Save prediction error:", e));
+
+    if (nextLocked) {
+      toast.success("تم تثبيت وقفل أرقامك بنجاح! ستبقى ثابتة ولن تتغير بأي رفرش 🔒");
+    } else {
+      toast.info("تم فك قفل الأرقام 🔓");
+    }
+  };
+
+  // Custom number toggle in interactive matrix
+  const handleToggleCustomNumber = (num: number) => {
+    let nextNums: number[];
+    if (suggestedNumbers.includes(num)) {
+      nextNums = suggestedNumbers.filter(n => n !== num);
+    } else {
+      if (suggestedNumbers.length >= 6) {
+        toast.warning("تم اختيار 6 أرقام بالفعل. اضغط على رقم لإلغائه أولاً.");
+        return;
+      }
+      nextNums = [...suggestedNumbers, num].sort((a, b) => a - b);
+    }
+    setSuggestedNumbers(nextNums);
+
+    if (nextNums.length === 6) {
+      const ana = analyzeCombination(nextNums, selectedGame, stats, "أرقام مختارة ومثبتة");
+      setPredictionAnalysis(ana);
+      const newSaved: SavedPrediction = {
+        game: selectedGame,
+        numbers: nextNums,
+        luckyNumber: suggestedLucky,
+        isLocked: true,
+        strategy: "custom",
+        confidenceScore: ana.confidenceScore,
+        analysis: ana,
+        updatedAt: new Date().toISOString()
+      };
+      setIsLocked(true);
+      const updatedAll = { ...savedPredictions, [selectedGame]: newSaved };
+      setSavedPredictions(updatedAll);
+      try {
+        localStorage.setItem("cache_lotto_predictions", JSON.stringify(updatedAll));
+      } catch (e) {}
+      setDoc(doc(db, "home_finance", "lotto_hub"), {
+        savedPredictions: updatedAll
+      }, { merge: true }).catch(e => console.error("Save custom prediction error:", e));
+      toast.success("تم تثبيت وحفظ توليفة الـ 6 أرقام الخاصة بك بنجاح 🔒🎯");
+    }
+  };
+
+  // Custom lucky number selection
+  const handleSelectCustomLucky = (luckyNum: number) => {
+    setSuggestedLucky(luckyNum);
+    if (suggestedNumbers.length === 6) {
+      const ana = analyzeCombination(suggestedNumbers, selectedGame, stats, "أرقام مختارة ومثبتة");
+      const newSaved: SavedPrediction = {
+        game: selectedGame,
+        numbers: suggestedNumbers,
+        luckyNumber: luckyNum,
+        isLocked: true,
+        strategy: "custom",
+        confidenceScore: ana.confidenceScore,
+        analysis: ana,
+        updatedAt: new Date().toISOString()
+      };
+      const updatedAll = { ...savedPredictions, [selectedGame]: newSaved };
+      setSavedPredictions(updatedAll);
+      try {
+        localStorage.setItem("cache_lotto_predictions", JSON.stringify(updatedAll));
+      } catch (e) {}
+      setDoc(doc(db, "home_finance", "lotto_hub"), {
+        savedPredictions: updatedAll
+      }, { merge: true }).catch(e => console.error("Save custom lucky error:", e));
+      toast.success(`تم اختيار وتثبيت رقم الحظ (${luckyNum}) 🌟`);
+    }
+  };
+
+  // Audit and auto-match all tickets with registered draws
+  const handleAuditAllTickets = async () => {
+    setLoading(true);
+    let updatedCount = 0;
+    const reAuditedTickets = tickets.map(tkt => {
+      const gameDraws = tkt.game === "super_key" ? superKeyDraws : iraqLottoDraws;
+      
+      // Match by drawNumber if present, or by exact date, or by closest date within 3 days
+      let matchingDraw = gameDraws.find(d => tkt.drawNumber && d.drawNumber === tkt.drawNumber);
+      if (!matchingDraw) {
+        matchingDraw = gameDraws.find(d => d.date === tkt.drawDate);
+      }
+      if (!matchingDraw && tkt.drawDate) {
+        const tTime = new Date(tkt.drawDate).getTime();
+        matchingDraw = gameDraws.find(d => {
+          const dTime = new Date(d.date).getTime();
+          return Math.abs(tTime - dTime) <= 3 * 24 * 60 * 60 * 1000;
+        });
+      }
+
+      if (matchingDraw) {
+        const matchRes = checkTicketMatch(tkt, matchingDraw);
+        updatedCount++;
+        return {
+          ...tkt,
+          status: "matched" as const,
+          drawNumber: matchingDraw.drawNumber,
+          matchCount: matchRes.matchCount,
+          luckyMatched: matchRes.luckyMatched,
+          matchedNumbers: matchRes.matchedNumbers,
+          prizeTier: matchRes.prizeTier
+        };
+      }
+      return tkt;
+    });
+
+    setTickets(reAuditedTickets);
+    try {
+      localStorage.setItem("cache_lotto_tickets", JSON.stringify(reAuditedTickets));
+      await setDoc(doc(db, "home_finance", "lotto_hub"), {
+        tickets: JSON.parse(JSON.stringify(reAuditedTickets))
+      }, { merge: true });
+      toast.success(`تم تدقيق وفحص ${reAuditedTickets.length} بطاقة بنجاح مع السحوبات الرسمية! 🏆`);
+    } catch (e) {
+      console.error("Audit tickets save error:", e);
+      toast.error("حدث خطأ أثناء حفظ تدقيق البطاقات");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Open ticket modal with prefilled data and exact official price
   const handleOpenAddTicket = (prefillNumbers?: number[], prefillLucky?: number) => {
     const validNumbers = (prefillNumbers || []).filter(n => n <= GAME_DETAILS[selectedGame].maxNumber);
@@ -316,21 +564,6 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     setNewTicketCost(GAME_DETAILS[selectedGame].ticketPrice);
     setNewTicketDrawNum("");
     setShowAddTicketModal(true);
-  };
-
-  // Generate initial prediction on mount or game change
-  useEffect(() => {
-    handleGeneratePrediction();
-  }, [selectedGame, predictionStrategy, currentDraws]);
-
-  const handleGeneratePrediction = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      const pred = predictNextNumbers(currentDraws, selectedGame, predictionStrategy);
-      setSuggestedNumbers(pred.numbers);
-      setSuggestedLucky(pred.luckyNumber);
-      setIsGenerating(false);
-    }, 250);
   };
 
   const handleCopyNumbers = () => {
@@ -689,30 +922,69 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
           {activeSubTab === "predict" && (
             <div className="space-y-6">
               {/* Next Draw Banner */}
-              <div className="relative rounded-3xl p-5 overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-zinc-900 text-white shadow-xl">
+              <div className="relative rounded-3xl p-5 overflow-hidden bg-gradient-to-br from-indigo-950 via-purple-900 to-zinc-900 text-white shadow-xl border border-white/10">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-pink-500/20 blur-3xl rounded-full pointer-events-none" />
                 <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
                   <div>
-                    <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-amber-300 mb-2 border border-white/10">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>السحبة القادمة: {GAME_DETAILS[selectedGame].drawDaysArabic}</span>
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="inline-flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-amber-300 border border-white/10">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>السحبة القادمة: {GAME_DETAILS[selectedGame].drawDaysArabic}</span>
+                      </span>
+                      {isLocked ? (
+                        <span className="inline-flex items-center gap-1 bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 px-2.5 py-0.5 rounded-full text-[11px] font-black animate-pulse">
+                          <Lock className="w-3 h-3" />
+                          <span>أرقام مثبتة ومحفوظة (ثابتة في كل رفرش)</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-purple-500/20 border border-purple-400/30 text-purple-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                          <Sparkles className="w-3 h-3" />
+                          <span>تنبؤ ذكي إحصائي</span>
+                        </span>
+                      )}
                     </div>
+
                     <h2 className="text-xl sm:text-2xl font-black">
-                      أرقام الحظ المقترحة لسحبة {nextDrawDate}
+                      {isLocked ? "أرقامك المختارة والمثبتة" : "التنبؤ الإحصائي المقترح"} لسحبة {nextDrawDate}
                     </h2>
                     <p className="text-xs text-purple-200 mt-1 max-w-md">
-                      تم توليد هذه الأرقام بناءً على خوارزمية توازن الأرقام الأكثر تكراراً (Hot) والأرقام المتأخرة إحصائياً.
+                      تنبؤ علمي قائم على تردد الظهور والانحراف المعياري، مع موازنة الفردي والزوجي والدلتا، والحفاظ على اختيارك.
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
-                      onClick={handleGeneratePrediction}
+                      onClick={handleToggleLock}
+                      className={`px-3.5 py-2.5 rounded-2xl font-black text-xs flex items-center gap-1.5 transition shadow-md active:scale-95 ${
+                        isLocked
+                          ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/20"
+                          : "bg-white/15 text-white hover:bg-white/25 border border-white/20"
+                      }`}
+                      title={isLocked ? "فك قفل الأرقام لتوليد جديد" : "تثبيت هذه الأرقام حتى لا تتغير أبداً"}
+                    >
+                      {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                      <span>{isLocked ? "الأرقام مقفلة ومثبتة 🔒" : "تثبيت الأرقام الحالية 🔓"}</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowCustomPicker(prev => !prev)}
+                      className={`px-3.5 py-2.5 rounded-2xl font-black text-xs flex items-center gap-1.5 transition shadow-md active:scale-95 ${
+                        showCustomPicker
+                          ? "bg-amber-400 text-amber-950 font-black"
+                          : "bg-white/10 text-white hover:bg-white/20 border border-white/10"
+                      }`}
+                    >
+                      <Sliders className="w-3.5 h-3.5" />
+                      <span>{showCustomPicker ? "إغلاق لوحة الاختيار" : "🎯 تخصيص أرقامي يدوياً"}</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleGeneratePrediction()}
                       disabled={isGenerating}
-                      className="bg-gradient-to-r from-amber-400 to-rose-500 hover:from-amber-300 hover:to-rose-400 text-gray-900 font-black px-4 py-2.5 rounded-2xl shadow-lg shadow-amber-500/20 active:scale-95 transition flex items-center gap-2 text-xs sm:text-sm"
+                      className="bg-gradient-to-r from-amber-400 to-rose-500 hover:from-amber-300 hover:to-rose-400 text-gray-950 font-black px-4 py-2.5 rounded-2xl shadow-lg shadow-amber-500/20 active:scale-95 transition flex items-center gap-2 text-xs sm:text-sm disabled:opacity-50"
                     >
                       <RotateCcw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-                      <span>توليد اقتراح جديد</span>
+                      <span>{isLocked && suggestedNumbers.length < 6 ? "إكمال الأرقام المتبقية" : "توليد تنبؤ جديد"}</span>
                     </button>
                   </div>
                 </div>
@@ -720,62 +992,191 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                 {/* Strategy Selector */}
                 <div className="mt-5 pt-4 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
-                    onClick={() => setPredictionStrategy("balanced")}
+                    onClick={() => {
+                      setPredictionStrategy("balanced");
+                      handleGeneratePrediction("balanced");
+                    }}
                     className={`p-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                       predictionStrategy === "balanced"
-                        ? "bg-white text-purple-900 shadow-md font-black"
+                        ? "bg-white text-purple-950 shadow-md font-black"
                         : "bg-white/10 text-white/80 hover:bg-white/20"
                     }`}
                   >
-                    <span>🎯</span> المتوازن الذكي
+                    <span>🎯</span> المتوازن الذهبي
                   </button>
 
                   <button
-                    onClick={() => setPredictionStrategy("hot")}
+                    onClick={() => {
+                      setPredictionStrategy("hot");
+                      handleGeneratePrediction("hot");
+                    }}
                     className={`p-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                       predictionStrategy === "hot"
                         ? "bg-amber-400 text-amber-950 shadow-md font-black"
                         : "bg-white/10 text-white/80 hover:bg-white/20"
                     }`}
                   >
-                    <span>🔥</span> الأكثر سخونة
+                    <span>🔥</span> زخم الأرقام الساخنة
                   </button>
 
                   <button
-                    onClick={() => setPredictionStrategy("cold")}
+                    onClick={() => {
+                      setPredictionStrategy("cold");
+                      handleGeneratePrediction("cold");
+                    }}
                     className={`p-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                       predictionStrategy === "cold"
                         ? "bg-cyan-400 text-cyan-950 shadow-md font-black"
                         : "bg-white/10 text-white/80 hover:bg-white/20"
                     }`}
                   >
-                    <span>❄️</span> الأرقام المتأخرة
+                    <span>❄️</span> ارتداد المتأخرة
                   </button>
 
                   <button
-                    onClick={() => setPredictionStrategy("random")}
+                    onClick={() => {
+                      setPredictionStrategy("ai_hybrid");
+                      handleGeneratePrediction("ai_hybrid");
+                    }}
                     className={`p-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                      predictionStrategy === "random"
+                      predictionStrategy === "ai_hybrid"
                         ? "bg-pink-400 text-pink-950 shadow-md font-black"
                         : "bg-white/10 text-white/80 hover:bg-white/20"
                     }`}
                   >
-                    <span>🎲</span> حظ عشوائي
+                    <span>🧠</span> الذكاء التوليدي الهجين
                   </button>
                 </div>
               </div>
 
+              {/* Interactive Number Matrix / Custom Picker ("الرقم اله اختار") */}
+              {showCustomPicker && (
+                <div className="p-5 bg-purple-500/5 dark:bg-white/[0.02] rounded-3xl border border-purple-200 dark:border-purple-500/20 shadow-sm animate-in fade-in duration-200">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h4 className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                        <span>🎯 اختر أرقامك الـ 6 بنفسك وثبّتها</span>
+                        <span className="text-xs bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-black">
+                          {suggestedNumbers.length} من 6 مختارة
+                        </span>
+                      </h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        انقر على أي رقم لإضافته أو حذفه. الأرقام التي تختارها تُحفظ تلقائياً وتثبت ولا تتغير عند الرفرش!
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSuggestedNumbers([]);
+                          setIsLocked(false);
+                        }}
+                        className="text-xs text-rose-500 font-bold hover:underline px-2 py-1"
+                      >
+                        تفريغ الاختيار
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomPicker(false)}
+                        className="px-3 py-1.5 bg-purple-600 text-white rounded-xl text-xs font-black shadow-sm hover:bg-purple-700 transition"
+                      >
+                        تم الاختيار ✓
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Main 6 Numbers Grid */}
+                  <div className="grid grid-cols-7 sm:grid-cols-11 md:grid-cols-14 gap-1.5 sm:gap-2">
+                    {Array.from({ length: GAME_DETAILS[selectedGame].maxNumber }, (_, i) => i + 1).map((num) => {
+                      const isSelected = suggestedNumbers.includes(num);
+                      const isHot = stats.hotNumbers.slice(0, 6).includes(num);
+                      const isCold = stats.coldNumbers.slice(0, 6).includes(num);
+                      return (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => handleToggleCustomNumber(num)}
+                          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center transition-all relative ${
+                            isSelected
+                              ? "bg-gradient-to-tr from-purple-600 to-rose-600 text-white shadow-md shadow-purple-500/30 scale-105 ring-2 ring-purple-400"
+                              : isHot
+                              ? "bg-amber-100/80 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700/50 hover:bg-amber-200"
+                              : isCold
+                              ? "bg-cyan-100/80 dark:bg-cyan-950/30 text-cyan-900 dark:text-cyan-200 border border-cyan-300 dark:border-cyan-700/50 hover:bg-cyan-200"
+                              : "bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-700"
+                          }`}
+                        >
+                          <span>{num}</span>
+                          {isHot && !isSelected && (
+                            <span className="absolute -top-1 -right-1 text-[8px]">🔥</span>
+                          )}
+                          {isCold && !isSelected && (
+                            <span className="absolute -top-1 -right-1 text-[8px]">❄️</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Lucky Number Matrix for Super Key */}
+                  {selectedGame === "super_key" && (
+                    <div className="mt-5 pt-4 border-t border-purple-100 dark:border-white/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-black text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                          <span>⭐ اختر رقم الحظ الإضافي (سوبر كي من 1 إلى 42):</span>
+                          {suggestedLucky !== undefined && (
+                            <span className="font-black text-amber-500 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded-full">
+                              المختار: {suggestedLucky}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-7 sm:grid-cols-11 md:grid-cols-14 gap-1.5">
+                        {Array.from({ length: 42 }, (_, i) => i + 1).map((luckyNum) => {
+                          const isSelectedLucky = suggestedLucky === luckyNum;
+                          return (
+                            <button
+                              key={`lucky-${luckyNum}`}
+                              type="button"
+                              onClick={() => handleSelectCustomLucky(luckyNum)}
+                              className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl font-black text-xs flex items-center justify-center transition ${
+                                isSelectedLucky
+                                  ? "bg-gradient-to-tr from-amber-500 to-yellow-400 text-amber-950 shadow-md ring-2 ring-amber-300 font-black scale-105"
+                                  : "bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 border border-amber-200/50 dark:border-amber-800/40 hover:bg-amber-100"
+                              }`}
+                            >
+                              {luckyNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* 3D Visual Lottery Balls Showcase */}
               <div className="bg-gradient-to-b from-gray-50 to-white dark:from-zinc-900/60 dark:to-zinc-950 p-6 rounded-3xl border border-gray-100 dark:border-white/10 shadow-inner flex flex-col items-center justify-center">
-                <span className="text-xs font-bold text-gray-400 mb-4">
-                  الأرقام المختارة للشبكة (6 كرات + رقم الحظ)
-                </span>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                    الأرقام المعتمدة للشبكة (6 كرات {selectedGame === "super_key" ? "+ رقم الحظ" : ""})
+                  </span>
+                  {isLocked && (
+                    <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-black border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5" />
+                      <span>مثبتة</span>
+                    </span>
+                  )}
+                </div>
 
                 <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 my-2">
                   {suggestedNumbers.map((num, idx) => (
                     <div
                       key={idx}
-                      className="relative group transition-all duration-300 transform hover:-translate-y-2"
+                      onClick={() => setShowCustomPicker(true)}
+                      className="relative group transition-all duration-300 transform hover:-translate-y-2 cursor-pointer"
+                      title="انقر لتعديل هذا الرقم"
                     >
                       <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr from-purple-800 via-rose-600 to-amber-400 p-0.5 shadow-xl shadow-rose-500/20 flex items-center justify-center">
                         <div className="w-full h-full rounded-full bg-gradient-to-br from-rose-500 to-purple-800 flex items-center justify-center border-2 border-white/40 shadow-inner relative overflow-hidden">
@@ -796,7 +1197,11 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                   {selectedGame === "super_key" && suggestedLucky !== undefined && (
                     <>
                       <div className="text-gray-300 dark:text-gray-600 font-black text-xl px-1">+</div>
-                      <div className="relative group transition-all duration-300 transform hover:-translate-y-2">
+                      <div
+                        onClick={() => setShowCustomPicker(true)}
+                        className="relative group transition-all duration-300 transform hover:-translate-y-2 cursor-pointer"
+                        title="انقر لتعديل رقم الحظ"
+                      >
                         <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 p-0.5 shadow-xl shadow-amber-500/30 flex items-center justify-center">
                           <div className="w-full h-full rounded-full bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 flex items-center justify-center border-2 border-white/60 shadow-inner relative overflow-hidden">
                             {/* Sphere Glare */}
@@ -817,6 +1222,18 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                 {/* Actions below balls */}
                 <div className="flex flex-wrap items-center justify-center gap-3 mt-8">
                   <button
+                    onClick={handleToggleLock}
+                    className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition border ${
+                      isLocked
+                        ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300"
+                        : "bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-800 dark:text-white border-transparent"
+                    }`}
+                  >
+                    {isLocked ? <Lock className="w-4 h-4 text-emerald-500" /> : <Unlock className="w-4 h-4 text-gray-400" />}
+                    <span>{isLocked ? "الأرقام مثبتة (اضغط للفك)" : "تثبيت الأرقام الحالية"}</span>
+                  </button>
+
+                  <button
                     onClick={handleCopyNumbers}
                     className="px-4 py-2.5 rounded-2xl bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-800 dark:text-white font-bold text-xs flex items-center gap-2 transition"
                   >
@@ -829,10 +1246,76 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                     className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-500 hover:to-rose-500 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-purple-500/20 transition active:scale-95"
                   >
                     <Ticket className="w-4 h-4" />
-                    <span>تسجيل هذه الأرقام كبطاقة مشتراة 🎫</span>
+                    <span>تسجيل هذه الأرقام كبطاقة مشتراة ({GAME_DETAILS[selectedGame].ticketPrice.toLocaleString("en-US")} د.ع) 🎫</span>
                   </button>
                 </div>
               </div>
+
+              {/* Scientific & Statistical Confidence Breakdown Card */}
+              {predictionAnalysis && (
+                <div className="p-5 rounded-3xl bg-gradient-to-br from-indigo-950/30 via-purple-950/20 to-zinc-900/40 border border-purple-500/30 dark:border-purple-500/20 shadow-md space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-black">
+                        🧠
+                      </div>
+                      <div>
+                        <h4 className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                          <span>التدقيق والتحليل الإحصائي للتوليفة</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-black">
+                            قوة التنبؤ: {predictionAnalysis.confidenceScore}% 🌟
+                          </span>
+                        </h4>
+                        <p className="text-xs text-gray-400">
+                          النموذج المعتمد: {predictionAnalysis.strategyLabel}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black px-2.5 py-1 rounded-xl bg-purple-500/20 text-purple-300">
+                        {predictionAnalysis.deltaScore}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Metric Chips */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                    <div className="p-3 rounded-2xl bg-white/5 border border-white/5">
+                      <span className="text-[10px] text-gray-400 block font-bold">مجموع الأرقام الإحصائي</span>
+                      <div className="text-sm font-black text-amber-400 mt-0.5 flex items-center gap-1.5">
+                        <span>{predictionAnalysis.sum}</span>
+                        <span className="text-[10px] text-gray-400">({predictionAnalysis.sumQuality})</span>
+                      </div>
+                      <span className="text-[9px] text-gray-500 block mt-0.5">النطاق المثالي: {predictionAnalysis.expectedSumRange[0]}-{predictionAnalysis.expectedSumRange[1]}</span>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-white/5 border border-white/5">
+                      <span className="text-[10px] text-gray-400 block font-bold">التوازن الزوجي / الفردي</span>
+                      <div className="text-sm font-black text-cyan-400 mt-0.5">
+                        {predictionAnalysis.parityBalance}
+                      </div>
+                      <span className="text-[9px] text-gray-500 block mt-0.5">أفضل توزيع احتمالي</span>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-white/5 border border-white/5">
+                      <span className="text-[10px] text-gray-400 block font-bold">التوزيع المنخفض / المرتفع</span>
+                      <div className="text-sm font-black text-rose-400 mt-0.5">
+                        {predictionAnalysis.highLowBalance}
+                      </div>
+                      <span className="text-[9px] text-gray-500 block mt-0.5">مقسم عند منتصف الشبكة</span>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-white/5 border border-white/5">
+                      <span className="text-[10px] text-gray-400 block font-bold">توليفة الساخن والمتأخر</span>
+                      <div className="text-sm font-black text-emerald-400 mt-0.5">
+                        {predictionAnalysis.hotCount} ساخنة + {predictionAnalysis.dueCount} متأخرة
+                      </div>
+                      <span className="text-[9px] text-gray-500 block mt-0.5">+ {predictionAnalysis.mediumCount} متوسطة مستقرة</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Hot & Cold Quick Pills */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -893,7 +1376,15 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleAuditAllTickets}
+                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition active:scale-95 flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>تدقيق ومطابقة كافة البطاقات</span>
+                    </button>
+
                     <button
                       onClick={() => {
                         const lastDrawNum = currentDraws[0]?.drawNumber || 23;
@@ -924,6 +1415,13 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                     <Ticket className="w-4 h-4 text-purple-500" />
                     <span>البطاقات المسجلة ({tickets.filter(t => t.game === selectedGame).length})</span>
                   </h4>
+                  <button
+                    onClick={handleAuditAllTickets}
+                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 px-3 py-1.5 rounded-xl border border-emerald-500/20 transition flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>فحص وتدقيق كل البطاقات الآن</span>
+                  </button>
                 </div>
 
                 {tickets.filter(t => t.game === selectedGame).length === 0 ? (
@@ -951,8 +1449,10 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                       <div
                         key={tkt.id}
                         className={`p-4 rounded-2xl border transition-all ${
-                          tkt.status === "matched" && (tkt.matchCount || 0) >= 3
-                            ? "bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-transparent border-amber-500/40 shadow-md"
+                          (tkt.matchCount || 0) >= 3 || ((tkt.matchCount || 0) >= 1 && tkt.luckyMatched)
+                            ? "bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-transparent border-amber-500/50 shadow-md ring-1 ring-amber-500/30"
+                            : (tkt.matchCount || 0) > 0
+                            ? "bg-white dark:bg-zinc-900 border-blue-300/80 dark:border-blue-900/60 shadow-sm"
                             : tkt.status === "matched"
                             ? "bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800"
                             : "bg-white dark:bg-zinc-900 border-purple-200/50 dark:border-purple-500/20 shadow-sm"
@@ -979,8 +1479,10 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
                               </span>
                             ) : (
                               <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full ${
-                                (tkt.matchCount || 0) >= 3
-                                  ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300"
+                                (tkt.matchCount || 0) >= 3 || ((tkt.matchCount || 0) >= 1 && tkt.luckyMatched)
+                                  ? "bg-gradient-to-r from-emerald-100 to-amber-100 dark:from-emerald-950 dark:to-amber-950 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 shadow-sm"
+                                  : (tkt.matchCount || 0) > 0 || tkt.luckyMatched
+                                  ? "bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300"
                                   : "bg-gray-100 dark:bg-zinc-800 text-gray-500"
                               }`}>
                                 {tkt.prizeTier}
