@@ -3399,62 +3399,6 @@ setEditTrip(null);
 
       {/* ═══════════════ TOP MAIN BALANCE & HEALTH SECTION (ABOVE OVERVIEW TABS) ═══════════════ */}
       <div className="px-3 sm:px-5 pt-4">
-        {/* Cycle Selector Bar */}
-        <div className="mb-3.5 bg-white/90 dark:bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-purple-100 dark:border-white/20 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
-            <div className="flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-purple-600 dark:text-purple-300" />
-              <h3 className="font-black text-slate-800 dark:text-white text-xs sm:text-sm">الدورة المالية:</h3>
-            </div>
-            <select
-              value={selectedCycleId}
-              onChange={(e) => setSelectedCycleId(e.target.value)}
-              className="bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/20 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-purple-500 py-1.5 px-3 outline-none"
-            >
-              {cycles.map(c => (
-                <option key={c.id} value={c.id} className="text-black">{c.label}</option>
-              ))}
-            </select>
-          </div>
-          
-          <button
-            type="button"
-            onClick={() => {
-              if (!confirm("هل أنت متأكد من إنهاء الدورة المالية الحالية يدوياً وبدء دورة جديدة؟ هذا سيؤدي إلى نقل الميزانية المتبقية إلى الدورة الجديدة.")) return;
-              
-              const todayStr = today();
-              const currentManualStarts = settings?.manualCycleStarts || [];
-              if (currentManualStarts.includes(todayStr)) {
-                toast.error("لقد قمت بإنهاء الدورة مسبقاً اليوم!");
-                return;
-              }
-              const newCycleStarts = [...currentManualStarts, todayStr];
-              setSettings({ ...settings, manualCycleStarts: newCycleStarts });
-              syncToFirebase("settings", { ...settings, manualCycleStarts: newCycleStarts });
-              
-              const d = new Date(todayStr);
-              const newId = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getDate()}`;
-              setTimeout(() => setSelectedCycleId(newId), 50);
-            }}
-            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-3.5 py-1.5 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>إنهاء الدورة يدوياً</span>
-          </button>
-        </div>
-
-        {/* Helper Alert if user is on new cycle */}
-        {(expenses.length > 0 || incomes.length > 0) && totalExpensesAmt === 0 && totalIncome === 0 && selectedCycleId === cycles[0]?.id && (
-          <div className="bg-indigo-50 dark:bg-indigo-500/20 backdrop-blur-md border border-indigo-200 dark:border-indigo-400/50 rounded-2xl p-4 text-center mb-3.5 shadow-sm dark:shadow-lg animate-pulse">
-            <div className="flex justify-center items-center gap-2 mb-1">
-              <span className="text-indigo-950 dark:text-indigo-100 font-black text-sm">مرحباً! لقد بدأت دورة مالية جديدة فارغة 🗓️</span>
-            </div>
-            <p className="text-indigo-800/80 dark:text-indigo-200/80 font-bold text-xs mt-1">
-              أنت الآن في دورة شهرية جديدة. لرؤية مصاريفك وإدخالاتك السابقة، قم بتغيير الدورة المالية من القائمة المنسدلة في الأعلى (اختر الدورة السابقة).
-            </p>
-          </div>
-        )}
-
         {/* Main Balance Card with Health Score */}
         <div className="bg-gradient-to-br from-indigo-50/90 via-purple-50/80 to-pink-50/80 dark:from-indigo-500/20 dark:via-purple-500/20 dark:to-pink-500/20 backdrop-blur-xl rounded-[2rem] p-5 sm:p-6 border border-purple-200/60 dark:border-white/20 shadow-md dark:shadow-2xl relative overflow-hidden group mb-3">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -3513,40 +3457,7 @@ setEditTrip(null);
           </div>
         </div>
 
-        {/* 4 KPI Top Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 mb-1">
-          <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-emerald-700 dark:text-emerald-200 text-xs font-bold">الدخل الكلي</span>
-              <div className="p-1.5 bg-emerald-100 dark:bg-emerald-500/20 rounded-lg"><TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /></div>
-            </div>
-            <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalIncome)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
-          </div>
 
-          <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-rose-700 dark:text-rose-200 text-xs font-bold">المصاريف الكلية</span>
-              <div className="p-1.5 bg-rose-100 dark:bg-rose-500/20 rounded-lg"><TrendingDown className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" /></div>
-            </div>
-            <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalExpensesAmt)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
-          </div>
-
-          <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-indigo-700 dark:text-indigo-200 text-xs font-bold">الأقساط الشهرية</span>
-              <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg"><CreditCard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /></div>
-            </div>
-            <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalInstallmentMonthly)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
-          </div>
-
-          <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-amber-700 dark:text-amber-200 text-xs font-bold">الفواتير الثابتة</span>
-              <div className="p-1.5 bg-amber-100 dark:bg-amber-500/20 rounded-lg"><Receipt className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /></div>
-            </div>
-            <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalBillsAmt)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
-          </div>
-        </div>
       </div>
 
       {/* ═══════════════ TABS AS APP ICONS ═══════════════ */}
@@ -3784,6 +3695,96 @@ setEditTrip(null);
             <div className="relative bg-gradient-to-br from-white via-indigo-50/40 to-purple-50/50 dark:from-[#120324] dark:via-[#240b4a] dark:to-[#0a2540] rounded-[2.2rem] p-5 sm:p-6 shadow-xl dark:shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden">
               <div className="absolute top-0 right-0 w-80 h-80 bg-purple-500/10 dark:bg-purple-500/15 rounded-full blur-[100px] pointer-events-none" />
               <div className="absolute bottom-0 left-0 w-80 h-80 bg-cyan-500/10 dark:bg-cyan-500/15 rounded-full blur-[100px] pointer-events-none" />
+              {/* Cycle Selector Bar */}
+              <div className="relative z-10 mb-3.5 bg-white/90 dark:bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-purple-100 dark:border-white/20 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-purple-600 dark:text-purple-300" />
+                    <h3 className="font-black text-slate-800 dark:text-white text-xs sm:text-sm">الدورة المالية:</h3>
+                  </div>
+                  <select
+                    value={selectedCycleId}
+                    onChange={(e) => setSelectedCycleId(e.target.value)}
+                    className="bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/20 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-purple-500 py-1.5 px-3 outline-none"
+                  >
+                    {cycles.map(c => (
+                      <option key={c.id} value={c.id} className="text-black">{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!confirm("هل أنت متأكد من إنهاء الدورة المالية الحالية يدوياً وبدء دورة جديدة؟ هذا سيؤدي إلى نقل الميزانية المتبقية إلى الدورة الجديدة.")) return;
+                    
+                    const todayStr = today();
+                    const currentManualStarts = settings?.manualCycleStarts || [];
+                    if (currentManualStarts.includes(todayStr)) {
+                      toast.error("لقد قمت بإنهاء الدورة مسبقاً اليوم!");
+                      return;
+                    }
+                    const newCycleStarts = [...currentManualStarts, todayStr];
+                    setSettings({ ...settings, manualCycleStarts: newCycleStarts });
+                    syncToFirebase("settings", { ...settings, manualCycleStarts: newCycleStarts });
+                    
+                    const d = new Date(todayStr);
+                    const newId = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getDate()}`;
+                    setTimeout(() => setSelectedCycleId(newId), 50);
+                  }}
+                  className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-3.5 py-1.5 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>إنهاء الدورة يدوياً</span>
+                </button>
+              </div>
+
+              {/* Helper Alert if user is on new cycle */}
+              {(expenses.length > 0 || incomes.length > 0) && totalExpensesAmt === 0 && totalIncome === 0 && selectedCycleId === cycles[0]?.id && (
+                <div className="relative z-10 bg-indigo-50 dark:bg-indigo-500/20 backdrop-blur-md border border-indigo-200 dark:border-indigo-400/50 rounded-2xl p-4 text-center mb-3.5 shadow-sm dark:shadow-lg animate-pulse">
+                  <div className="flex justify-center items-center gap-2 mb-1">
+                    <span className="text-indigo-950 dark:text-indigo-100 font-black text-sm">مرحباً! لقد بدأت دورة مالية جديدة فارغة 🗓️</span>
+                  </div>
+                  <p className="text-indigo-800/80 dark:text-indigo-200/80 font-bold text-xs mt-1">
+                    أنت الآن في دورة شهرية جديدة. لرؤية مصاريفك وإدخالاتك السابقة، قم بتغيير الدورة المالية من القائمة المنسدلة في الأعلى (اختر الدورة السابقة).
+                  </p>
+                </div>
+              )}
+
+              {/* 4 KPI Top Cards */}
+              <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 mb-4">
+                <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-emerald-700 dark:text-emerald-200 text-xs font-bold">الدخل الكلي</span>
+                    <div className="p-1.5 bg-emerald-100 dark:bg-emerald-500/20 rounded-lg"><TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /></div>
+                  </div>
+                  <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalIncome)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
+                </div>
+
+                <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-rose-700 dark:text-rose-200 text-xs font-bold">المصاريف الكلية</span>
+                    <div className="p-1.5 bg-rose-100 dark:bg-rose-500/20 rounded-lg"><TrendingDown className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" /></div>
+                  </div>
+                  <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalExpensesAmt)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
+                </div>
+
+                <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-indigo-700 dark:text-indigo-200 text-xs font-bold">الأقساط الشهرية</span>
+                    <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg"><CreditCard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /></div>
+                  </div>
+                  <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalInstallmentMonthly)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
+                </div>
+
+                <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/80 dark:border-white/10 transition-colors flex flex-col justify-between shadow-sm">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-amber-700 dark:text-amber-200 text-xs font-bold">الفواتير الثابتة</span>
+                    <div className="p-1.5 bg-amber-100 dark:bg-amber-500/20 rounded-lg"><Receipt className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /></div>
+                  </div>
+                  <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white">{dataLoading ? <span className="opacity-40 animate-pulse text-sm">...</span> : fmt(totalBillsAmt)} <span className="text-[10px] text-slate-500 dark:text-gray-400">د.ع</span></div>
+                </div>
+              </div>
 
               {/* Mini-Cards: Debts vs Needs */}
               <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-3">
