@@ -42,6 +42,7 @@ interface ScanCakeInvoiceModalProps {
   inventoryItems?: any[];
   onSuccess: () => void;
   initialMode?: "scan" | "manual";
+  autoTrigger?: "camera" | "gallery" | null;
 }
 
 export default function ScanCakeInvoiceModal({
@@ -49,7 +50,8 @@ export default function ScanCakeInvoiceModal({
   onClose,
   inventoryItems = [],
   onSuccess,
-  initialMode = "scan"
+  initialMode = "scan",
+  autoTrigger = null
 }: ScanCakeInvoiceModalProps) {
   const safeInventory = Array.isArray(inventoryItems) ? inventoryItems.filter(i => i && typeof i === "object") : [];
 
@@ -139,8 +141,14 @@ export default function ScanCakeInvoiceModal({
         }
       };
       fetchStores();
+
+      if (autoTrigger === "camera") {
+        setTimeout(() => cameraInputRef.current?.click(), 120);
+      } else if (autoTrigger === "gallery") {
+        setTimeout(() => fileInputRef.current?.click(), 120);
+      }
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, autoTrigger]);
 
   const totalCalculated = items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
 

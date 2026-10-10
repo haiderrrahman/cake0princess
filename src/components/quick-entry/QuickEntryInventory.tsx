@@ -1,13 +1,13 @@
 "use client";
-import React, { useState, useRef } from "react";
-import { Boxes, Upload, Camera, Tag, Calculator, Loader2 } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { Boxes, Upload, Camera, Tag, Calculator, Loader2, Receipt, Image as ImageIcon, Sparkles, Zap } from "lucide-react";
 import { collection, addDoc, updateDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import AutocompleteInput from "@/components/AutocompleteInput";
-import { useEffect } from "react";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import imageCompression from 'browser-image-compression';
 import { toast } from "sonner";
+import ScanCakeInvoiceModal from "@/components/ScanCakeInvoiceModal";
 
 const INVENTORY_UNITS = ["كغم", "لتر", "قطعة", "كيس", "سطل", "علبة", "ورقة", "رول"];
 const INVENTORY_CATEGORIES = ["طحين وسكر", "كريمات", "حشوات", "شوكولاتة وكاكاو", "ألوان وإضافات", "منكهات وعطور", "عجينة سكر", "فواكه ومكسرات", "تغليف وزينة", "مستهلكات", "قوالب وصواني", "أدوات", "أخرى"];
@@ -25,13 +25,19 @@ export default function QuickEntryInventory({ onSuccess }: { onSuccess: () => vo
   const [invImagePreview, setInvImagePreview] = useState<string | null>(null);
   const invFileRef = useRef<HTMLInputElement>(null);
   const [existingNames, setExistingNames] = useState<string[]>([]);
+  const [fullInventoryItems, setFullInventoryItems] = useState<any[]>([]);
   const [invPaidBy, setInvPaidBy] = useState<"none" | "cake" | "salary" | "split">("cake");
   const [invSplitDebtAmount, setInvSplitDebtAmount] = useState("");
 
+  // Invoice scan modal state
+  const [isScanInvoiceOpen, setIsScanInvoiceOpen] = useState(false);
+  const [scanAutoTrigger, setScanAutoTrigger] = useState<"camera" | "gallery" | null>(null);
 
   useEffect(() => {
     getDocs(collection(db, "cake_inventory")).then(snap => {
-      setExistingNames(snap.docs.map(d => d.data().name || ""));
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setFullInventoryItems(items);
+      setExistingNames(items.map((d: any) => d.name || ""));
     });
   }, []);
 
@@ -132,11 +138,73 @@ export default function QuickEntryInventory({ onSuccess }: { onSuccess: () => vo
 
   return (
     <div className="space-y-4">
+      {/* Smart AI Invoice Scanner Bar */}
+      <div className="p-3.5 bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-orange-500/10 border border-amber-200/80 dark:border-amber-500/30 rounded-2xl space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center font-bold shadow-md shadow-amber-500/20 shrink-0">
+              <Receipt className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1.5">
+                <span>إضافة فاتورة مواد للمخزن</span>
+                <span className="text-[10px] bg-amber-200/60 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-1.5 py-0.2 rounded-md font-bold">🧠 AI</span>
+              </h4>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold">
+                مسح ذكي بالكاميرا أو الاستوديو واستخراج المواد والأسعار تلقائياً
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setScanAutoTrigger("camera");
+              setIsScanInvoiceOpen(true);
+            }}
+            className="flex items-center justify-center gap-1.5 p-2 rounded-xl text-xs font-black bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm transition active:scale-95 cursor-pointer"
+            title="تصوير الفاتورة بالكاميرا مباشرة"
+          >
+            <Camera className="w-3.5 h-3.5" />
+            <span>مسح كاميرا 📸</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setScanAutoTrigger("gallery");
+              setIsScanInvoiceOpen(true);
+            }}
+            className="flex items-center justify-center gap-1.5 p-2 rounded-xl text-xs font-black bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-sm transition active:scale-95 cursor-pointer"
+            title="رفع الفاتورة من الاستوديو"
+          >
+            <ImageIcon className="w-3.5 h-3.5" />
+            <span>من الاستوديو 🖼️</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setScanAutoTrigger(null);
+              setIsScanInvoiceOpen(true);
+            }}
+            className="flex items-center justify-center gap-1.5 p-2 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow-sm transition active:scale-95 cursor-pointer"
+            title="فتح نافذة الفاتورة الذكية بالكامل"
+          >
+            <Receipt className="w-3.5 h-3.5 text-amber-950" />
+            <span>فاتورة كاملة 🧾</span>
+          </button>
+        </div>
+      </div>
+
       {/* Tab Switcher */}
       <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl mb-4">
         <button
+          type="button"
           onClick={() => setEntryType("need")}
-          className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
             entryType === "need"
               ? "bg-white dark:bg-zinc-700 text-orange-600 dark:text-orange-400 shadow-sm"
               : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -145,14 +213,25 @@ export default function QuickEntryInventory({ onSuccess }: { onSuccess: () => vo
           إضافة للاحتياجات
         </button>
         <button
+          type="button"
           onClick={() => setEntryType("available")}
-          className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
             entryType === "available"
               ? "bg-white dark:bg-zinc-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
               : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
           }`}
         >
           إضافة للمتوفر
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setScanAutoTrigger(null);
+            setIsScanInvoiceOpen(true);
+          }}
+          className="flex-1 py-2 text-xs font-bold rounded-lg transition text-amber-600 dark:text-amber-400 hover:bg-white/60 dark:hover:bg-zinc-700/60"
+        >
+          🧾 مسح فاتورة AI
         </button>
       </div>
 
@@ -292,6 +371,23 @@ export default function QuickEntryInventory({ onSuccess }: { onSuccess: () => vo
       >
         {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (entryType === "need" ? "إضافة للاحتياجات" : "إضافة للمخزن")}
       </button>
+
+      {/* Full AI Invoice Scanner Modal */}
+      <ScanCakeInvoiceModal
+        isOpen={isScanInvoiceOpen}
+        onClose={() => {
+          setIsScanInvoiceOpen(false);
+          setScanAutoTrigger(null);
+        }}
+        onSuccess={() => {
+          setIsScanInvoiceOpen(false);
+          setScanAutoTrigger(null);
+          toast.success("تم تسجيل فاتورة المواد بنجاح في المخزن والمشتريات 🎉");
+          onSuccess();
+        }}
+        inventoryItems={fullInventoryItems}
+        autoTrigger={scanAutoTrigger}
+      />
     </div>
   );
 }

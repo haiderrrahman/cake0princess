@@ -222,15 +222,15 @@ export default function AdminDashboard() {
     );
   }
 
-  // Tactical Core 4 Operation Hubs
+  // Tactical Core 4 Operation Hubs with distributed sales & balances
   const tacticalPillars = [
     {
       title: "طلبات السوشيال",
       subtitle: "واتساب وانستغرام",
       icon: "📱",
       href: "/admin/hub?tab=external",
-      count: activeOperationalCounts.pendingExternal,
-      countLabel: "قيد التنفيذ",
+      amount: statsLoading ? "…" : `${fmt(realStats?.breakdown?.social)} د.ع`,
+      badge: activeOperationalCounts.pendingExternal > 0 ? `${activeOperationalCounts.pendingExternal} قيد التنفيذ` : null,
       gradient: "from-emerald-500 to-teal-700",
       glow: "shadow-emerald-500/25",
       border: "border-emerald-500/40",
@@ -240,8 +240,8 @@ export default function AdminDashboard() {
       subtitle: "متجر الزبائن",
       icon: "🛒",
       href: "/admin/hub?tab=orders",
-      count: activeOperationalCounts.pendingApp,
-      countLabel: "طلب نشط",
+      amount: statsLoading ? "…" : `${fmt(realStats?.breakdown?.appCakes)} د.ع`,
+      badge: activeOperationalCounts.pendingApp > 0 ? `${activeOperationalCounts.pendingApp} طلب نشط` : null,
       gradient: "from-pink-500 to-rose-700",
       glow: "shadow-pink-500/25",
       border: "border-pink-500/40",
@@ -251,8 +251,8 @@ export default function AdminDashboard() {
       subtitle: "جرد ومتابعة المواد",
       icon: "📦",
       href: "/admin/hub?tab=inventory",
-      count: null,
-      countLabel: "مراقبة المخزون",
+      amount: statsLoading ? "…" : `${fmt(realStats?.cakeMaterialsExpense)} د.ع`,
+      badge: "مخزون ومواد",
       gradient: "from-cyan-500 to-blue-700",
       glow: "shadow-cyan-500/25",
       border: "border-cyan-500/40",
@@ -262,16 +262,32 @@ export default function AdminDashboard() {
       subtitle: "المشتريات وتتبع النفاد",
       icon: "🧂",
       href: "/admin/hub?tab=supplies_orders",
-      count: null,
-      countLabel: "الفواتير والمصروف",
+      amount: statsLoading ? "…" : `${fmt(realStats?.totalExpenses)} د.ع`,
+      badge: activeOperationalCounts.totalExpensesCount > 0 ? `${activeOperationalCounts.totalExpensesCount} فواتير` : null,
       gradient: "from-amber-500 to-orange-700",
       glow: "shadow-amber-500/25",
       border: "border-amber-500/40",
     },
   ];
 
+  interface CommandItem {
+    title: string;
+    subtitle: string;
+    icon: string;
+    href: string;
+    bg: string;
+    glow: string;
+    badge?: string | null;
+    amount?: string | null;
+  }
+
+  interface CommandSection {
+    title: string;
+    items: CommandItem[];
+  }
+
   // Strategic Operations Matrix Categories
-  const commandSections = [
+  const commandSections: CommandSection[] = [
     {
       title: "👑 الإدارة المالية والحسابات",
       items: [
@@ -282,16 +298,18 @@ export default function AdminDashboard() {
           href: "/admin/home-finance",
           bg: "from-rose-600 to-red-800",
           glow: "shadow-rose-600/30",
-          badge: "VIP",
+          badge: "VIP 🏡",
+          amount: null,
         },
         {
           title: "الجرد المالي السريع",
-          subtitle: "أرباح ومصروفات",
+          subtitle: `إيرادات: ${fmt(realStats?.totalRevenue)} د.ع`,
           icon: "💰",
           href: "/admin/finances",
           bg: "from-teal-600 to-emerald-800",
           glow: "shadow-teal-600/30",
-          badge: null,
+          badge: "أرباح",
+          amount: statsLoading ? "…" : `صافي الربح: ${fmt(realStats?.netProfit)} د.ع`,
         },
         {
           title: "المطابقة والكشف المالي",
@@ -300,7 +318,8 @@ export default function AdminDashboard() {
           href: "/admin/hub?tab=audit",
           bg: "from-indigo-600 to-blue-800",
           glow: "shadow-indigo-600/30",
-          badge: null,
+          badge: debtRatio > 0 ? `${debtRatio}% دين` : null,
+          amount: statsLoading ? "…" : `دين مستحق: ${fmt(realStats?.totalSalaryDebt)} د.ع`,
         },
       ],
     },
@@ -473,229 +492,6 @@ export default function AdminDashboard() {
                 </Link>
               </div>
             </div>
-
-            {/* ═══════════════ AI SENTINEL RADAR (OPERATIONAL PULSE) ═══════════════ */}
-            <div className="bg-gradient-to-r from-purple-50 via-indigo-50/50 to-white dark:from-purple-950/60 dark:via-indigo-950/40 dark:to-slate-900/60 border border-purple-200/70 dark:border-purple-500/30 rounded-3xl p-4 backdrop-blur-xl shadow-md dark:shadow-2xl relative overflow-hidden transition-colors">
-              <div className="absolute top-0 right-0 w-40 h-40 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
-                <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-500/20 border border-purple-200 dark:border-purple-400/30 flex items-center justify-center shrink-0 mt-0.5">
-                    <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-300 animate-spin-slow" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-purple-900 dark:text-purple-200">المرصد الذكي للعمليات الحية:</span>
-                      <span className="text-[10px] bg-purple-100 dark:bg-purple-500/30 text-purple-700 dark:text-purple-200 px-2 py-0.5 rounded-full font-mono font-bold">
-                        Sentinel AI
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-700 dark:text-slate-300 font-bold mt-1">
-                      {activeOperationalCounts.todayDeliveries > 0 ? (
-                        <span className="text-amber-700 dark:text-amber-300 font-black">
-                          🚨 انتباه: لديك {activeOperationalCounts.todayDeliveries} طلبات سوشيال تستحق التسليم اليوم! اضغط لمتابعتها في المحور.
-                        </span>
-                      ) : activeOperationalCounts.pendingExternal > 0 ? (
-                        <span className="text-emerald-700 dark:text-emerald-300">
-                          ⚡ العمليات نشطة: يوجد {activeOperationalCounts.pendingExternal} طلب سوشيال قيد التجهيز و {activeOperationalCounts.pendingApp} طلب تطبيق.
-                        </span>
-                      ) : (
-                        <span className="text-cyan-700 dark:text-cyan-300">
-                          ✅ كافة الطلبات مكتملة ومحدّثة. الأداء التشغيلي في أعلى درجات الاستقرار.
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                  <Link
-                    href="/admin/hub?tab=external"
-                    className="text-xs font-black bg-purple-100 hover:bg-purple-200 dark:bg-purple-500/20 dark:hover:bg-purple-500/30 border border-purple-300 dark:border-purple-400/40 text-purple-800 dark:text-purple-200 px-3 py-1.5 rounded-xl flex items-center gap-1 transition shadow-xs"
-                  >
-                    <span>فتح غرفة العمليات</span>
-                    <ChevronRight className="w-3.5 h-3.5 rotate-180" />
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            {/* ═══════════════ KPI FLIGHT DECK (FINANCIAL RADAR) ═══════════════ */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
-              {/* Card 1: Total Revenue */}
-              <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 transition border border-slate-200/80 dark:border-white/10 rounded-3xl p-4 shadow-sm dark:shadow-none backdrop-blur-md relative overflow-hidden group">
-                <div className="flex items-center justify-between text-purple-700 dark:text-purple-200 mb-2">
-                  <span className="text-[11px] font-bold flex items-center gap-1.5">
-                    <Wallet className="w-4 h-4 text-purple-600 dark:text-purple-400" /> إجمالي الإيرادات
-                  </span>
-                  <span className="text-[10px] bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-bold">
-                    كل القنوات
-                  </span>
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                  {statsLoading ? "…" : fmt(realStats.totalRevenue)}
-                  <span className="text-xs text-slate-400 dark:text-purple-300/70 font-normal mr-1">د.ع</span>
-                </div>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 dark:border-white/5 text-[10px] text-slate-500 dark:text-slate-400 font-bold">
-                  <span>مبيعات اليوم:</span>
-                  <span className="text-emerald-600 dark:text-emerald-400 font-black">+{fmt(realStats.todaySales)} د.ع</span>
-                </div>
-              </div>
-
-              {/* Card 2: Monthly Inflow */}
-              <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 transition border border-slate-200/80 dark:border-white/10 rounded-3xl p-4 shadow-sm dark:shadow-none backdrop-blur-md relative overflow-hidden group">
-                <div className="flex items-center justify-between text-cyan-700 dark:text-cyan-200 mb-2">
-                  <span className="text-[11px] font-bold flex items-center gap-1.5">
-                    <TrendingUp className="w-4 h-4 text-cyan-600 dark:text-cyan-400" /> مبيعات 30 يوماً
-                  </span>
-                  <span className="text-[10px] bg-cyan-100 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 px-2 py-0.5 rounded-full font-bold">
-                    شهري
-                  </span>
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-cyan-700 dark:text-cyan-300 tracking-tight">
-                  {statsLoading ? "…" : fmt(realStats.monthSales)}
-                  <span className="text-xs text-slate-400 dark:text-cyan-200/70 font-normal mr-1">د.ع</span>
-                </div>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 dark:border-white/5 text-[10px] text-slate-500 dark:text-slate-400 font-bold">
-                  <span>الأسبوع الحالي:</span>
-                  <span className="text-cyan-600 dark:text-cyan-400 font-black">{fmt(realStats.weekSales)} د.ع</span>
-                </div>
-              </div>
-
-              {/* Card 3: Cake Operating Expenses */}
-              <div className="bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 transition border border-slate-200/80 dark:border-white/10 rounded-3xl p-4 shadow-sm dark:shadow-none backdrop-blur-md relative overflow-hidden group">
-                <div className="flex items-center justify-between text-rose-700 dark:text-rose-200 mb-2">
-                  <span className="text-[11px] font-bold flex items-center gap-1.5">
-                    <Receipt className="w-4 h-4 text-rose-600 dark:text-rose-400" /> مصروفات الكيك
-                  </span>
-                  <span className="text-[10px] bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-full font-bold">
-                    أموال الكيك
-                  </span>
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tight">
-                  {statsLoading ? "…" : fmt(realStats.totalExpenses)}
-                  <span className="text-xs text-slate-400 dark:text-rose-300/70 font-normal mr-1">د.ع</span>
-                </div>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 dark:border-white/5 text-[10px] text-slate-500 dark:text-slate-400 font-bold">
-                  <span>منها مواد خام ومخزن:</span>
-                  <span className="text-rose-600 dark:text-rose-300 font-black">{fmt(realStats.cakeMaterialsExpense)} د.ع</span>
-                </div>
-              </div>
-
-              {/* Card 4: Net Profit */}
-              <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/40 dark:from-emerald-950/60 dark:to-emerald-900/30 border border-emerald-200/80 dark:border-emerald-500/30 rounded-3xl p-4 shadow-sm dark:shadow-lg backdrop-blur-md relative overflow-hidden group">
-                <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-200 mb-2">
-                  <span className="text-[11px] font-bold flex items-center gap-1.5">
-                    <Crown className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> صافي الربح الحقيقي
-                  </span>
-                  <span className="text-[10px] bg-emerald-200/60 dark:bg-emerald-500/30 text-emerald-800 dark:text-emerald-200 px-2 py-0.5 rounded-full font-black">
-                    {profitMargin}% هامش
-                  </span>
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-emerald-300 tracking-tight">
-                  {statsLoading ? "…" : fmt(realStats.netProfit)}
-                  <span className="text-xs text-slate-400 dark:text-emerald-200/70 font-normal mr-1">د.ع</span>
-                </div>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-emerald-200/50 dark:border-emerald-500/20 text-[10px] text-emerald-800/80 dark:text-emerald-300/80 font-bold">
-                  <span>بعد خصم المصاريف والديون:</span>
-                  <span className="text-emerald-950 dark:text-white font-black">صافي كاش</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Salary Debt Alert Cockpit Bar */}
-            <div className="bg-gradient-to-r from-amber-50 via-orange-50/50 to-white dark:from-orange-950/50 dark:via-amber-950/40 dark:to-slate-900/50 border border-amber-200 dark:border-orange-500/30 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-xs backdrop-blur-md">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 flex items-center justify-center font-black">
-                  👤
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-amber-900 dark:text-orange-300 font-black">دين مستحق شخصي (أموال الراتب المدفوعة للكيك):</p>
-                    {debtRatio > 0 && (
-                      <span className="text-[10px] bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded font-bold">
-                        يمثل {debtRatio}% من الإيراد
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-lg font-black text-slate-900 dark:text-white">
-                    {statsLoading ? "…" : fmt(realStats.totalSalaryDebt)}{" "}
-                    <span className="text-xs font-normal text-amber-700 dark:text-orange-200/70">د.ع مستحق استرداده لكِ</span>
-                  </p>
-                </div>
-              </div>
-              <Link
-                href="/admin/finances"
-                className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-black text-xs px-4 py-2 rounded-xl transition shadow-md shadow-orange-500/20 whitespace-nowrap active:scale-95"
-              >
-                تسديد واسترداد الدين
-              </Link>
-            </div>
-
-            {/* ═══════════════ REVENUE CHANNELS RADAR ═══════════════ */}
-            <div className="bg-white/90 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 rounded-2xl p-3.5 shadow-xs dark:shadow-none backdrop-blur-md">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-300 mb-2.5">
-                <span className="flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5 text-pink-500 dark:text-pink-400" />
-                  توزيع مصادر الدخل التشغيلي
-                </span>
-                <span className="text-[10px] text-slate-400">تحديث فوري لكل قناة</span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="bg-slate-50 dark:bg-black/30 rounded-xl p-2.5 border border-slate-200/60 dark:border-white/5">
-                  <div className="flex items-center justify-between text-[11px] text-emerald-600 dark:text-emerald-400 font-bold mb-1">
-                    <span>📱 سوشيال</span>
-                    <span className="font-mono">
-                      {(Number(realStats?.totalRevenue) || 0) > 0
-                        ? Math.round(((Number(realStats?.breakdown?.social) || 0) / Number(realStats?.totalRevenue)) * 100)
-                        : 0}
-                      %
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats?.breakdown?.social)} د.ع</p>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-black/30 rounded-xl p-2.5 border border-slate-200/60 dark:border-white/5">
-                  <div className="flex items-center justify-between text-[11px] text-pink-600 dark:text-pink-400 font-bold mb-1">
-                    <span>🛒 كيك التطبيق</span>
-                    <span className="font-mono">
-                      {(Number(realStats?.totalRevenue) || 0) > 0
-                        ? Math.round(((Number(realStats?.breakdown?.appCakes) || 0) / Number(realStats?.totalRevenue)) * 100)
-                        : 0}
-                      %
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats?.breakdown?.appCakes)} د.ع</p>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-black/30 rounded-xl p-2.5 border border-slate-200/60 dark:border-white/5">
-                  <div className="flex items-center justify-between text-[11px] text-cyan-600 dark:text-cyan-400 font-bold mb-1">
-                    <span>🎓 الأكاديمية</span>
-                    <span className="font-mono">
-                      {(Number(realStats?.totalRevenue) || 0) > 0
-                        ? Math.round(((Number(realStats?.breakdown?.appAcademy) || 0) / Number(realStats?.totalRevenue)) * 100)
-                        : 0}
-                      %
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats?.breakdown?.appAcademy)} د.ع</p>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-black/30 rounded-xl p-2.5 border border-slate-200/60 dark:border-white/5">
-                  <div className="flex items-center justify-between text-[11px] text-amber-600 dark:text-amber-400 font-bold mb-1">
-                    <span>🧂 مستلزمات ومواد</span>
-                    <span className="font-mono">
-                      {(Number(realStats?.totalRevenue) || 0) > 0
-                        ? Math.round(((Number(realStats?.breakdown?.storeSupplies) || 0) / Number(realStats?.totalRevenue)) * 100)
-                        : 0}
-                      %
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">{fmt(realStats?.breakdown?.storeSupplies)} د.ع</p>
-                </div>
-              </div>
-            </div>
           </div>
         </header>
 
@@ -716,23 +512,28 @@ export default function AdminDashboard() {
                 <Link
                   key={idx}
                   href={item.href}
-                  className={`bg-gradient-to-br ${item.gradient} p-4 rounded-3xl shadow-md dark:shadow-xl ${item.glow} hover:-translate-y-1 active:scale-95 transition-all text-white relative overflow-hidden group flex flex-col justify-between min-h-[125px]`}
+                  className={`bg-gradient-to-br ${item.gradient} p-4 rounded-3xl shadow-md dark:shadow-xl ${item.glow} hover:-translate-y-1 active:scale-95 transition-all text-white relative overflow-hidden group flex flex-col justify-between min-h-[145px]`}
                 >
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-white/15 rounded-full blur-xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-white/15 rounded-full blur-xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
 
                   <div className="flex items-start justify-between">
                     <span className="text-2xl sm:text-3xl p-1 bg-white/10 rounded-2xl backdrop-blur-md">
                       {item.icon}
                     </span>
-                    {item.count !== null && item.count > 0 && (
-                      <span className="bg-white/20 text-white font-mono font-black text-xs px-2 py-0.5 rounded-full border border-white/30 backdrop-blur-md animate-pulse">
-                        {item.count} {item.countLabel}
+                    {item.badge && (
+                      <span className="bg-white/20 text-white font-mono font-black text-[10px] sm:text-xs px-2 py-0.5 rounded-full border border-white/30 backdrop-blur-md animate-pulse">
+                        {item.badge}
                       </span>
                     )}
                   </div>
 
-                  <div>
-                    <h3 className="font-black text-sm tracking-tight text-white mb-0.5">{item.title}</h3>
+                  <div className="mt-2.5">
+                    {item.amount && (
+                      <div className="text-base sm:text-lg font-black tracking-tight text-white mb-0.5 leading-tight drop-shadow-xs">
+                        {item.amount}
+                      </div>
+                    )}
+                    <h3 className="font-black text-xs sm:text-sm tracking-tight text-white mb-0.5">{item.title}</h3>
                     <p className="text-[10px] text-white/80 font-bold">{item.subtitle}</p>
                   </div>
                 </Link>
@@ -753,20 +554,25 @@ export default function AdminDashboard() {
                     <Link
                       key={i}
                       href={item.href}
-                      className={`bg-gradient-to-br ${item.bg} rounded-3xl p-4 sm:p-5 flex flex-col justify-between shadow-md dark:shadow-lg ${item.glow} hover:-translate-y-1 active:scale-95 transition-all text-white relative overflow-hidden group min-h-[110px] border border-white/20 dark:border-white/10`}
+                      className={`bg-gradient-to-br ${item.bg} rounded-3xl p-4 sm:p-5 flex flex-col justify-between shadow-md dark:shadow-lg ${item.glow} hover:-translate-y-1 active:scale-95 transition-all text-white relative overflow-hidden group min-h-[135px] border border-white/20 dark:border-white/10`}
                     >
                       <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full blur-xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
 
                       <div className="flex items-start justify-between">
                         <span className="text-2xl sm:text-3xl">{item.icon}</span>
                         {item.badge && (
-                          <span className="bg-white/20 text-white font-black text-[9px] px-2 py-0.5 rounded-full border border-white/30 backdrop-blur-md">
+                          <span className="bg-white/20 text-white font-black text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full border border-white/30 backdrop-blur-md">
                             {item.badge}
                           </span>
                         )}
                       </div>
 
-                      <div className="mt-2">
+                      <div className="mt-2.5">
+                        {item.amount && (
+                          <div className="text-xs sm:text-sm font-black tracking-tight text-white mb-0.5 leading-tight drop-shadow-xs">
+                            {item.amount}
+                          </div>
+                        )}
                         <h4 className="font-black text-xs sm:text-sm tracking-tight text-white leading-tight">
                           {item.title}
                         </h4>

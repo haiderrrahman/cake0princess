@@ -1,15 +1,49 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   X, Home, Receipt, Users, ShoppingCart, ReceiptText,
   CreditCard, TrendingUp, Banknote, Calendar, Tag,
-  Check, Loader2, Sparkles, Zap, Plus, ArrowRight
+  Check, Loader2, Sparkles, Zap, Plus, ArrowRight,
+  Camera, Image as ImageIcon, ListPlus, Trash2, ScanLine
 } from "lucide-react";
 import { doc, getDoc, setDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import FormattedNumberInput from "@/components/FormattedNumberInput";
 import { toast } from "sonner";
+import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
+
+interface ExpenseItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+const compressImageFast = (file: File, maxDim = 1200, quality = 0.8): Promise<string> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round((height * maxDim) / width); width = maxDim; }
+          else { width = Math.round((width * maxDim) / height); height = maxDim; }
+        }
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
+const fmt = (n: number) => (n || 0).toLocaleString("en-US");
 
 interface HomeQuickEntryProps {
   onClose: () => void;
@@ -124,6 +158,50 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
   const [expDate, setExpDate] = useState(new Date().toISOString().split("T")[0]);
   const [expNotes, setExpNotes] = useState("");
 
+  // Expense AI & Items details state
+  const [expenseItems, setExpenseItems] = useState<ExpenseItem[]>([]);
+  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
+  const [scanStatusText, setScanStatusText] = useState("");
+  const [showQuickPasteModal, setShowQuickPasteModal] = useState(false);
+  const [quickPasteText, setQuickPasteText] = useState("");
+  const [uniqueNames, setUniqueNames] = useState<string[]>([]);
+  const [uniqueProductNames, setUniqueProductNames] = useState<string[]>([]);
+  const [showExpSuggestions, setShowExpSuggestions] = useState(false);
+  const [focusedProductIdx, setFocusedProductIdx] = useState<number | null>(null);
+
+  const receiptCameraInputRef = useRef<HTMLInputElement>(null);
+  const receiptGalleryInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      try {
+        const snap = await getDoc(doc(db, "home_finance", "expenses"));
+        if (snap.exists() && Array.isArray(snap.data()?.data)) {
+          const list = snap.data().data;
+          const namesSet = new Set<string>();
+          const productsSet = new Set<string>();
+          list.forEach((e: any) => {
+            if (e.name && typeof e.name === "string" && e.name.trim()) {
+              namesSet.add(e.name.trim());
+            }
+            if (Array.isArray(e.items)) {
+              e.items.forEach((it: any) => {
+                if (it.name && typeof it.name === "string" && it.name.trim()) {
+                  productsSet.add(it.name.trim());
+                }
+              });
+            }
+          });
+          setUniqueNames(Array.from(namesSet).slice(0, 30));
+          setUniqueProductNames(Array.from(productsSet).slice(0, 50));
+        }
+      } catch (err) {
+        console.warn("Could not load expense suggestions:", err);
+      }
+    };
+    fetchSuggestions();
+  }, []);
+
   // 2. Family need state
   const [familyMember, setFamilyMember] = useState("العائلة");
   const [familyType, setFamilyType] = useState<"duty" | "need">("duty");
@@ -170,25 +248,167 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
 
   const activeTabInfo = HOME_TABS.find(t => t.id === tab) || HOME_TABS[0];
 
+  // AI Receipt Scanner Handler
+  const handleScanReceipt = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
+
+    try {
+      setIsScanningReceipt(true);
+      setScanStatusText(files.length > 1 ? `جاري قراءة واستخراج البيانات من ${files.length} صور بالذكاء الاصطناعي 🧠...` : "جاري قراءة واستخراج بيانات الفاتورة بالذكاء الاصطناعي 🧠...");
+
+      const dataUrls = await Promise.all(files.map(f => compressImageFast(f, 1200, 0.8)));
+      const data = await scanReceiptWithGemini(dataUrls, (status) => setScanStatusText(status));
+
+      if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
+        setExpName(data.storeName);
+      } else if (!expName || expName === "غير محدد") {
+        setExpName("تعاون ماركت");
+      }
+
+      if (data.category) {
+        setExpCategory(data.category);
+      }
+
+      const todayStr = new Date().toISOString().split("T")[0];
+      const currentYear = new Date().getFullYear().toString();
+      let extractedDate = data.date;
+
+      if (extractedDate) {
+        const parts = extractedDate.split("-");
+        if (parts.length === 3) {
+          if (parts[0] !== currentYear) {
+            extractedDate = `${currentYear}-${parts[1]}-${parts[2]}`;
+          }
+        }
+        if (extractedDate > todayStr) {
+          extractedDate = todayStr;
+        }
+      } else {
+        extractedDate = todayStr;
+      }
+
+      setExpDate(extractedDate);
+
+      if (Array.isArray(data.items) && data.items.length > 0) {
+        const formattedItems = data.items.map((it: any, idx: number) => ({
+          id: it.id || `item-${Date.now()}-${idx}`,
+          name: it.name || "",
+          quantity: Number(it.quantity) || 1,
+          price: Number(it.price) || 0
+        }));
+        setExpenseItems(formattedItems);
+        const sum = formattedItems.reduce((acc, curr) => acc + (curr.price || 0), 0);
+        setExpAmount(sum.toString());
+      }
+
+      toast.success(`تم استخراج ${data.items?.length || 0} مادة وتعبئة بيانات الفاتورة بنجاح! ⚡✨`);
+    } catch (err: any) {
+      console.error("Receipt scan failed:", err);
+      toast.error(err.message || "حدث خطأ أثناء مسح الفاتورة");
+    } finally {
+      setIsScanningReceipt(false);
+      setScanStatusText("");
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  // Quick Paste text parser
+  const handleQuickPasteSubmit = () => {
+    if (!quickPasteText.trim()) return;
+
+    const lines = quickPasteText.split("\n").map(l => l.trim()).filter(Boolean);
+    const newItems: ExpenseItem[] = [];
+
+    for (const line of lines) {
+      const cleanedLine = line.replace(/^[\d]+\.\s*/, "").replace(/^[-•*]\s*/, "").trim();
+      const match = cleanedLine.match(/^(.*?)(?:[\s,:=-]+)(\d+(?:[.,]\d+)?)(?:[\s,:=-]+(\d+(?:[.,]\d+)?))?$/);
+      if (match) {
+        let name = match[1].trim();
+        let num1 = parseFloat(match[2].replace(/,/g, ""));
+        let num2 = match[3] ? parseFloat(match[3].replace(/,/g, "")) : null;
+
+        let quantity = 1;
+        let price = 0;
+
+        if (num2 !== null) {
+          if (num1 > 100 && num2 <= 100) {
+            price = num1;
+            quantity = num2;
+          } else {
+            quantity = num1 || 1;
+            price = num2;
+          }
+        } else {
+          price = num1;
+        }
+
+        if (name && price > 0) {
+          newItems.push({
+            id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+            name,
+            quantity,
+            price
+          });
+          continue;
+        }
+      }
+
+      const parts = cleanedLine.split(/\s+/);
+      if (parts.length >= 2) {
+        const lastPart = parts[parts.length - 1].replace(/[^\d.]/g, "");
+        const price = parseFloat(lastPart) || 0;
+        const name = parts.slice(0, parts.length - 1).join(" ");
+        if (name && price > 0) {
+          newItems.push({
+            id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+            name,
+            quantity: 1,
+            price
+          });
+        }
+      }
+    }
+
+    if (newItems.length > 0) {
+      const updated = [...expenseItems, ...newItems];
+      setExpenseItems(updated);
+      const sum = updated.reduce((acc, curr) => acc + (curr.price || 0), 0);
+      setExpAmount(sum.toString());
+      toast.success(`تمت إضافة ${newItems.length} مواد بنجاح!`);
+      setShowQuickPasteModal(false);
+      setQuickPasteText("");
+    } else {
+      toast.error("لم يتم التعرف على أي مواد. تأكد من إدخال اسم المادة والسعر في كل سطر.");
+    }
+  };
+
   // Submit Handlers
   const handleSaveExpense = async () => {
-    const rawAmt = Number(expAmount.replace(/,/g, ''));
-    if (!rawAmt || rawAmt <= 0) {
-      toast.error("يرجى إدخال مبلغ المصروف");
+    const validItems = expenseItems.filter(i => (i.name || "").trim() !== "");
+    const totalAmount = validItems.length > 0
+      ? validItems.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0)
+      : Number(expAmount.replace(/,/g, ''));
+
+    if (!totalAmount || totalAmount <= 0) {
+      toast.error("يرجى إدخال مبلغ المصروف أو تفاصيل المواد");
       return;
     }
     setSubmitting(true);
     try {
       const finalName = expName.trim() || (expCategory === "سوبر ماركت" ? "تعاون ماركت" : expCategory);
-      const newExp = {
+      const newExp: any = {
         id: Date.now().toString(),
         name: finalName,
         category: expCategory,
-        amount: rawAmt,
+        amount: totalAmount,
         date: expDate || new Date().toISOString().split("T")[0],
         notes: expNotes.trim(),
         createdAt: new Date().toISOString()
       };
+      if (validItems.length > 0) {
+        newExp.items = validItems;
+      }
       await appendToHomeDoc("expenses", newExp);
       toast.success("تم تسجيل المصروف بنجاح 💸");
       onSuccess();
@@ -479,19 +699,88 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
         <div className="p-6 overflow-y-auto space-y-4 flex-1">
           {/* TAB 1: المصروفات (Default) */}
           {tab === "expense" && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div>
+            <div className="space-y-4 animate-in fade-in duration-200 relative">
+              {/* Hidden file inputs for AI Scanning */}
+              <input
+                type="file"
+                ref={receiptCameraInputRef}
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleScanReceipt}
+              />
+              <input
+                type="file"
+                ref={receiptGalleryInputRef}
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleScanReceipt}
+              />
+
+              {/* Smart Action Buttons (AI Scan & Quick Paste) */}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => receiptCameraInputRef.current?.click()}
+                  className="flex items-center justify-center gap-1.5 p-2.5 rounded-2xl font-black text-xs bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-sm hover:opacity-95 active:scale-[0.98] transition cursor-pointer"
+                  title="تصوير الفاتورة مباشرة بالكاميرا"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>مسح كاميرا 📸</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => receiptGalleryInputRef.current?.click()}
+                  className="flex items-center justify-center gap-1.5 p-2.5 rounded-2xl font-black text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-sm hover:opacity-95 active:scale-[0.98] transition cursor-pointer"
+                  title="رفع وقراءة صورة الفاتورة من الاستوديو"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span>من الاستوديو 🖼️</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowQuickPasteModal(true)}
+                  className="flex items-center justify-center gap-1.5 p-2.5 rounded-2xl font-black text-xs bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30 transition active:scale-[0.98] cursor-pointer"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-500" />
+                  <span>لصق سريعة ⚡</span>
+                </button>
+              </div>
+
+              {/* Store / Description with Suggestions */}
+              <div className="relative">
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم أو وجه المصروف</label>
                 <div className="relative">
                   <Receipt className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input 
                     type="text" 
                     value={expName} 
-                    onChange={e => setExpName(e.target.value)}
+                    onChange={e => {
+                      setExpName(e.target.value);
+                      setShowExpSuggestions(e.target.value.length >= 1);
+                    }}
+                    onFocus={() => setShowExpSuggestions(expName.length >= 1)}
+                    onBlur={() => setTimeout(() => setShowExpSuggestions(false), 200)}
                     className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-500 outline-none"
                     placeholder="مثال: مسواك تعاون ماركت، خضار وفواكه..."
                   />
                 </div>
+                {showExpSuggestions && uniqueNames.filter(n => n.includes(expName)).length > 0 && (
+                  <div className="absolute z-30 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-40 overflow-y-auto">
+                    {uniqueNames.filter(n => n.includes(expName)).slice(0, 6).map((suggestedName, idx) => (
+                      <div 
+                        key={idx} 
+                        onClick={() => { setExpName(suggestedName); setShowExpSuggestions(false); }} 
+                        className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200"
+                      >
+                        {suggestedName}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -510,13 +799,29 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">المبلغ (د.ع) *</label>
-                  <FormattedNumberInput
-                    value={expAmount} 
-                    onChange={setExpAmount} 
-                    placeholder="المبلغ د.ع"
-                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-500 outline-none text-left font-black"
-                  />
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">المبلغ (د.ع) *</label>
+                    {expenseItems.length > 0 && (
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-500/10 px-1.5 py-0.5 rounded">
+                        محسوب آلياً
+                      </span>
+                    )}
+                  </div>
+                  {expenseItems.length > 0 ? (
+                    <input 
+                      type="text"
+                      readOnly
+                      value={fmt(expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0))}
+                      className="w-full bg-indigo-50/50 dark:bg-zinc-800/80 border border-indigo-200 dark:border-indigo-800/40 rounded-xl px-4 py-3 text-sm text-rose-600 dark:text-rose-400 font-black outline-none text-left cursor-not-allowed"
+                    />
+                  ) : (
+                    <FormattedNumberInput
+                      value={expAmount} 
+                      onChange={setExpAmount} 
+                      placeholder="المبلغ د.ع"
+                      className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-500 outline-none text-left font-black"
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -531,6 +836,225 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* ─── Ultra-Fast Keyboard-Navigable Items Section ─── */}
+              <div className="pt-2 border-t border-gray-100 dark:border-zinc-800 space-y-2.5">
+                <div className="flex flex-wrap justify-between items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                      <ListPlus className="w-4 h-4 text-indigo-500" />
+                      <span>تفاصيل قائمة المنتجات</span>
+                    </label>
+                    {expenseItems.length > 0 && (
+                      <span className="text-[11px] font-black bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-500/30">
+                        {expenseItems.length} مواد | {fmt(expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0))} د.ع
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {expenseItems.length > 0 && (
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          if (confirm("هل تريد مسح جميع المواد من القائمة؟")) {
+                            setExpenseItems([]);
+                            setExpAmount("");
+                          }
+                        }}
+                        className="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition"
+                      >
+                        مسح الكل
+                      </button>
+                    )}
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+                        const updated = [...expenseItems, { id: newId, name: "", quantity: 1, price: 0 }];
+                        setExpenseItems(updated);
+                        setTimeout(() => {
+                          const input = document.getElementById(`quick-exp-item-name-${updated.length - 1}`);
+                          if (input) input.focus();
+                        }, 50);
+                      }} 
+                      className="text-xs flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-black bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition active:scale-95 border border-indigo-200/60 dark:border-indigo-500/30"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> إضافة مادة (Enter)
+                    </button>
+                  </div>
+                </div>
+
+                {expenseItems.length > 0 ? (
+                  <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 border border-gray-100 dark:border-zinc-800">
+                    <div className="hidden sm:grid sm:grid-cols-12 gap-2 px-2 pb-2 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
+                      <div className="col-span-1 text-center">#</div>
+                      <div className="col-span-5">اسم المادة / المنتج</div>
+                      <div className="col-span-2 text-center">الكمية</div>
+                      <div className="col-span-3 text-left">السعر (د.ع)</div>
+                      <div className="col-span-1 text-center">حذف</div>
+                    </div>
+
+                    <div className="space-y-2 mt-2 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
+                      {expenseItems.map((item, idx) => (
+                        <div 
+                          key={item.id} 
+                          className="flex flex-col sm:grid sm:grid-cols-12 gap-2 items-center bg-white dark:bg-zinc-950 p-2 sm:p-2 rounded-xl border border-gray-200/80 dark:border-zinc-800 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-600 transition"
+                        >
+                          {/* Row Index */}
+                          <div className="hidden sm:flex sm:col-span-1 items-center justify-center font-black text-xs text-gray-400">
+                            {idx + 1}
+                          </div>
+
+                          {/* Product Name with Suggestions */}
+                          <div className="w-full sm:col-span-5 relative">
+                            <input 
+                              id={`quick-exp-item-name-${idx}`}
+                              type="text" 
+                              placeholder="اسم المنتج (مثال: حليب، خضار...)" 
+                              value={item.name} 
+                              autoComplete="off"
+                              onFocus={() => setFocusedProductIdx(idx)}
+                              onBlur={() => setTimeout(() => setFocusedProductIdx(null), 200)}
+                              onChange={e => {
+                                const newItems = [...expenseItems];
+                                newItems[idx].name = e.target.value;
+                                setExpenseItems(newItems);
+                              }} 
+                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
+                              required 
+                            />
+                            {focusedProductIdx === idx && (item.name || "").length >= 1 && uniqueProductNames.filter(n => n.includes(item.name || "")).length > 0 && (
+                              <div className="absolute z-30 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-32 overflow-y-auto">
+                                {uniqueProductNames.filter(n => n.includes(item.name || "")).slice(0, 5).map((suggestedName, sIdx) => (
+                                  <div 
+                                    key={sIdx} 
+                                    onClick={() => { 
+                                      const newItems = [...expenseItems];
+                                      newItems[idx].name = suggestedName;
+                                      setExpenseItems(newItems);
+                                      setFocusedProductIdx(null);
+                                    }} 
+                                    className="px-3 py-1.5 hover:bg-indigo-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200"
+                                  >
+                                    {suggestedName}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Quantity & Price */}
+                          <div className="w-full flex sm:contents gap-2">
+                            <div className="w-24 sm:w-auto sm:col-span-2">
+                              <input 
+                                type="number" 
+                                placeholder="الكمية" 
+                                min="0.1" 
+                                step="any" 
+                                value={item.quantity || ''} 
+                                onChange={e => {
+                                  const newItems = [...expenseItems];
+                                  newItems[idx].quantity = Number(e.target.value);
+                                  setExpenseItems(newItems);
+                                }} 
+                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-xs sm:text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
+                                required 
+                              />
+                            </div>
+
+                            <div className="flex-1 sm:col-span-3">
+                              <input 
+                                id={`quick-exp-item-price-${idx}`}
+                                type="number" 
+                                placeholder="السعر (د.ع)" 
+                                value={item.price || ''} 
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    if (idx === expenseItems.length - 1) {
+                                      const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+                                      const updated = [...expenseItems, { id: newId, name: "", quantity: 1, price: 0 }];
+                                      setExpenseItems(updated);
+                                      setTimeout(() => {
+                                        const nextInput = document.getElementById(`quick-exp-item-name-${updated.length - 1}`);
+                                        if (nextInput) nextInput.focus();
+                                      }, 50);
+                                    } else {
+                                      const nextInput = document.getElementById(`quick-exp-item-name-${idx + 1}`);
+                                      if (nextInput) nextInput.focus();
+                                    }
+                                  }
+                                }}
+                                onChange={e => {
+                                  const newItems = [...expenseItems];
+                                  newItems[idx].price = Number(e.target.value);
+                                  setExpenseItems(newItems);
+                                  const sum = newItems.reduce((acc, curr) => acc + (curr.price || 0), 0);
+                                  setExpAmount(sum.toString());
+                                }} 
+                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-black text-rose-600 dark:text-rose-400 text-left transition" 
+                                required 
+                              />
+                            </div>
+
+                            <div className="sm:col-span-1 flex justify-center">
+                              <button 
+                                type="button" 
+                                onClick={() => {
+                                  const updated = expenseItems.filter(x => x.id !== item.id);
+                                  setExpenseItems(updated);
+                                  if (updated.length > 0) {
+                                    setExpAmount(updated.reduce((acc, curr) => acc + (curr.price || 0), 0).toString());
+                                  }
+                                }} 
+                                className="text-red-500 hover:text-red-600 p-1.5 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 rounded-lg transition"
+                                title="حذف هذه المادة"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-gray-200 dark:border-zinc-800 flex justify-between items-center text-xs px-1">
+                      <span className="text-gray-500 font-bold text-[10px]">💡 اضغط Enter في حقل السعر لإضافة سطر جديد</span>
+                      <span className="font-black text-gray-800 dark:text-white">المجموع: {fmt(expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0))} د.ع</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50/70 dark:bg-zinc-900/40 border border-dashed border-gray-200 dark:border-zinc-800 rounded-2xl p-4 text-center">
+                    <p className="text-xs font-bold text-gray-400 mb-2">لم تقم بإضافة مواد تفصيلية للمصروف بعد (اختياري)</p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => receiptCameraInputRef.current?.click()}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline px-2 py-1 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg"
+                      >
+                        📸 مسح فاتورة
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickPasteModal(true)}
+                        className="text-xs text-amber-600 dark:text-amber-400 font-bold hover:underline px-2 py-1 bg-amber-50 dark:bg-amber-500/10 rounded-lg"
+                      >
+                        ⚡ لصق قائمة نصية
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+                          setExpenseItems([{ id: newId, name: "", quantity: 1, price: 0 }]);
+                        }}
+                        className="text-xs text-gray-600 dark:text-gray-300 font-bold hover:underline px-2 py-1 bg-gray-100 dark:bg-zinc-800 rounded-lg"
+                      >
+                        ✍️ كتابة يدوية
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -548,7 +1072,7 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                 type="button"
                 onClick={handleSaveExpense} 
                 disabled={submitting}
-                className="w-full bg-gradient-to-r from-rose-500 via-pink-600 to-purple-600 hover:from-rose-600 hover:to-purple-700 text-white py-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 mt-2 shadow-lg shadow-pink-500/25 active:scale-95 transition"
+                className="w-full bg-gradient-to-r from-rose-500 via-pink-600 to-purple-600 hover:from-rose-600 hover:to-purple-700 text-white py-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 mt-2 shadow-lg shadow-pink-500/25 active:scale-95 transition cursor-pointer"
               >
                 {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><span>تسجيل المصروف</span><Check className="w-4 h-4" /></>}
               </button>
