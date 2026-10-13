@@ -621,6 +621,23 @@ export function saveLearnedCategory(name: string, category: string): void {
   }
 }
 
+function matchesKeyword(text: string, kw: string): boolean {
+  const t = text.toLowerCase().trim();
+  const k = kw.toLowerCase().trim();
+  if (!t || !k) return false;
+  if (t === k) return true;
+  if (k.includes(" ")) {
+    return t.includes(k);
+  }
+  const words = t.split(/[\s,،_.\/\\-]+/).filter(Boolean);
+  for (const w of words) {
+    if (w === k) return true;
+    if (w === "ال" + k || w === "و" + k || w === "وال" + k || w === "ف" + k || w === "كال" + k || w === "بال" + k) return true;
+    if (k.length >= 4 && (w.startsWith(k) || w.endsWith(k))) return true;
+  }
+  return false;
+}
+
 /**
  * دالة التنبؤ الذكي التلقائي بالفئة حسب اسم المادة (مع دعم التعلم المسبق)
  */
@@ -633,44 +650,54 @@ export function detectProductCategory(name: string): string {
   const learned = getLearnedCategory(cleaned);
   if (learned) return learned;
 
-  // 2. Exact match in prioritized order
+  // 2. Exact or word-boundary keyword match across all categories
   for (const cat of PRODUCT_CATEGORIES) {
     for (const kw of cat.keywords) {
-      const kwLower = kw.toLowerCase();
-      if (cleaned === kwLower) {
-        return cat.name;
-      }
-    }
-  }
-
-  // 3. Partial keyword matching (e.g. "كراج سيارة" matches "كراج" or "سيارة")
-  for (const cat of PRODUCT_CATEGORIES) {
-    for (const kw of cat.keywords) {
-      const kwLower = kw.toLowerCase();
-      if (cleaned.includes(kwLower)) {
-        return cat.name;
-      }
-      if (cleaned.length >= 3 && kwLower.includes(cleaned)) {
+      if (matchesKeyword(cleaned, kw)) {
         return cat.name;
       }
     }
   }
 
   // 4. Heuristic fallbacks for key Iraqi terms:
-  if (cleaned.includes("كراج") || cleaned.includes("بانزين") || cleaned.includes("بنزين") || cleaned.includes("سيار") || cleaned.includes("دهن محرك") || cleaned.includes("فيتر") || cleaned.includes("تاير") || cleaned.includes("غسل سيارة")) {
+  if (cleaned.includes("كراج") || cleaned.includes("بانزين") || cleaned.includes("بنزين") || cleaned.includes("سيار") || cleaned.includes("دهن محرك") || cleaned.includes("فيتر") || cleaned.includes("تاير") || cleaned.includes("غسل سيارة") || cleaned.includes("بنشر") || cleaned.includes("تبديل دهن") || cleaned.includes("وقود") || cleaned.includes("باركنك") || cleaned.includes("تكسي") || cleaned.includes("كروة")) {
     return "السيارة والنقل";
   }
-  if (cleaned.includes("مطعم") || cleaned.includes("كافيه") || cleaned.includes("كوفي") || cleaned.includes("شاورما") || cleaned.includes("برغر") || cleaned.includes("بيتزا") || cleaned.includes("مشويات") || cleaned.includes("ريوق") || cleaned.includes("عشاء") || cleaned.includes("غداء")) {
+  if (cleaned.includes("كارت") || cleaned.includes("رصيد") || cleaned.includes("اسيا") || cleaned.includes("اسياسيل") || cleaned.includes("زين") || cleaned.includes("كورك") || cleaned.includes("سيم كارت") || cleaned.includes("سيمكارت")) {
+    return "كارتات وشحن";
+  }
+  if (cleaned.includes("مطعم") || cleaned.includes("كافيه") || cleaned.includes("كوفي") || cleaned.includes("شاورما") || cleaned.includes("برغر") || cleaned.includes("برجر") || cleaned.includes("بيتزا") || cleaned.includes("مشويات") || cleaned.includes("ريوق") || cleaned.includes("عشاء") || cleaned.includes("غداء") || cleaned.includes("صاج") || cleaned.includes("فلافل") || cleaned.includes("وجبة سفري")) {
     return "مطاعم وكافيهات";
+  }
+  if (cleaned.includes("صيانة") || cleaned.includes("تصليح") || cleaned.includes("سبلت") || cleaned.includes("سبالت") || cleaned.includes("كهربائي") || cleaned.includes("سباك") || cleaned.includes("صباغ") || cleaned.includes("تأسيسات") || cleaned.includes("ماطور") || cleaned.includes("دينمو")) {
+    return "صيانة وترميم المنزل";
+  }
+  if (cleaned.includes("ملابس") || cleaned.includes("بنطلون") || cleaned.includes("قميص") || cleaned.includes("تيشرت") || cleaned.includes("حذاء") || cleaned.includes("قندرة") || cleaned.includes("دشداشة") || cleaned.includes("فستان") || cleaned.includes("جاكيت")) {
+    return "ملابس وأحذية";
+  }
+  if (cleaned.includes("صيدلية") || cleaned.includes("دواء") || cleaned.includes("علاج") || cleaned.includes("بندول") || cleaned.includes("فيتامين") || cleaned.includes("مسكن") || cleaned.includes("طبيب") || cleaned.includes("تحليل")) {
+    return "صيدلية وعلاج";
+  }
+  if (cleaned.includes("حفاض") || cleaned.includes("بامبرز") || cleaned.includes("حليب اطفال") || cleaned.includes("سيريلاك") || cleaned.includes("لهاية")) {
+    return "العناية بالطفل";
+  }
+  if (cleaned.includes("موبايل") || cleaned.includes("ايفون") || cleaned.includes("سامسونج") || cleaned.includes("كفر") || cleaned.includes("شاحن") || cleaned.includes("سماعة") || cleaned.includes("باور بانك") || cleaned.includes("لزقة شاشة")) {
+    return "هواتف واكسسوارات";
+  }
+  if (cleaned.includes("لابتوب") || cleaned.includes("كمبيوتر") || cleaned.includes("حاسبة") || cleaned.includes("راوتر") || cleaned.includes("شاشة") || cleaned.includes("طابعة")) {
+    return "إلكترونيات وكمبيوتر";
+  }
+  if (cleaned.includes("غسالة") || cleaned.includes("ثلاجة") || cleaned.includes("مكنسة") || cleaned.includes("طباخ") || cleaned.includes("مروحة") || cleaned.includes("سخان") || cleaned.includes("قلاية")) {
+    return "أجهزة كهربائية ومنزلية";
+  }
+  if (cleaned.includes("زاهي") || cleaned.includes("تايد") || cleaned.includes("كلور") || cleaned.includes("قاصر") || cleaned.includes("فلاش") || cleaned.includes("منظف") || cleaned.includes("معطر") || cleaned.includes("صابون")) {
+    return "منظفات ومعقمات";
+  }
+  if (cleaned.includes("مولدة") || cleaned.includes("امبير") || cleaned.includes("انترنت") || cleaned.includes("كهرباء") || cleaned.includes("فاتورة") || cleaned.includes("اشتراك")) {
+    return "فواتير وخدمات منزلية";
   }
   if (cleaned.includes("ماركت") || cleaned.includes("سوبر")) {
     return "سوبر ماركت";
-  }
-  if (cleaned.includes("صيدلية") || cleaned.includes("دواء") || cleaned.includes("علاج") || cleaned.includes("بندول")) {
-    return "صيدلية وعلاج";
-  }
-  if (cleaned.includes("مولدة") || cleaned.includes("امبير") || cleaned.includes("انترنت") || cleaned.includes("كهرباء")) {
-    return "فواتير وخدمات منزلية";
   }
 
   // 5. No match found - do not arbitrarily return fruits & veg!

@@ -1819,16 +1819,25 @@ setEditFuturePlan(null);
     const fd = new FormData(form);
     const isEdit = !!editExpense;
     
-    const category = expCategoryInput || (fd.get("category") as string) || "سوبر ماركت";
+    const validItems = expenseItems.filter(i => (i.name || "").trim() !== "");
+    const derivedCategory = validItems.find(i => i.category && i.category.trim() !== "")?.category
+      || expCategoryInput
+      || "سوبر ماركت";
+    const category = derivedCategory;
+
     let name = (expNameInput || (fd.get("name") as string) || "").trim();
     if (!name || name === "غير محدد") {
-      name = category === "سوبر ماركت" ? "تعاون ماركت" : (category || "مصروف عام");
+      name = validItems[0]?.place || validItems[0]?.name || (category === "سوبر ماركت" ? "تعاون ماركت" : (category || "مصروف عام"));
     }
-    const validItems = expenseItems.filter(i => (i.name || "").trim() !== "");
     const finalAmount = validItems.length > 0 
       ? validItems.reduce((acc, curr) => acc + (curr.price || 0), 0) 
       : Number(fd.get("amount") || 0);
     const date = expDateInput || (fd.get("date") as string) || today();
+
+    if (finalAmount <= 0 && validItems.length === 0 && !name) {
+      toast.error("يرجى إدخال اسم ومبلغ المصروف أو إضافة مواد للقائمة");
+      return;
+    }
 
     // 1. Lottery Check
     const isLottoRelated = name.includes("لوتو") || name.includes("عراق لوتو") || category === "ألعاب ويانصيب";
@@ -7474,64 +7483,46 @@ setEditTrip(null);
 
             <form onSubmit={handleSaveExpense} className="space-y-3.5">
               {/* Main Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="relative">
-                  <label className="label-sm">وصف المصروف / المتجر</label>
-                  <input 
-                    name="name" 
-                    type="text" 
-                    required 
-                    autoComplete="off" 
-                    value={expNameInput}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setExpNameInput(val);
-                      setShowExpSuggestions(val.length >= 1);
-                      const pred = detectProductCategory(val);
-                      if (pred) {
-                        setExpCategoryInput(pred);
-                      }
-                    }}
-                    onFocus={() => setShowExpSuggestions(expNameInput.length >= 1)}
-                    onBlur={() => setTimeout(() => setShowExpSuggestions(false), 200)}
-                    className="input-field" 
-                    placeholder="مثال: هايبرماركت البركات، بنزين السيارة..." 
-                  />
-                  
-                  {showExpSuggestions && (
-                    <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl max-h-40 overflow-y-auto">
-                      {uniqueNames.filter(n => n.includes(expNameInput)).map((suggestedName, idx) => (
-                        <div 
-                          key={idx} 
-                          onClick={() => { 
-                            setExpNameInput(suggestedName); 
-                            setShowExpSuggestions(false); 
-                            const pred = detectProductCategory(suggestedName);
-                            if (pred) setExpCategoryInput(pred);
-                          }} 
-                          className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-sm font-bold text-gray-800 dark:text-gray-200"
-                        >
-                          {suggestedName}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="label-sm">الفئة</label>
-                  <select 
-                    name="category" 
-                    value={expCategoryInput} 
-                    onChange={e => setExpCategoryInput(e.target.value)} 
-                    className="input-field"
-                  >
-                    {Array.from(new Set(EXPENSE_CATEGORIES.map(c => c.label))).map(label => {
-                      const c = EXPENSE_CATEGORIES.find(item => item.label === label);
-                      return <option key={label} value={label}>{c?.icon || "📌"} {label}</option>;
-                    })}
-                  </select>
-                </div>
+              <div className="relative w-full">
+                <label className="label-sm">وصف المصروف / المتجر</label>
+                <input 
+                  name="name" 
+                  type="text" 
+                  autoComplete="off" 
+                  value={expNameInput}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setExpNameInput(val);
+                    setShowExpSuggestions(val.length >= 1);
+                    const pred = detectProductCategory(val);
+                    if (pred) {
+                      setExpCategoryInput(pred);
+                    }
+                  }}
+                  onFocus={() => setShowExpSuggestions(expNameInput.length >= 1)}
+                  onBlur={() => setTimeout(() => setShowExpSuggestions(false), 200)}
+                  className="input-field" 
+                  placeholder="مثال: هايبرماركت البركات، بنزين السيارة، صيانة..." 
+                />
+                
+                {showExpSuggestions && (
+                  <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl max-h-40 overflow-y-auto">
+                    {uniqueNames.filter(n => n.includes(expNameInput)).map((suggestedName, idx) => (
+                      <div 
+                        key={idx} 
+                        onClick={() => { 
+                          setExpNameInput(suggestedName); 
+                          setShowExpSuggestions(false); 
+                          const pred = detectProductCategory(suggestedName);
+                          if (pred) setExpCategoryInput(pred);
+                        }} 
+                        className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-sm font-bold text-gray-800 dark:text-gray-200"
+                      >
+                        {suggestedName}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {(expCategoryInput === "ألعاب ويانصيب" || expNameInput.includes("لوتو")) && (
@@ -7719,7 +7710,7 @@ setEditTrip(null);
                                       name: "",
                                       quantity: 1,
                                       price: 0,
-                                      category: detectProductCategory(""),
+                                      category: "",
                                       place: pName
                                     }]);
                                     setNewPlaceInput("");
@@ -7740,7 +7731,7 @@ setEditTrip(null);
                                       name: "",
                                       quantity: 1,
                                       price: 0,
-                                      category: detectProductCategory(""),
+                                      category: "",
                                       place: pName
                                     }]);
                                     setNewPlaceInput("");
@@ -7816,7 +7807,6 @@ setEditTrip(null);
                     defaultValue={expenseItems.length === 0 ? editExpense?.amount : undefined} 
                     value={expenseItems.length > 0 ? expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0) : undefined} 
                     readOnly={expenseItems.length > 0} 
-                    required 
                     placeholder="0" 
                     className={`input-field font-black text-rose-600 dark:text-rose-400 ${expenseItems.length > 0 ? 'bg-indigo-50/50 dark:bg-zinc-800/80 cursor-not-allowed border-indigo-200 dark:border-indigo-800/40' : ''}`} 
                   />
@@ -7910,10 +7900,11 @@ setEditTrip(null);
                   <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 border border-gray-100 dark:border-zinc-800">
                     <div className="hidden sm:grid sm:grid-cols-12 gap-2 px-2 pb-2 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
                       <div className="col-span-1 text-center">#</div>
-                      <div className="col-span-5">اسم المادة / المنتج</div>
-                      <div className="col-span-3">المكان / المحطة 📍</div>
+                      <div className="col-span-4">اسم المادة / المنتج</div>
+                      <div className="col-span-3">القسم / الفئة 🏷️</div>
+                      <div className="col-span-2">المكان / المحطة 📍</div>
                       <div className="col-span-1 text-center">الكمية</div>
-                      <div className="col-span-2 text-left">السعر والضمان 🛡️</div>
+                      <div className="col-span-1 text-left">السعر 🛡️</div>
                     </div>
 
                     <div className="space-y-2 mt-2 max-h-[340px] overflow-y-auto pr-1 custom-scrollbar">
@@ -7928,7 +7919,7 @@ setEditTrip(null);
                           </div>
 
                           {/* Product Name with Suggestions */}
-                          <div className="w-full sm:col-span-5 relative">
+                          <div className="w-full sm:col-span-4 relative">
                             <input 
                               id={`exp-item-name-${idx}`}
                               type="text" 
@@ -7951,7 +7942,6 @@ setEditTrip(null);
                                 setExpenseItems(newItems);
                               }} 
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
-                              required 
                             />
                             {focusedProductIdx === idx && (item.name || "").length >= 1 && uniqueProductNames.filter(n => n.includes(item.name || "")).length > 0 && (
                               <div className="absolute z-30 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-36 overflow-y-auto">
@@ -7980,8 +7970,32 @@ setEditTrip(null);
                             )}
                           </div>
 
-                          {/* Place / Shop Selector */}
+                          {/* Category Selector (Comprehensive Departments) */}
                           <div className="w-full sm:col-span-3">
+                            <select
+                              value={item.category || ""}
+                              onChange={e => {
+                                const newCat = e.target.value;
+                                const newItems = [...expenseItems];
+                                newItems[idx].category = newCat;
+                                setExpenseItems(newItems);
+                                if (newItems[idx].name && newCat) {
+                                  saveLearnedCategory(newItems[idx].name, newCat);
+                                }
+                              }}
+                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200 cursor-pointer"
+                            >
+                              <option value="">اختر القسم (تنبؤ ذكي 🧠)</option>
+                              {PRODUCT_CATEGORIES.map(cat => (
+                                <option key={cat.id} value={cat.name}>
+                                  {cat.icon} {cat.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Place / Shop Selector */}
+                          <div className="w-full sm:col-span-2">
                             <input
                               type="text"
                               list={`places-list-${idx}`}
@@ -8017,12 +8031,11 @@ setEditTrip(null);
                                   setExpenseItems(newItems);
                                 }} 
                                 className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-1.5 py-1.5 text-xs text-center outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
-                                required 
                               />
                             </div>
 
                             {/* Price & Actions (Warranty + Delete) */}
-                            <div className="flex-1 sm:col-span-2 flex items-center gap-1.5">
+                            <div className="flex-1 sm:col-span-1 flex items-center gap-1.5">
                               <input 
                                 id={`exp-item-price-${idx}`}
                                 type="number" 
@@ -8059,7 +8072,6 @@ setEditTrip(null);
                                   setExpenseItems(newItems);
                                 }} 
                                 className="w-full min-w-0 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/40 font-black text-rose-600 dark:text-rose-400 text-left transition" 
-                                required 
                               />
 
                               {/* Warranty Button */}
