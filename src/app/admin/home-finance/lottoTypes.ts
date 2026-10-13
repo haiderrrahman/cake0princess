@@ -559,7 +559,8 @@ export function predictNextNumbers(
     }
   }
 
-  const finalNumbers = bestCombination.length === 6 ? bestCombination : Array.from(new Set([...validLocked, 3, 8, 17, 24, 29, 38])).slice(0, 6).sort((a, b) => a - b);
+  const fallbackPool = [3, 7, 12, 18, 22, Math.min(28, max)].filter(n => n <= max);
+  const finalNumbers = bestCombination.length === 6 ? bestCombination : Array.from(new Set([...validLocked, ...fallbackPool])).slice(0, 6).sort((a, b) => a - b);
 
   let luckyNumber: number | undefined;
   if (GAME_DETAILS[game].hasLuckyNumber) {

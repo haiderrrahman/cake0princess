@@ -10,7 +10,8 @@ import {
   MessageCircle, Send, Bot, Sparkles, BrainCircuit, CheckCircle, PackageCheck,
   Camera, Upload, ScanLine, FileText, ListPlus, Copy, Search, RefreshCw, Loader2,
   Pill, Image as ImageIcon, Eye,
-  Flame, Lightbulb, ShieldAlert, ShieldCheck, Compass, Info
+  Flame, Lightbulb, ShieldAlert, ShieldCheck, Compass, Info,
+  Shield, ZoomIn, Download
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -25,10 +26,30 @@ import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
 import { uploadImageResiliently, compressToTinyThumbnail } from "@/lib/hfImageStore";
 import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
 import { scanNeedItemWithGemini, cropItemFromImage, ScannedNeedItem } from "@/lib/scanNeedItemClient";
+import {
+  PRODUCT_CATEGORIES,
+  PRODUCT_CATEGORY_MAP,
+  detectProductCategory,
+  OUTING_PLACES_SUGGESTIONS,
+  ProductCategoryDef,
+  sortItemsByCategoryPriority,
+  getCategoryPriorityIndex,
+  saveLearnedCategory,
+  WARRANTY_PERIOD_PRESETS,
+  calculateWarrantyExpiryDate,
+  getWarrantyStatus
+} from "./productCategories";
 
 // ══════════════════════════════════════════════
 // TYPES
 // ══════════════════════════════════════════════
+
+interface WalletState {
+  bankBalance: number;
+  cashBalance: number;
+  updatedAt?: string;
+  notes?: string;
+}
 
 interface Installment {
   id: string;
@@ -63,6 +84,13 @@ interface ExpenseItem {
   name: string;
   quantity: number;
   price: number;
+  category?: string;
+  place?: string;
+  hasWarranty?: boolean;
+  warrantyPeriod?: string;
+  warrantyExpiryDate?: string;
+  warrantyCardImage?: string;
+  warrantyNotes?: string;
 }
 
 interface Expense {
@@ -76,6 +104,9 @@ interface Expense {
   imageUrl?: string;
   receiptUrl?: string;
   receiptImages?: string[];
+  hasWarranty?: boolean;
+  warrantiesCount?: number;
+  warrantyCardImage?: string;
 }
 
 interface Income {
@@ -465,6 +496,10 @@ export default function HomeFinanceDashboard() {
   const [expenseItems, setExpenseItems] = useState<ExpenseItem[]>([]);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showLottoTrackerModal, setShowLottoTrackerModal] = useState(false);
+  const [wallet, setWallet] = useState<WalletState>({ bankBalance: 410000, cashBalance: 50000 });
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [walletBankInput, setWalletBankInput] = useState<number>(410000);
+  const [walletCashInput, setWalletCashInput] = useState<number>(50000);
   const [expCategoryInput, setExpCategoryInput] = useState<string>("سوبر ماركت");
   const [expDateInput, setExpDateInput] = useState<string>(today());
   const [isScanningReceipt, setIsScanningReceipt] = useState(false);
@@ -475,6 +510,18 @@ export default function HomeFinanceDashboard() {
   const [receiptItemFilter, setReceiptItemFilter] = useState("");
   const receiptCameraInputRef = useRef<HTMLInputElement | null>(null);
   const receiptGalleryInputRef = useRef<HTMLInputElement | null>(null);
+  const warrantyCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const warrantyGalleryInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ─── Outing Places & Warranty States ───
+  const [selectedOutingPlace, setSelectedOutingPlace] = useState<string>("كل المحطات");
+  const [newPlaceInput, setNewPlaceInput] = useState<string>("");
+  const [showAddPlaceInput, setShowAddPlaceInput] = useState<boolean>(false);
+  const [activeWarrantyItemIdx, setActiveWarrantyItemIdx] = useState<number | null>(null);
+  const [warrantyCardPreviewUrl, setWarrantyCardPreviewUrl] = useState<string | null>(null);
+  const [showWarrantiesRegistryModal, setShowWarrantiesRegistryModal] = useState<boolean>(false);
+  const [onlyWarrantyFilter, setOnlyWarrantyFilter] = useState<boolean>(false);
+  const [viewReceiptGroupingMode, setViewReceiptGroupingMode] = useState<"order" | "priority" | "place">("order");
 
   const [showProductSearchModal, setShowProductSearchModal] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState("");
@@ -729,10 +776,28 @@ export default function HomeFinanceDashboard() {
       checkAllLoaded();
     });
 
+    const unsubWallet = onSnapshot(doc(db, "home_finance", "wallets"), (snap) => {
+      if (snap.exists()) {
+        const d = snap.data();
+        const b = typeof d.bankBalance === "number" ? d.bankBalance : 410000;
+        const c = typeof d.cashBalance === "number" ? d.cashBalance : 50000;
+        setWallet({ bankBalance: b, cashBalance: c, updatedAt: d.updatedAt, notes: d.notes });
+        setWalletBankInput(b);
+        setWalletCashInput(c);
+      } else {
+        setDoc(doc(db, "home_finance", "wallets"), {
+          bankBalance: 410000,
+          cashBalance: 50000,
+          updatedAt: new Date().toISOString()
+        }).catch(e => console.error("init wallet err", e));
+      }
+    });
+
     return () => {
       clearTimeout(safetyTimeout);
       unsubscribers.forEach(unsub => unsub());
       unsubExpenses();
+      unsubWallet();
     };
   }, []);
 
@@ -1168,7 +1233,7 @@ export default function HomeFinanceDashboard() {
     .reduce((s, d) => {
       const paidForMe = d.payments.filter(p => p.type === "دين لي" || (!p.type && d.type === "دين لي")).reduce((ps, p) => ps + p.amount, 0);
       const paidOnMe = d.payments.filter(p => p.type === "دين علي" || (!p.type && d.type === "دين علي")).reduce((ps, p) => ps + p.amount, 0);
-      return s + Math.max(0, (d.amount - paidForMe) - paidOnMe);
+      return s + Math.max(0, (d.amount - paidForMe) + paidOnMe);
     }, 0);
 
   const totalDebtsOnMe = effectiveDebts
@@ -1176,7 +1241,7 @@ export default function HomeFinanceDashboard() {
     .reduce((s, d) => {
       const paidOnMe = d.payments.filter(p => p.type === "دين علي" || (!p.type && d.type === "دين علي")).reduce((ps, p) => ps + p.amount, 0);
       const paidForMe = d.payments.filter(p => p.type === "دين لي" || (!p.type && d.type === "دين لي")).reduce((ps, p) => ps + p.amount, 0);
-      return s + Math.max(0, (d.amount - paidOnMe) - paidForMe);
+      return s + Math.max(0, (d.amount - paidOnMe) + paidForMe);
     }, 0);
 
   // ──────────────────────────────────────────
@@ -1518,7 +1583,11 @@ setEditFuturePlan(null);
   // ──────────────────────────────────────────
   // EXPENSE HANDLERS & SMART AI SCANNER
   // ──────────────────────────────────────────
-  const handleScanReceipt = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScanReceipt = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    customPlace?: string,
+    append: boolean = false
+  ) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (files.length === 0) return;
 
@@ -1532,13 +1601,17 @@ setEditFuturePlan(null);
       // Pass images to Gemini for data extraction (does not store attached photos)
       const data = await scanReceiptWithGemini(dataUrls, (status) => setScanStatusText(status));
 
+      const determinedPlace = customPlace || (selectedOutingPlace !== "كل المحطات" ? selectedOutingPlace : data.storeName) || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت");
+
       if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
-        setExpNameInput(data.storeName);
+        if (!expNameInput || expNameInput === "غير محدد") {
+          setExpNameInput(data.storeName);
+        }
       } else if (!expNameInput || expNameInput === "غير محدد") {
-        setExpNameInput("تعاون ماركت");
+        setExpNameInput(expCategoryInput === "طلعات وجولات" ? "طلعة بغداد" : "تعاون ماركت");
       }
 
-      if (data.category) {
+      if (data.category && expCategoryInput !== "طلعات وجولات") {
         setExpCategoryInput(data.category);
       }
 
@@ -1563,12 +1636,29 @@ setEditFuturePlan(null);
       setExpDateInput(extractedDate);
 
       if (Array.isArray(data.items) && data.items.length > 0) {
-        setExpenseItems(data.items);
-      }
+        const itemsWithPlace = data.items.map(it => {
+          const itemPlace = it.place || determinedPlace;
+          const cat = it.category || detectProductCategory(it.name);
+          return {
+            ...it,
+            place: itemPlace,
+            category: cat
+          };
+        });
 
-      toast.success(`تم استخراج ${data.items.length} مادة وتعبئة بيانات الفاتورة بنجاح! ⚡✨`, {
-        duration: 4000
-      });
+        // If in outing or append mode and we already have items, append them!
+        if (append || (expCategoryInput === "طلعات وجولات" && expenseItems.length > 0)) {
+          setExpenseItems(prev => [...prev, ...itemsWithPlace]);
+          toast.success(`تمت إضافة ${itemsWithPlace.length} مادة لفاتورة محطة (${determinedPlace}) بنجاح! ⚡✨`, {
+            duration: 4000
+          });
+        } else {
+          setExpenseItems(itemsWithPlace);
+          toast.success(`تم استخراج ${data.items.length} مادة وتعبئة بيانات الفاتورة بنجاح! ⚡✨`, {
+            duration: 4000
+          });
+        }
+      }
     } catch (err: any) {
       console.error("Receipt scan failed:", err);
       toast.error(err.message || "حدث خطأ أثناء مسح الفاتورة");
@@ -1579,7 +1669,25 @@ setEditFuturePlan(null);
     }
   };
 
-    const handleQuickPasteSubmit = () => {
+  const handleSaveWallet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload: WalletState = {
+        bankBalance: Number(walletBankInput) || 0,
+        cashBalance: Number(walletCashInput) || 0,
+        updatedAt: new Date().toISOString()
+      };
+      setWallet(payload);
+      await setDoc(doc(db, "home_finance", "wallets"), payload, { merge: true });
+      setShowWalletModal(false);
+      toast.success("تم تحديث أرصدة المحفظة المصرفية والكاش بنجاح 💼");
+    } catch (err) {
+      console.error("Save wallet err:", err);
+      toast.error("حدث خطأ أثناء حفظ المحفظة");
+    }
+  };
+
+  const handleQuickPasteSubmit = () => {
     if (!quickPasteText.trim()) return;
 
     const lines = quickPasteText.split("\n").map(l => l.trim()).filter(Boolean);
@@ -1613,7 +1721,9 @@ setEditFuturePlan(null);
             id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
             name,
             quantity,
-            price
+            price,
+            category: detectProductCategory(name),
+            place: expNameInput.trim() || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت")
           });
           continue;
         }
@@ -1629,7 +1739,9 @@ setEditFuturePlan(null);
             id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
             name,
             quantity: 1,
-            price
+            price,
+            category: detectProductCategory(name),
+            place: expNameInput.trim() || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت")
           });
         }
       }
@@ -1665,13 +1777,18 @@ setEditFuturePlan(null);
     // 1. Lottery Check
     const isLottoRelated = name.includes("لوتو") || name.includes("عراق لوتو") || category === "ألعاب ويانصيب";
 
+    const hasAnyWarranty = validItems.some(i => i.hasWarranty);
+    const warrantiesCount = validItems.filter(i => i.hasWarranty).length;
+
     const item: Expense = {
       id: isEdit ? editExpense!.id : Date.now().toString(),
       name,
       category,
       amount: finalAmount,
       date,
-      createdAt: isEdit ? editExpense!.createdAt : new Date().toISOString()
+      createdAt: isEdit ? editExpense!.createdAt : new Date().toISOString(),
+      hasWarranty: hasAnyWarranty || Boolean(isEdit && editExpense?.hasWarranty),
+      warrantiesCount: warrantiesCount || (isEdit ? editExpense?.warrantiesCount : 0)
     };
     if (validItems.length > 0) {
       item.items = validItems;
@@ -2810,11 +2927,11 @@ setEditInventory(null);
       .reduce((s, p) => s + p.amount, 0);
 
     const netRemaining = debt.type === "دين علي"
-      ? (debt.amount - paidOnMe) - paidForMe
-      : (debt.amount - paidForMe) - paidOnMe;
+      ? (debt.amount - paidOnMe) + paidForMe
+      : (debt.amount - paidForMe) + paidOnMe;
     
     if (debt.id === "virtual-cake-debt") {
-      const remainingCake = Math.max(0, debt.amount - paidOnMe - paidForMe);
+      const remainingCake = Math.max(0, (debt.amount - paidOnMe) + paidForMe);
       showPrompt("تسديد جزء من دين الكيك (اموال الراتب)", async (amountStr) => {
         const actualAmount = Number(amountStr);
         if (isNaN(actualAmount) || actualAmount <= 0) { toast.error("مبلغ غير صحيح"); return; }
@@ -2844,13 +2961,13 @@ setEditInventory(null);
         } catch (e) {
           toast.error("حدث خطأ أثناء التسديد");
         }
-      });
+      }, remainingCake > 0 ? remainingCake.toString() : "", "المبلغ المطلوب تسديده");
       return;
     }
     
     // إذا كان ديناً متقدماً (بنظام الأقساط)، وبدون تحديد جهة يدوية، يتم سداد القسط الشهري تلقائياً
     if (debt.monthlyInstallment && debt.totalMonths && !isDirectionChosen) {
-      const remainingInstallment = Math.max(0, debt.amount - paidOnMe);
+      const remainingInstallment = Math.max(0, (debt.amount - paidOnMe) + paidForMe);
       const paymentAmount = Math.min(debt.monthlyInstallment, Math.max(remainingInstallment, 0));
       const recordId = Date.now().toString();
       
@@ -2891,21 +3008,29 @@ setEditInventory(null);
       return;
     }
 
-    const promptTitle = isOwedToMe
-      ? `تسديد دين لي (استلام من: ${debt.person})`
-      : `تسديد دين عليّ (دفع لـ: ${debt.person})`;
+    const isPayingOwedDebt = direction === "دين علي" && debt.type === "دين علي";
+    const isCollectingDebt = direction === "دين لي" && debt.type === "دين لي";
+    const isBorrowingMore = direction === "دين لي" && debt.type === "دين علي";
 
-    const promptMsg = isOwedToMe
-      ? `أدخل المبلغ المقبوض من ${debt.person} (يُسجل كدخل استرجاع دين في الميزانية):`
-      : `أدخل المبلغ المدفوع لـ ${debt.person} (يُسجل كمصروف سداد دين في الميزانية):`;
+    const promptTitle = isPayingOwedDebt
+      ? `تسديد دين عليّ (دفع لـ: ${debt.person})`
+      : isCollectingDebt
+      ? `قبض تسديد دين لي (استلام من: ${debt.person})`
+      : isBorrowingMore
+      ? `قبض / اقتراض إضافي من: ${debt.person} (زيادة ديني له)`
+      : `دفع / إقراض إضافي لـ: ${debt.person} (زيادة ديني عليه)`;
+
+    const promptMsg = isPayingOwedDebt
+      ? `أدخل المبلغ الذي دفعته لـ ${debt.person} (المتبقي بذمتك له: ${fmt(netRemaining)} د.ع):`
+      : isCollectingDebt
+      ? `أدخل المبلغ الذي قبضته من ${debt.person} (المتبقي بذمته لك: ${fmt(netRemaining)} د.ع):`
+      : isBorrowingMore
+      ? `أدخل المبلغ الذي اقترضته إضافياً من ${debt.person} (يزيد ديني له):`
+      : `أدخل المبلغ الذي أقرضته إضافياً لـ ${debt.person} (يزيد ديني عليه):`;
 
     let defaultVal = "";
-    if (direction === "دين علي") {
-      const rem = debt.type === "دين علي" ? Math.max(0, (debt.amount - paidOnMe) - paidForMe) : 0;
-      if (rem > 0) defaultVal = rem.toString();
-    } else {
-      const rem = debt.type === "دين لي" ? Math.max(0, (debt.amount - paidForMe) - paidOnMe) : 0;
-      if (rem > 0) defaultVal = rem.toString();
+    if (isPayingOwedDebt || isCollectingDebt) {
+      if (netRemaining > 0) defaultVal = netRemaining.toString();
     }
 
     showPrompt(promptTitle, (amountStr) => {
@@ -3110,7 +3235,7 @@ setEditTrip(null);
   const unsettledDebtsCount = effectiveDebts.filter(d => {
     const paidOnMe = d.payments.filter(p => p.type === "دين علي" || (!p.type && d.type === "دين علي")).reduce((s, p) => s + p.amount, 0);
     const paidForMe = d.payments.filter(p => p.type === "دين لي" || (!p.type && d.type === "دين لي")).reduce((s, p) => s + p.amount, 0);
-    const net = d.type === "دين علي" ? (d.amount - paidOnMe) - paidForMe : (d.amount - paidForMe) - paidOnMe;
+    const net = d.type === "دين علي" ? (d.amount - paidOnMe) + paidForMe : (d.amount - paidForMe) + paidOnMe;
     return net > 0;
   }).length;
 
@@ -3124,7 +3249,7 @@ setEditTrip(null);
       .map(d => {
         const paidOnMe = d.payments.filter(p => p.type === "دين علي" || (!p.type && d.type === "دين علي")).reduce((ps, p) => ps + (Number(p.amount) || 0), 0);
         const paidForMe = d.payments.filter(p => p.type === "دين لي" || (!p.type && d.type === "دين لي")).reduce((ps, p) => ps + (Number(p.amount) || 0), 0);
-        const remaining = Math.max(0, (Number(d.amount) || 0) - paidOnMe - paidForMe);
+        const remaining = Math.max(0, (Number(d.amount) || 0) - paidOnMe + paidForMe);
         return {
           id: d.id,
           name: d.person,
@@ -3481,7 +3606,97 @@ setEditTrip(null);
           </div>
         </div>
 
+        {/* Real Liquidity Wallet Card (Bank + Cash Pocket) */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white rounded-[2rem] p-4 sm:p-5 border border-purple-500/30 shadow-xl mb-3 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative z-10">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-white/10 text-amber-300 flex items-center justify-center text-xl font-black shadow-inner">
+                  💼
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                    <span>محفظة السيولة والنقد الفعلي المتوفر</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                      نقد حي
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-purple-200/80 font-bold">
+                    إجمالي أموالك الحقيقية المتاحة بين المصرف وجيبك
+                  </p>
+                </div>
+              </div>
 
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWalletBankInput(wallet.bankBalance);
+                    setWalletCashInput(wallet.cashBalance);
+                    setShowWalletModal(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-black text-xs transition border border-white/20 active:scale-95 flex items-center gap-1.5"
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-amber-300" />
+                  <span>تحديث رصيد المحفظة ✏️</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Wallet Balance Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              {/* Bank Account */}
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+                <div className="flex items-center justify-between text-gray-400 text-xs mb-1">
+                  <span className="font-bold flex items-center gap-1 text-[11px]">
+                    <span>💳</span> رصيد المصرف / كي كارد
+                  </span>
+                  <span className="text-[10px] text-indigo-300 font-bold">حساب بنكي</span>
+                </div>
+                <div className="text-lg sm:text-xl font-black text-cyan-300">
+                  {fmt(wallet.bankBalance)} <span className="text-xs font-normal text-cyan-300/70">د.ع</span>
+                </div>
+              </div>
+
+              {/* Cash in Pocket */}
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+                <div className="flex items-center justify-between text-gray-400 text-xs mb-1">
+                  <span className="font-bold flex items-center gap-1 text-[11px]">
+                    <span>💵</span> نقد بالجيب / كاش المحفظة
+                  </span>
+                  <span className="text-[10px] text-emerald-300 font-bold">كاش حي</span>
+                </div>
+                <div className="text-lg sm:text-xl font-black text-emerald-300">
+                  {fmt(wallet.cashBalance)} <span className="text-xs font-normal text-emerald-300/70">د.ع</span>
+                </div>
+              </div>
+
+              {/* Total Available Liquidity */}
+              <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/20 via-purple-500/20 to-emerald-500/20 border border-amber-400/40 backdrop-blur-md">
+                <div className="flex items-center justify-between text-amber-200 text-xs mb-1">
+                  <span className="font-black flex items-center gap-1 text-[11px]">
+                    <span>✨</span> إجمالي السيولة الحقيقية
+                  </span>
+                  <span className="text-[10px] text-amber-300 font-black">مجموع النقد</span>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-amber-300">
+                  {fmt(wallet.bankBalance + wallet.cashBalance)} <span className="text-xs font-normal text-amber-300/80">د.ع</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Reconciliation Note Pill */}
+            <div className="mt-3 pt-2.5 border-t border-white/10 flex items-start gap-2 text-[11px] text-purple-200/90 font-bold">
+              <span className="text-amber-300 text-sm shrink-0">💡</span>
+              <p className="leading-relaxed">
+                <span>توضيح المطابقة: رصيد دورة الشهر الحسابي ({fmt(balance)} د.ع) يمثل حركة الوارد والمنصرف منذ بداية الدورة، بينما </span>
+                <strong className="text-amber-300 font-black">السيولة الحقيقية ({fmt(wallet.bankBalance + wallet.cashBalance)} د.ع)</strong>
+                <span> تمثل نقدك الفعلي المتبقي في المصرف ({fmt(wallet.bankBalance)} د.ع) وفي جيبك ({fmt(wallet.cashBalance)} د.ع) بعد تسديد الديون.</span>
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ═══════════════ TABS AS APP ICONS ═══════════════ */}
@@ -4567,6 +4782,31 @@ setEditTrip(null);
 
             {/* Category quick filters (ALL VISIBLE ON SCREEN) */}
             <div className="flex flex-wrap gap-2 justify-center pb-1">
+              {/* Warranty Filter & Registry Buttons */}
+              <button
+                type="button"
+                onClick={() => setOnlyWarrantyFilter(!onlyWarrantyFilter)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-full text-[11px] font-black transition ${
+                  onlyWarrantyFilter
+                    ? "bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/20 scale-105"
+                    : "bg-white dark:bg-zinc-800 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                }`}
+                title="تصفية المشتريات التي تحتوي على كفالات وضمانات أجهزة"
+              >
+                <Shield className="w-3.5 h-3.5 fill-amber-500/20" />
+                <span>مشتريات بضمان 🛡️</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowWarrantiesRegistryModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 border rounded-full text-[11px] font-black transition bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-600/40 hover:bg-amber-100"
+                title="فتح سجل وضمانات الأجهزة والمشتريات"
+              >
+                <Shield className="w-3.5 h-3.5 text-amber-600" />
+                <span>سجل الضمانات والأجهزة</span>
+              </button>
+
               <button
                 onClick={() => setExpenseCategoryFilter(null)}
                 className={`flex items-center gap-1 px-3.5 py-2 border rounded-full text-[11px] font-bold transition ${
@@ -4647,6 +4887,11 @@ setEditTrip(null);
                 if (!isDateValid) return false;
 
                 if (expenseCategoryFilter && exp.category !== expenseCategoryFilter) return false;
+
+                if (onlyWarrantyFilter) {
+                  const hasW = exp.hasWarranty || (exp.warrantiesCount && exp.warrantiesCount > 0) || (exp.items && exp.items.some(it => it.hasWarranty));
+                  if (!hasW) return false;
+                }
 
                 if (!query) return true;
 
@@ -4760,6 +5005,12 @@ setEditTrip(null);
                         <div className="flex items-center gap-1 flex-wrap mt-auto">
                           <span className="text-[9px] bg-gray-100 dark:bg-zinc-800 text-gray-500 px-1.5 py-0.5 rounded-full font-bold truncate max-w-[80px]">{exp.category}</span>
                           <span className="text-[9px] text-gray-400">{exp.createdAt ? new Date(exp.createdAt).toLocaleDateString("ar-IQ") : new Date(exp.date).toLocaleDateString("ar-IQ")}</span>
+                          {(exp.hasWarranty || (exp.warrantiesCount && exp.warrantiesCount > 0) || (exp.items && exp.items.some(it => it.hasWarranty))) && (
+                            <span className="text-[9px] bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 px-1.5 py-0.5 rounded-full font-black flex items-center gap-0.5">
+                              <Shield className="w-2.5 h-2.5 text-amber-600 fill-amber-500/20" />
+                              <span>ضمان {exp.warrantiesCount ? `(${exp.warrantiesCount})` : ''}</span>
+                            </span>
+                          )}
                         </div>
 
                         {/* Items badge / view receipt button */}
@@ -5589,8 +5840,8 @@ setEditTrip(null);
                     .reduce((s, p) => s + p.amount, 0);
 
                   const net = debt.type === "دين علي"
-                    ? (debt.amount - paidOnMe) - paidForMe
-                    : (debt.amount - paidForMe) - paidOnMe;
+                    ? (debt.amount - paidOnMe) + paidForMe
+                    : (debt.amount - paidForMe) + paidOnMe;
 
                   const isPaid = net <= 0;
                   const isOwedToMe = debt.type === "دين لي";
@@ -5634,7 +5885,7 @@ setEditTrip(null);
                             </div>
                             <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-1.5 text-center">
                               <div className="text-[8px] text-emerald-600 dark:text-emerald-500 font-bold">المسدد</div>
-                              <div className="font-black text-emerald-600 dark:text-emerald-500 text-[10px] sm:text-xs">{fmt(paidOnMe + paidForMe)}</div>
+                              <div className="font-black text-emerald-600 dark:text-emerald-500 text-[10px] sm:text-xs">{fmt(debt.type === "دين علي" ? paidOnMe : paidForMe)}</div>
                             </div>
                             <div className="bg-rose-50 dark:bg-rose-900/10 rounded-xl p-1.5 text-center col-span-2">
                               <div className="text-[8px] text-rose-600 dark:text-rose-500 font-bold">المتبقي الصافي</div>
@@ -5644,8 +5895,12 @@ setEditTrip(null);
                         ) : (
                           <div className="bg-gray-50/80 dark:bg-zinc-800/50 rounded-2xl p-2 mb-2.5 border border-gray-100 dark:border-zinc-800/80">
                             <div className="flex justify-between items-center text-[9px] pb-1.5 mb-1.5 border-b border-gray-200/50 dark:border-zinc-700/50">
-                              <span className="text-gray-500 dark:text-gray-400 font-bold">المسدد الإجمالي:</span>
-                              <span className="font-black text-gray-800 dark:text-gray-200 text-[10px]">{fmt(paidOnMe + paidForMe)} د.ع</span>
+                              <span className="text-gray-500 dark:text-gray-400 font-bold">
+                                {debt.type === "دين علي" ? "المسدد الإجمالي:" : "المقبوض الإجمالي:"}
+                              </span>
+                              <span className="font-black text-emerald-600 dark:text-emerald-400 text-[10px]">
+                                {fmt(debt.type === "دين علي" ? paidOnMe : paidForMe)} د.ع
+                              </span>
                             </div>
                             
                             {/* Net Balance Status */}
@@ -7047,6 +7302,43 @@ setEditTrip(null);
         className="hidden"
         onChange={handleScanReceipt}
       />
+      <input
+        type="file"
+        ref={warrantyCameraInputRef}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file && activeWarrantyItemIdx !== null) {
+            const url = await compressImageFast(file, 1200, 0.85);
+            const newItems = [...expenseItems];
+            newItems[activeWarrantyItemIdx].warrantyCardImage = url;
+            newItems[activeWarrantyItemIdx].hasWarranty = true;
+            setExpenseItems(newItems);
+            toast.success("تم إرفاق صورة بطاقة الضمان بنجاح 📸🛡️");
+          }
+          if (e.target) e.target.value = "";
+        }}
+      />
+      <input
+        type="file"
+        ref={warrantyGalleryInputRef}
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file && activeWarrantyItemIdx !== null) {
+            const url = await compressImageFast(file, 1200, 0.85);
+            const newItems = [...expenseItems];
+            newItems[activeWarrantyItemIdx].warrantyCardImage = url;
+            newItems[activeWarrantyItemIdx].hasWarranty = true;
+            setExpenseItems(newItems);
+            toast.success("تم إرفاق صورة بطاقة الضمان بنجاح 🖼️🛡️");
+          }
+          if (e.target) e.target.value = "";
+        }}
+      />
 
 
       {/* ─── Expense Modal (Modernized & Super Fast) ─── */}
@@ -7208,17 +7500,36 @@ setEditTrip(null);
               )}
 
               {expCategoryInput === "طلعات وجولات" && (
-                <div className="p-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border border-teal-200 dark:border-teal-500/30 rounded-2xl space-y-2 animate-in fade-in duration-200 text-right" dir="rtl">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">🎡</span>
-                    <span className="font-black text-xs text-teal-800 dark:text-teal-300">
-                      طلعات وجولات (بغداد والمحافظات) - اقتراحات سريعة للوجهة والنشاط:
-                    </span>
+                <div className="p-3.5 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border border-teal-200 dark:border-teal-500/30 rounded-2xl space-y-3 animate-in fade-in duration-200 text-right" dir="rtl">
+                  {/* Destination Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🎡</span>
+                      <div>
+                        <span className="font-black text-xs text-teal-800 dark:text-teal-300 block">
+                          طلعات وجولات (بغداد والمحافظات) - محطات وفواتير متعددة
+                        </span>
+                        <span className="text-[10px] text-teal-600/80 dark:text-teal-400 font-bold block">
+                          يمكنك زيارة عدة أماكن (هايبر، سوق، منزلية...) وإرفاق فاتورة خاصة لكل مكان مع تصنيف مواده
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Quick Scan for active place */}
+                    <button
+                      type="button"
+                      onClick={() => receiptCameraInputRef.current?.click()}
+                      className="px-2.5 py-1 bg-gradient-to-r from-teal-600 to-emerald-600 text-white rounded-xl text-[11px] font-black shadow-xs hover:opacity-95 active:scale-95 flex items-center gap-1.5"
+                      title="مسح فاتورة وإضافتها لمحطة التسوق المحددة"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>مسح فاتورة محطة 📸</span>
+                    </button>
                   </div>
                   
                   {/* Destination shortcuts */}
                   <div className="flex flex-wrap gap-1.5 items-center">
-                    <span className="text-[10px] font-bold text-gray-400">الوجهة:</span>
+                    <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">الوجهة:</span>
                     {[
                       "جولة بغداد", "المتنبي والرشيد", "كورنيش وجادرية", "المنصور والكرادة", 
                       "متنزه الزوراء", "كربلاء المقدسة", "النجف الأشرف", "بابل والآثار", 
@@ -7241,9 +7552,162 @@ setEditTrip(null);
                     ))}
                   </div>
 
-                  {/* Activity / Expense type shortcuts */}
+                  {/* Outing Places / Stops Selector & Multiple Invoices */}
+                  <div className="pt-2 border-t border-teal-100 dark:border-zinc-800/80 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                      <span className="font-black text-teal-900 dark:text-teal-200 flex items-center gap-1">
+                        <span>📍</span>
+                        <span>محطات وأماكن التسوق داخل هذه الطلعة:</span>
+                      </span>
+                      {selectedOutingPlace !== "كل المحطات" && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOutingPlace("كل المحطات")}
+                          className="text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline"
+                        >
+                          عرض جميع المحطات ↩
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Visited Places Pills with subtotals */}
+                    {(() => {
+                      const visitedPlaces = Array.from(new Set(expenseItems.map(it => (it.place || "").trim()).filter(Boolean)));
+                      return (
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          {/* All Places Tab */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOutingPlace("كل المحطات")}
+                            className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition flex items-center gap-1 ${
+                              selectedOutingPlace === "كل المحطات"
+                                ? "bg-teal-700 text-white shadow-xs"
+                                : "bg-white dark:bg-zinc-800 text-teal-900 dark:text-teal-200 border border-teal-200 dark:border-zinc-700 hover:bg-teal-50"
+                            }`}
+                          >
+                            <span>📍 كل المحطات</span>
+                            <span className="text-[10px] opacity-80">({expenseItems.length})</span>
+                          </button>
+
+                          {/* Existing Visited Places */}
+                          {visitedPlaces.map(p => {
+                            const pItems = expenseItems.filter(it => (it.place || "").trim() === p);
+                            const pTotal = pItems.reduce((acc, curr) => acc + (curr.price || 0), 0);
+                            const isSelected = selectedOutingPlace === p;
+
+                            return (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => setSelectedOutingPlace(p)}
+                                className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition flex items-center gap-1.5 ${
+                                  isSelected
+                                    ? "bg-teal-600 text-white shadow-sm ring-2 ring-teal-400/50"
+                                    : "bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-200 border border-teal-200 dark:border-zinc-700 hover:bg-teal-50"
+                                }`}
+                              >
+                                <span>🛒 {p}</span>
+                                <span className="text-[10px] opacity-80">({pItems.length})</span>
+                                <span className={`text-[10px] font-black ${isSelected ? "text-amber-200" : "text-rose-600 dark:text-rose-400"}`}>
+                                  {fmt(pTotal)} د.ع
+                                </span>
+                              </button>
+                            );
+                          })}
+
+                          {/* Quick Place Presets */}
+                          {["هايبر ماركت", "سوق الخضار", "سوق اللحوم", "تجهيزات منزلية", "مطعم وكافيه", "صيدلية", "أجهزة كهربائية"].map(preset => {
+                            if (visitedPlaces.includes(preset)) return null;
+                            return (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedOutingPlace(preset);
+                                  setExpenseItems(prev => [...prev, {
+                                    id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                                    name: "",
+                                    quantity: 1,
+                                    price: 0,
+                                    category: preset === "سوق الخضار" ? "الفواكه والخضار" : preset === "تجهيزات منزلية" ? "اللوازم المنزلية" : preset === "سوق اللحوم" ? "لحوم ودواجن" : "سوبر ماركت",
+                                    place: preset
+                                  }]);
+                                }}
+                                className="px-2 py-0.5 rounded-lg bg-teal-50/70 dark:bg-zinc-800/60 border border-dashed border-teal-300 dark:border-zinc-700 text-teal-700 dark:text-teal-300 text-[10px] font-bold hover:bg-teal-100 transition active:scale-95"
+                              >
+                                + {preset}
+                              </button>
+                            );
+                          })}
+
+                          {/* Custom New Place Button / Input */}
+                          {showAddPlaceInput ? (
+                            <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 border border-teal-300 rounded-xl px-1.5 py-0.5">
+                              <input
+                                type="text"
+                                placeholder="اسم المكان / المحل..."
+                                value={newPlaceInput}
+                                onChange={e => setNewPlaceInput(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter" && newPlaceInput.trim()) {
+                                    e.preventDefault();
+                                    const pName = newPlaceInput.trim();
+                                    setSelectedOutingPlace(pName);
+                                    setExpenseItems(prev => [...prev, {
+                                      id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                                      name: "",
+                                      quantity: 1,
+                                      price: 0,
+                                      category: detectProductCategory(""),
+                                      place: pName
+                                    }]);
+                                    setNewPlaceInput("");
+                                    setShowAddPlaceInput(false);
+                                  }
+                                }}
+                                className="w-28 text-[11px] font-bold outline-none bg-transparent"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (newPlaceInput.trim()) {
+                                    const pName = newPlaceInput.trim();
+                                    setSelectedOutingPlace(pName);
+                                    setExpenseItems(prev => [...prev, {
+                                      id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                                      name: "",
+                                      quantity: 1,
+                                      price: 0,
+                                      category: detectProductCategory(""),
+                                      place: pName
+                                    }]);
+                                    setNewPlaceInput("");
+                                  }
+                                  setShowAddPlaceInput(false);
+                                }}
+                                className="text-teal-600 font-black text-xs px-1"
+                              >
+                                ✓
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setShowAddPlaceInput(true)}
+                              className="px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-teal-300 text-teal-700 dark:text-teal-300 text-[10px] font-black hover:bg-teal-50 transition"
+                            >
+                              + مكان آخر
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Activity shortcuts */}
                   <div className="flex flex-wrap gap-1.5 items-center pt-1 border-t border-teal-100 dark:border-zinc-800">
-                    <span className="text-[10px] font-bold text-gray-400">نوع الصرف:</span>
+                    <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">نوع الصرف:</span>
                     {[
                       "مطعم وكافيه", "بنزين وكروة تكسي", "تذاكر وألعاب", "عصائر ومرطبات", "مسواك وتسوق جولة"
                     ].map((act) => (
@@ -7251,10 +7715,16 @@ setEditTrip(null);
                         key={act}
                         type="button"
                         onClick={() => {
-                          const existingIndex = expenseItems.findIndex(it => it.name === act);
-                          if (existingIndex === -1) {
-                            setExpenseItems(prev => [...prev, { id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, name: act, price: 0, quantity: 1, isChecked: true }]);
-                          }
+                          const actPlace = act.includes("بنزين") ? "محطة بنزين" : act.includes("مطعم") ? "مطعم وكافيه" : act.includes("مسواك") ? "سوق الخضار" : (selectedOutingPlace !== "كل المحطات" ? selectedOutingPlace : "أخرى");
+                          setExpenseItems(prev => [...prev, { 
+                            id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, 
+                            name: act, 
+                            price: 0, 
+                            quantity: 1, 
+                            isChecked: true,
+                            category: detectProductCategory(act),
+                            place: actPlace
+                          }]);
                           if (!expNameInput) {
                             setExpNameInput(`جولة - ${act}`);
                           }
@@ -7333,11 +7803,34 @@ setEditTrip(null);
                         مسح الكل
                       </button>
                     )}
+                    {expenseItems.length > 1 && (
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          const sorted = sortItemsByCategoryPriority(expenseItems);
+                          setExpenseItems(sorted);
+                          toast.success("تم ترتيب المواد حسب أولوية الأقسام (المخضر والفواكه أولاً ثم اللحوم والألبان...) 🥗✨");
+                        }}
+                        className="text-xs flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-black bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1.5 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition active:scale-95 border border-emerald-200/60 dark:border-emerald-500/30"
+                        title="ترتيب المواد حسب الأولوية الغذائية والمنزلية (المخضر والفواكه بالبداية)"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>🥗 ترتيب حسب الأولوية</span>
+                      </button>
+                    )}
                     <button 
                       type="button" 
                       onClick={() => {
                         const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-                        const updated = [...expenseItems, { id: newId, name: "", quantity: 1, price: 0 }];
+                        const defaultPlace = selectedOutingPlace || (expCategoryInput === "طلعات وجولات" ? "هايبر ماركت" : expNameInput.trim() || "سوبر ماركت");
+                        const updated = [...expenseItems, { 
+                          id: newId, 
+                          name: "", 
+                          quantity: 1, 
+                          price: 0,
+                          category: "",
+                          place: defaultPlace
+                        }];
                         setExpenseItems(updated);
                         setTimeout(() => {
                           const input = document.getElementById(`exp-item-name-${updated.length - 1}`);
@@ -7356,13 +7849,14 @@ setEditTrip(null);
                   <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 border border-gray-100 dark:border-zinc-800">
                     <div className="hidden sm:grid sm:grid-cols-12 gap-2 px-2 pb-2 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
                       <div className="col-span-1 text-center">#</div>
-                      <div className="col-span-5">اسم المادة / المنتج</div>
-                      <div className="col-span-2 text-center">الكمية</div>
-                      <div className="col-span-3 text-left">السعر الإجمالي (د.ع)</div>
-                      <div className="col-span-1 text-center">حذف</div>
+                      <div className="col-span-3">اسم المادة / المنتج</div>
+                      <div className="col-span-3">القسم / الفئة (تنبؤ ذكي 🧠)</div>
+                      <div className="col-span-2">المكان / المحطة 📍</div>
+                      <div className="col-span-1 text-center">الكمية</div>
+                      <div className="col-span-2 text-left">السعر والضمان 🛡️</div>
                     </div>
 
-                    <div className="space-y-2 mt-2 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
+                    <div className="space-y-2 mt-2 max-h-[340px] overflow-y-auto pr-1 custom-scrollbar">
                       {expenseItems.map((item, idx) => (
                         <div 
                           key={item.id} 
@@ -7374,18 +7868,23 @@ setEditTrip(null);
                           </div>
 
                           {/* Product Name with Suggestions */}
-                          <div className="w-full sm:col-span-5 relative">
+                          <div className="w-full sm:col-span-3 relative">
                             <input 
                               id={`exp-item-name-${idx}`}
                               type="text" 
-                              placeholder="اسم المنتج (مثال: حليب، خبز...)" 
+                              placeholder="اسم المنتج (طماطة، روبة، كباب...)" 
                               value={item.name} 
                               autoComplete="off"
                               onFocus={() => setFocusedProductIdx(idx)}
                               onBlur={() => setTimeout(() => setFocusedProductIdx(null), 200)}
                               onChange={e => {
+                                const val = e.target.value;
                                 const newItems = [...expenseItems];
-                                newItems[idx].name = e.target.value;
+                                newItems[idx].name = val;
+                                const pred = detectProductCategory(val);
+                                if (pred) {
+                                  newItems[idx].category = pred;
+                                }
                                 setExpenseItems(newItems);
                               }} 
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
@@ -7399,6 +7898,8 @@ setEditTrip(null);
                                     onClick={() => { 
                                       const newItems = [...expenseItems];
                                       newItems[idx].name = suggestedName;
+                                      const pred = detectProductCategory(suggestedName);
+                                      if (pred) newItems[idx].category = pred;
                                       setExpenseItems(newItems);
                                       setFocusedProductIdx(null);
                                     }} 
@@ -7411,10 +7912,55 @@ setEditTrip(null);
                             )}
                           </div>
 
+                          {/* Category Selector (28 Priority Departments) */}
+                          <div className="w-full sm:col-span-3">
+                            <select
+                              value={item.category || ""}
+                              onChange={e => {
+                                const newCat = e.target.value;
+                                const newItems = [...expenseItems];
+                                newItems[idx].category = newCat;
+                                setExpenseItems(newItems);
+                                if (newItems[idx].name && newCat) {
+                                  saveLearnedCategory(newItems[idx].name, newCat);
+                                }
+                              }}
+                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
+                            >
+                              <option value="">اختر القسم (تنبؤ ذكي 🧠)</option>
+                              {PRODUCT_CATEGORIES.map(cat => (
+                                <option key={cat.id} value={cat.name}>
+                                  {cat.icon} {cat.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Place / Shop Selector */}
+                          <div className="w-full sm:col-span-2">
+                            <input
+                              type="text"
+                              list={`places-list-${idx}`}
+                              placeholder="المحل (سوق، هايبر..)"
+                              value={item.place || ""}
+                              onChange={e => {
+                                const newItems = [...expenseItems];
+                                newItems[idx].place = e.target.value;
+                                setExpenseItems(newItems);
+                              }}
+                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
+                            />
+                            <datalist id={`places-list-${idx}`}>
+                              {OUTING_PLACES_SUGGESTIONS.map((p, pIdx) => (
+                                <option key={pIdx} value={p} />
+                              ))}
+                            </datalist>
+                          </div>
+
                           {/* Quantity & Price Row */}
                           <div className="w-full flex sm:contents gap-2">
                             {/* Quantity */}
-                            <div className="w-24 sm:w-auto sm:col-span-2">
+                            <div className="w-20 sm:w-auto sm:col-span-1">
                               <input 
                                 type="number" 
                                 placeholder="الكمية" 
@@ -7426,24 +7972,32 @@ setEditTrip(null);
                                   newItems[idx].quantity = Number(e.target.value);
                                   setExpenseItems(newItems);
                                 }} 
-                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-xs sm:text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
+                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-1.5 py-1.5 text-xs text-center outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
                                 required 
                               />
                             </div>
 
-                            {/* Price (Supports Enter to jump/add next row) */}
-                            <div className="flex-1 sm:col-span-3">
+                            {/* Price & Actions (Warranty + Delete) */}
+                            <div className="flex-1 sm:col-span-2 flex items-center gap-1.5">
                               <input 
                                 id={`exp-item-price-${idx}`}
                                 type="number" 
-                                placeholder="السعر الإجمالي" 
+                                placeholder="السعر" 
                                 value={item.price || ''} 
                                 onKeyDown={e => {
                                   if (e.key === "Enter") {
                                     e.preventDefault();
                                     if (idx === expenseItems.length - 1) {
                                       const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-                                      const updated = [...expenseItems, { id: newId, name: "", quantity: 1, price: 0 }];
+                                      const defaultPlace = selectedOutingPlace || (expCategoryInput === "طلعات وجولات" ? "هايبر ماركت" : expNameInput.trim() || "سوبر ماركت");
+                                      const updated = [...expenseItems, { 
+                                        id: newId, 
+                                        name: "", 
+                                        quantity: 1, 
+                                        price: 0, 
+                                        category: "",
+                                        place: defaultPlace
+                                      }];
                                       setExpenseItems(updated);
                                       setTimeout(() => {
                                         const nextInput = document.getElementById(`exp-item-name-${updated.length - 1}`);
@@ -7460,17 +8014,31 @@ setEditTrip(null);
                                   newItems[idx].price = Number(e.target.value);
                                   setExpenseItems(newItems);
                                 }} 
-                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-black text-rose-600 dark:text-rose-400 text-left transition" 
+                                className="w-full min-w-0 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/40 font-black text-rose-600 dark:text-rose-400 text-left transition" 
                                 required 
                               />
-                            </div>
 
-                            {/* Delete Button */}
-                            <div className="sm:col-span-1 flex justify-center">
+                              {/* Warranty Button */}
+                              <button
+                                type="button"
+                                onClick={() => setActiveWarrantyItemIdx(idx)}
+                                className={`p-1.5 rounded-lg border transition shrink-0 relative flex items-center justify-center ${
+                                  item.hasWarranty
+                                    ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-600 shadow-xs"
+                                    : "bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-gray-200 dark:border-zinc-700"
+                                }`}
+                                title={item.hasWarranty ? `ضمان ${item.warrantyPeriod || 'مفعل'} - انقر لتعديل بطاقة الضمان` : 'إضافة بطاقة وفترة ضمان لهذا المنتج'}
+                              >
+                                <Shield className={`w-3.5 h-3.5 ${item.hasWarranty ? "fill-amber-500/30 text-amber-600 dark:text-amber-400" : ""}`} />
+                                {item.hasWarranty && item.warrantyCardImage && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 absolute -top-0.5 -right-0.5 ring-1 ring-white"></span>
+                                )}
+                              </button>
+
                               <button 
                                 type="button" 
                                 onClick={() => setExpenseItems(expenseItems.filter(x => x.id !== item.id))} 
-                                className="text-red-500 hover:text-red-600 p-1.5 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 rounded-lg transition"
+                                className="text-red-500 hover:text-red-600 p-1.5 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 rounded-lg transition shrink-0"
                                 title="حذف هذه المادة"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -7512,7 +8080,14 @@ setEditTrip(null);
                       </button>
                       <button
                         type="button"
-                        onClick={() => setExpenseItems([{ id: `item-${Date.now()}`, name: "", quantity: 1, price: 0 }])}
+                        onClick={() => setExpenseItems([{ 
+                          id: `item-${Date.now()}`, 
+                          name: "", 
+                          quantity: 1, 
+                          price: 0,
+                          category: "",
+                          place: expNameInput.trim() || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت")
+                        }])}
                         className="text-xs font-black text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 px-3 py-1.5 rounded-xl hover:bg-gray-200 transition flex items-center gap-1.5"
                       >
                         <Plus className="w-3.5 h-3.5" /> أضف يدوياً
@@ -7592,6 +8167,416 @@ setEditTrip(null);
         </div>
       )}
 
+      {/* ─── Item Warranty Modal ─── */}
+      {activeWarrantyItemIdx !== null && expenseItems[activeWarrantyItemIdx] && (() => {
+        const item = expenseItems[activeWarrantyItemIdx];
+        const updateActiveItem = (patch: Partial<ExpenseItem>) => {
+          const updated = [...expenseItems];
+          updated[activeWarrantyItemIdx] = { ...updated[activeWarrantyItemIdx], ...patch };
+          setExpenseItems(updated);
+        };
+
+        return (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-zinc-950 w-full max-w-md rounded-[32px] p-6 shadow-2xl border border-gray-100 dark:border-zinc-800 animate-in zoom-in-95 duration-200 text-right">
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <div className="p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <Shield className="w-5 h-5 fill-amber-500/20" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-gray-900 dark:text-white text-base">
+                      كفالة وضمان المنتج
+                    </h4>
+                    <p className="text-[11px] text-gray-500 font-bold truncate max-w-[220px]">
+                      {item.name ? `المادة: ${item.name}` : "تفاصيل بطاقة الضمان"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveWarrantyItemIdx(null)}
+                  className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full hover:bg-gray-200 transition"
+                >
+                  <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Active Switch */}
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-amber-600" />
+                    <span className="text-xs font-black text-amber-950 dark:text-amber-200">تفعيل الضمان لهذا المنتج</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={item.hasWarranty || false}
+                    onChange={e => {
+                      const enabled = e.target.checked;
+                      const defaultPeriod = item.warrantyPeriod || "سنة واحدة";
+                      const expiry = enabled ? calculateWarrantyExpiryDate(defaultPeriod, expDateInput) : undefined;
+                      updateActiveItem({
+                        hasWarranty: enabled,
+                        warrantyPeriod: enabled ? defaultPeriod : item.warrantyPeriod,
+                        warrantyExpiryDate: expiry
+                      });
+                    }}
+                    className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                  />
+                </div>
+
+                {item.hasWarranty && (
+                  <>
+                    {/* Period Presets */}
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 block">
+                        مدة / فترة الضمان:
+                      </label>
+                      <div className="grid grid-cols-3 gap-1.5 mb-2">
+                        {WARRANTY_PERIOD_PRESETS.map(preset => {
+                          const isSel = item.warrantyPeriod === preset;
+                          return (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => {
+                                const expiry = calculateWarrantyExpiryDate(preset, expDateInput);
+                                updateActiveItem({
+                                  warrantyPeriod: preset,
+                                  warrantyExpiryDate: expiry
+                                });
+                              }}
+                              className={`py-2 px-2 rounded-xl text-xs font-black transition border ${
+                                isSel
+                                  ? "bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/20 scale-[1.02]"
+                                  : "bg-gray-50 dark:bg-zinc-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-zinc-800 hover:border-amber-400"
+                              }`}
+                            >
+                              {preset}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Custom input or expiry date view */}
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 mb-0.5 block">فترة مخصصة:</label>
+                          <input
+                            type="text"
+                            placeholder="مثال: سنتين ونصف"
+                            value={item.warrantyPeriod || ""}
+                            onChange={e => {
+                              const p = e.target.value;
+                              const expiry = calculateWarrantyExpiryDate(p, expDateInput);
+                              updateActiveItem({
+                                warrantyPeriod: p,
+                                warrantyExpiryDate: expiry
+                              });
+                            }}
+                            className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500/30"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 mb-0.5 block">تاريخ انتهاء الضمان:</label>
+                          <input
+                            type="date"
+                            value={item.warrantyExpiryDate || ""}
+                            onChange={e => updateActiveItem({ warrantyExpiryDate: e.target.value })}
+                            className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-2.5 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500/30"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Warranty Card Photo */}
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 block">
+                        صورة بطاقة / وصل الضمان:
+                      </label>
+                      {item.warrantyCardImage ? (
+                        <div className="relative rounded-2xl overflow-hidden border border-amber-200 dark:border-amber-800/40 bg-zinc-900 group">
+                          <img
+                            src={item.warrantyCardImage}
+                            alt="بطاقة الضمان"
+                            className="w-full h-44 object-cover cursor-pointer group-hover:scale-105 transition duration-300"
+                            onClick={() => setWarrantyCardPreviewUrl(item.warrantyCardImage || null)}
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setWarrantyCardPreviewUrl(item.warrantyCardImage || null)}
+                              className="p-2 bg-white/90 text-gray-900 rounded-xl font-bold text-xs flex items-center gap-1 shadow-md hover:bg-white"
+                            >
+                              <ZoomIn className="w-4 h-4" /> معاينة كاملة
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateActiveItem({ warrantyCardImage: undefined })}
+                              className="p-2 bg-rose-600 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md hover:bg-rose-700"
+                            >
+                              <Trash2 className="w-4 h-4" /> حذف
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => warrantyCameraInputRef.current?.click()}
+                            className="flex-1 py-3 px-3 bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-dashed border-amber-300 dark:border-amber-600 rounded-2xl text-xs font-black flex items-center justify-center gap-1.5 transition active:scale-95"
+                          >
+                            <Camera className="w-4 h-4" /> التقاط بكاميرا الضمان
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => warrantyGalleryInputRef.current?.click()}
+                            className="flex-1 py-3 px-3 bg-gray-50 hover:bg-gray-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-gray-700 dark:text-gray-300 border border-dashed border-gray-300 dark:border-zinc-700 rounded-2xl text-xs font-black flex items-center justify-center gap-1.5 transition active:scale-95"
+                          >
+                            <ImageIcon className="w-4 h-4" /> اختيار من الاستوديو
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Warranty Notes */}
+                    <div>
+                      <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 block">
+                        ملاحظات أو شروط الضمان (اختياري):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="مثال: الضمان يشمل استبدال القطع فقط، هاتف الصيانة: 077..."
+                        value={item.warrantyNotes || ""}
+                        onChange={e => updateActiveItem({ warrantyNotes: e.target.value })}
+                        className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500/30"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setActiveWarrantyItemIdx(null)}
+                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-black py-2.5 rounded-xl transition shadow-md shadow-amber-500/20 text-xs flex items-center justify-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" /> حفظ وإغلاق
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── Fullscreen Warranty Card Image Lightbox ─── */}
+      {warrantyCardPreviewUrl && (
+        <div 
+          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/90 p-4 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setWarrantyCardPreviewUrl(null)}
+        >
+          <div className="relative max-w-3xl max-h-[90vh] flex flex-col items-center" onClick={e => e.stopPropagation()}>
+            <div className="absolute -top-12 left-0 right-0 flex justify-between items-center text-white">
+              <span className="text-sm font-black flex items-center gap-1.5">
+                <Shield className="w-4 h-4 text-amber-400" /> معاينة بطاقة الضمان
+              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={warrantyCardPreviewUrl}
+                  download="warranty-card.jpg"
+                  className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition flex items-center gap-1 text-xs font-bold"
+                  title="تحميل الصورة"
+                >
+                  <Download className="w-4 h-4" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setWarrantyCardPreviewUrl(null)}
+                  className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <img
+              src={warrantyCardPreviewUrl}
+              alt="معاينة بطاقة الضمان كاملة"
+              className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/10"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ─── Central Warranties Registry Dashboard Modal ─── */}
+      {showWarrantiesRegistryModal && (() => {
+        const allWarrantiedItems: Array<{
+          expenseId: string;
+          expenseName: string;
+          expenseDate: string;
+          item: ExpenseItem;
+        }> = [];
+
+        allExpenses.forEach(exp => {
+          (exp.items || []).forEach(it => {
+            if (it.hasWarranty) {
+              allWarrantiedItems.push({
+                expenseId: exp.id,
+                expenseName: exp.name,
+                expenseDate: exp.date,
+                item: it
+              });
+            }
+          });
+        });
+
+        return (
+          <div className="fixed inset-0 z-[125] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-3xl rounded-t-[32px] sm:rounded-[32px] px-5 sm:px-7 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[90svh] overflow-y-auto mb-[75px] sm:mb-0 custom-scrollbar text-right">
+              {/* Header */}
+              <div className="flex justify-between items-start mb-4 pb-4 border-b border-gray-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <Shield className="w-6 h-6 fill-amber-500/20" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                      <span>سجل كفالات وضمانات الأجهزة</span>
+                      <span className="text-xs bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-black">
+                        {allWarrantiedItems.length} أجهزة
+                      </span>
+                    </h3>
+                    <p className="text-xs font-bold text-gray-500">
+                      متابعة بطاقات وتواريخ انتهاء الضمان للمشتريات والأجهزة الكهربائية
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWarrantiesRegistryModal(false)}
+                  className="p-2 bg-gray-100 dark:bg-zinc-800 rounded-full hover:bg-gray-200 transition"
+                >
+                  <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                </button>
+              </div>
+
+              {/* Items List */}
+              {allWarrantiedItems.length === 0 ? (
+                <div className="py-12 text-center">
+                  <div className="w-16 h-16 rounded-3xl bg-amber-50 dark:bg-amber-950/30 text-amber-500 flex items-center justify-center mx-auto mb-3">
+                    <Shield className="w-8 h-8" />
+                  </div>
+                  <h4 className="font-black text-sm text-gray-800 dark:text-gray-200 mb-1">
+                    لا توجد أجهزة أو مواد مسجلة بضمان بعد
+                  </h4>
+                  <p className="text-xs font-bold text-gray-400 max-w-sm mx-auto">
+                    عند تسجيل أي مصروف يحتوي على أجهزة أو مشتريات مكفولة، اضغط على زر 🛡️ ضمان بجانب المادة لحفظ بطاقة الضمان وفترة الصلاحية!
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {allWarrantiedItems.map(({ expenseId, expenseName, expenseDate, item }, wIdx) => {
+                    const status = getWarrantyStatus(item.warrantyExpiryDate);
+
+                    return (
+                      <div
+                        key={`${expenseId}-${item.id || wIdx}`}
+                        className="p-3.5 rounded-2xl bg-gray-50/80 dark:bg-zinc-900/60 border border-gray-200/80 dark:border-zinc-800 flex flex-col justify-between space-y-3 hover:border-amber-400/60 transition shadow-xs"
+                      >
+                        <div>
+                          <div className="flex justify-between items-start gap-2 mb-1.5">
+                            <h4 className="font-black text-sm text-gray-900 dark:text-white line-clamp-1">
+                              {item.name || "مادة بدون اسم"}
+                            </h4>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 border ${status.badgeClass}`}>
+                              {status.label}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500 font-bold mb-2">
+                            <span>🧾 {expenseName}</span>
+                            <span>•</span>
+                            <span>📅 شراء: {new Date(expenseDate).toLocaleDateString("ar-IQ")}</span>
+                            {item.place && (
+                              <>
+                                <span>•</span>
+                                <span>📍 {item.place}</span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Warranty Duration & Expiry */}
+                          <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-950 border border-gray-100 dark:border-zinc-800 text-xs space-y-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-500 font-bold">مدة الضمان:</span>
+                              <span className="font-black text-amber-600 dark:text-amber-400">{item.warrantyPeriod || "غير محدد"}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-500 font-bold">تاريخ الانتهاء:</span>
+                              <span className="font-black text-gray-800 dark:text-gray-200">
+                                {item.warrantyExpiryDate ? new Date(item.warrantyExpiryDate).toLocaleDateString("ar-IQ") : "غير محدد"}
+                              </span>
+                            </div>
+                            {status.daysRemaining !== null && !status.isExpired && (
+                              <div className="flex justify-between items-center pt-1 border-t border-gray-100 dark:border-zinc-800/60 text-[11px]">
+                                <span className="text-gray-400 font-bold">المتبقي:</span>
+                                <span className="font-black text-emerald-600 dark:text-emerald-400">
+                                  {status.daysRemaining} يوم
+                                </span>
+                              </div>
+                            )}
+                            {item.warrantyNotes && (
+                              <div className="pt-1 text-[11px] text-gray-500 font-bold">
+                                💡 {item.warrantyNotes}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Card Image Thumbnail + Actions */}
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-200/60 dark:border-zinc-800">
+                          {item.warrantyCardImage ? (
+                            <button
+                              type="button"
+                              onClick={() => setWarrantyCardPreviewUrl(item.warrantyCardImage || null)}
+                              className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:underline"
+                            >
+                              <img
+                                src={item.warrantyCardImage}
+                                alt="بطاقة الضمان"
+                                className="w-7 h-7 rounded-lg object-cover border border-amber-300"
+                              />
+                              <span>عرض بطاقة الضمان</span>
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-gray-400 font-bold">لا توجد صورة للبطاقة</span>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const foundExp = allExpenses.find(e => e.id === expenseId);
+                              if (foundExp) {
+                                setShowWarrantiesRegistryModal(false);
+                                setViewingReceiptExpense(foundExp);
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold border border-indigo-200 dark:border-indigo-800/40 hover:bg-indigo-100 transition"
+                          >
+                            عرض الفاتورة 🧾
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ─── Viewing Full Receipt Details Modal ─── */}
       {viewingReceiptExpense && (
         <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -7624,6 +8609,88 @@ setEditTrip(null);
               </button>
             </div>
 
+            {/* Grouping Mode Switcher */}
+            <div className="flex flex-wrap gap-1.5 items-center mb-3">
+              <span className="text-[11px] font-black text-gray-500 dark:text-gray-400 ml-1">عرض المواد:</span>
+              <button
+                type="button"
+                onClick={() => setViewReceiptGroupingMode("order")}
+                className={`px-2.5 py-1 rounded-xl text-xs font-black transition ${
+                  viewReceiptGroupingMode === "order"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
+                }`}
+              >
+                الترتيب الأصلي
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewReceiptGroupingMode("priority")}
+                className={`px-2.5 py-1 rounded-xl text-xs font-black transition flex items-center gap-1 ${
+                  viewReceiptGroupingMode === "priority"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100"
+                }`}
+              >
+                <span>🥗 حسب أولوية الأقسام</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewReceiptGroupingMode("place")}
+                className={`px-2.5 py-1 rounded-xl text-xs font-black transition flex items-center gap-1 ${
+                  viewReceiptGroupingMode === "place"
+                    ? "bg-teal-600 text-white shadow-xs"
+                    : "bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100"
+                }`}
+              >
+                <span>📍 حسب محطات الطلعة</span>
+              </button>
+            </div>
+
+            {/* Warrantied Items Showcase in Receipt */}
+            {(() => {
+              const warrantiedItems = (viewingReceiptExpense.items || []).filter(it => it.hasWarranty);
+              if (warrantiedItems.length === 0) return null;
+
+              return (
+                <div className="mb-3.5 p-3 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200 dark:border-amber-800/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-black text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+                      <Shield className="w-4 h-4 text-amber-600 fill-amber-500/20" />
+                      <span>الأجهزة والمواد المكفولة في هذه الفاتورة ({warrantiedItems.length})</span>
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {warrantiedItems.map((wItem, wIdx) => {
+                      const status = getWarrantyStatus(wItem.warrantyExpiryDate);
+                      return (
+                        <div key={wIdx} className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-amber-200/60 dark:border-zinc-800 flex items-center justify-between gap-2 shadow-xs">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-black text-xs text-gray-900 dark:text-white truncate">{wItem.name}</div>
+                            <div className="text-[10px] font-bold text-gray-500 flex items-center gap-1 mt-0.5">
+                              <span>ضمان: {wItem.warrantyPeriod || "سنة"}</span>
+                              <span>•</span>
+                              <span className={`px-1.5 py-0.2 rounded font-black border ${status.badgeClass}`}>{status.label}</span>
+                            </div>
+                          </div>
+                          {wItem.warrantyCardImage && (
+                            <button
+                              type="button"
+                              onClick={() => setWarrantyCardPreviewUrl(wItem.warrantyCardImage || null)}
+                              className="shrink-0 p-0.5 rounded-lg border border-amber-300 hover:scale-105 transition"
+                              title="معاينة بطاقة الضمان"
+                            >
+                              <img src={wItem.warrantyCardImage} alt="كارت الضمان" className="w-9 h-9 object-cover rounded-md" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Search inside receipt */}
             <div className="relative mb-3">
               <input
@@ -7645,18 +8712,30 @@ setEditTrip(null);
             <div className="bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
               <div className="grid grid-cols-12 gap-2 px-3 py-2.5 bg-gray-100/70 dark:bg-zinc-800/60 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
                 <div className="col-span-1 text-center">#</div>
-                <div className="col-span-6">اسم المادة</div>
-                <div className="col-span-2 text-center">الكمية</div>
+                <div className="col-span-5">اسم المادة والقسم</div>
+                <div className="col-span-2">المكان / المحل 📍</div>
+                <div className="col-span-1 text-center">الكمية</div>
                 <div className="col-span-3 text-left">الإجمالي (د.ع)</div>
               </div>
 
               <div className="divide-y divide-gray-100 dark:divide-zinc-800/80 max-h-[350px] overflow-y-auto custom-scrollbar">
                 {(() => {
                   const filtered = (viewingReceiptExpense.items || []).filter(item => 
-                    !receiptItemFilter || item.name.toLowerCase().includes(receiptItemFilter.toLowerCase())
+                    !receiptItemFilter || 
+                    item.name.toLowerCase().includes(receiptItemFilter.toLowerCase()) ||
+                    (item.category && item.category.toLowerCase().includes(receiptItemFilter.toLowerCase())) ||
+                    (item.place && item.place.toLowerCase().includes(receiptItemFilter.toLowerCase()))
                   );
 
-                  if (filtered.length === 0) {
+                  // Apply view grouping mode
+                  let itemsToRender = [...filtered];
+                  if (viewReceiptGroupingMode === "priority") {
+                    itemsToRender = sortItemsByCategoryPriority(itemsToRender);
+                  } else if (viewReceiptGroupingMode === "place") {
+                    itemsToRender.sort((a, b) => (a.place || "").localeCompare(b.place || ""));
+                  }
+
+                  if (itemsToRender.length === 0) {
                     return (
                       <div className="text-center py-8 text-xs font-bold text-gray-400">
                         {receiptItemFilter ? "لا توجد مواد مطابقة للبحث" : "لا توجد مواد في هذه القائمة"}
@@ -7664,18 +8743,47 @@ setEditTrip(null);
                     );
                   }
 
-                  return filtered.map((item, idx) => (
-                    <div key={item.id || idx} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs items-center hover:bg-white dark:hover:bg-zinc-800/50 transition">
-                      <div className="col-span-1 text-center font-bold text-gray-400 text-[11px]">{idx + 1}</div>
-                      <div className="col-span-6 font-bold text-gray-800 dark:text-gray-200 truncate">{item.name}</div>
-                      <div className="col-span-2 text-center font-black text-gray-600 dark:text-gray-300 bg-gray-200/60 dark:bg-zinc-800 px-1 py-0.5 rounded-md text-[11px]">
-                        {item.quantity}
+                  return itemsToRender.map((item, idx) => {
+                    const resolvedCat = item.category || detectProductCategory(item.name);
+                    const catDef = resolvedCat ? PRODUCT_CATEGORY_MAP[resolvedCat] : null;
+
+                    return (
+                      <div key={item.id || idx} className="grid grid-cols-12 gap-2 px-3 py-2.5 text-xs items-center hover:bg-white dark:hover:bg-zinc-800/50 transition">
+                        <div className="col-span-1 text-center font-bold text-gray-400 text-[11px]">{idx + 1}</div>
+                        
+                        <div className="col-span-5 font-bold text-gray-800 dark:text-gray-200">
+                          <div className="truncate font-black">{item.name}</div>
+                          {resolvedCat && (
+                            <div className="mt-0.5">
+                              <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-bold border ${catDef ? `${catDef.bgLight} ${catDef.bgDark} ${catDef.color}` : 'bg-gray-100 text-gray-600'}`}>
+                                <span>{catDef?.icon || "🏷️"}</span>
+                                <span>{resolvedCat}</span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="col-span-2 text-gray-600 dark:text-gray-300">
+                          {item.place ? (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50">
+                              <span>📍</span>
+                              <span className="truncate">{item.place}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-gray-400">-</span>
+                          )}
+                        </div>
+
+                        <div className="col-span-1 text-center font-black text-gray-600 dark:text-gray-300 bg-gray-200/60 dark:bg-zinc-800 px-1 py-0.5 rounded-md text-[11px]">
+                          {item.quantity}
+                        </div>
+
+                        <div className="col-span-3 text-left font-black text-rose-600 dark:text-rose-400">
+                          {fmt(item.price)} <span className="text-[9px] font-bold text-gray-400">د.ع</span>
+                        </div>
                       </div>
-                      <div className="col-span-3 text-left font-black text-rose-600 dark:text-rose-400">
-                        {fmt(item.price)} <span className="text-[9px] font-bold text-gray-400">د.ع</span>
-                      </div>
-                    </div>
-                  ));
+                    );
+                  });
                 })()}
               </div>
 
@@ -7689,6 +8797,82 @@ setEditTrip(null);
                 </span>
               </div>
             </div>
+
+            {/* Department & Outing Places Breakdown Summary */}
+            {(() => {
+              const items = viewingReceiptExpense.items || [];
+              if (items.length === 0) return null;
+
+              // Group by category
+              const catTotals: Record<string, { count: number; total: number; icon: string }> = {};
+              // Group by place
+              const placeTotals: Record<string, { count: number; total: number }> = {};
+
+              items.forEach(it => {
+                const cat = it.category || detectProductCategory(it.name) || "أخرى";
+                const catDef = PRODUCT_CATEGORY_MAP[cat];
+                const price = Number(it.price) || 0;
+                
+                if (!catTotals[cat]) {
+                  catTotals[cat] = { count: 0, total: 0, icon: catDef?.icon || "🏷️" };
+                }
+                catTotals[cat].count += 1;
+                catTotals[cat].total += price;
+
+                if (it.place && it.place.trim()) {
+                  const pl = it.place.trim();
+                  if (!placeTotals[pl]) {
+                    placeTotals[pl] = { count: 0, total: 0 };
+                  }
+                  placeTotals[pl].count += 1;
+                  placeTotals[pl].total += price;
+                }
+              });
+
+              const sortedCats = Object.entries(catTotals).sort((a, b) => b[1].total - a[1].total);
+              const sortedPlaces = Object.entries(placeTotals).sort((a, b) => b[1].total - a[1].total);
+
+              return (
+                <div className="mt-3.5 p-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+                  <div>
+                    <h4 className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5 mb-2">
+                      <span>📊</span>
+                      <span>تحليل مشتريات الفاتورة حسب الأقسام (مرتبة حسب الأهمية)</span>
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      {sortedCats.map(([cName, data]) => (
+                        <div key={cName} className="p-2 rounded-xl bg-white dark:bg-zinc-900 border border-indigo-100 dark:border-zinc-800 flex items-center justify-between text-xs shadow-xs">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="text-sm">{data.icon}</span>
+                            <span className="font-bold text-gray-800 dark:text-gray-200 truncate">{cName}</span>
+                            <span className="text-[10px] text-gray-400 font-bold">({data.count})</span>
+                          </div>
+                          <span className="font-black text-rose-600 dark:text-rose-400 text-xs shrink-0">{fmt(data.total)} د.ع</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {sortedPlaces.length > 0 && (
+                    <div className="pt-2.5 border-t border-indigo-100 dark:border-indigo-900/30">
+                      <h5 className="text-[11px] font-black text-indigo-900 dark:text-indigo-300 flex items-center gap-1 mb-1.5">
+                        <span>📍</span>
+                        <span>توزيع الصرف حسب المحطات والأماكن في الطلعة:</span>
+                      </h5>
+                      <div className="flex flex-wrap gap-2">
+                        {sortedPlaces.map(([plName, data]) => (
+                          <div key={plName} className="px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-zinc-800 text-[11px] font-black text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5 shadow-xs">
+                            <span>📍 {plName}</span>
+                            <span className="text-gray-400 text-[10px]">({data.count} مواد):</span>
+                            <span className="text-rose-600 dark:text-rose-400 font-black">{fmt(data.total)} د.ع</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Actions Bar */}
             <div className="flex flex-wrap gap-2.5 mt-4">
@@ -7718,6 +8902,87 @@ setEditTrip(null);
                 <Edit2 className="w-4 h-4" /> تعديل في تسجيل المصروف
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Edit Real Liquidity Wallet Modal ─── */}
+      {showWalletModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-zinc-950 w-full max-w-md rounded-3xl p-6 shadow-2xl border border-gray-100 dark:border-zinc-800 text-right">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-300 font-black">
+                  💼
+                </div>
+                <h3 className="font-black text-base text-gray-900 dark:text-white">
+                  تحديث محفظة السيولة والنقد الفعلي
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowWalletModal(false)}
+                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveWallet} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
+                  <span>💳</span>
+                  <span>الرصيد في المصرف / الحساب البنكي / كي كارد (د.ع):</span>
+                </label>
+                <input
+                  type="number"
+                  value={walletBankInput}
+                  onChange={e => setWalletBankInput(Number(e.target.value))}
+                  placeholder="مثال: 410000"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900 text-sm font-black text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
+                  <span>💵</span>
+                  <span>النقد الفعلي في الجيب / كاش المحفظة (د.ع):</span>
+                </label>
+                <input
+                  type="number"
+                  value={walletCashInput}
+                  onChange={e => setWalletCashInput(Number(e.target.value))}
+                  placeholder="مثال: 50000"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900 text-sm font-black text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                  required
+                />
+              </div>
+
+              {/* Calculated Total Display */}
+              <div className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 flex items-center justify-between text-xs">
+                <span className="font-bold text-purple-900 dark:text-purple-200">إجمالي السيولة النقدية:</span>
+                <span className="font-black text-sm text-purple-700 dark:text-purple-300">
+                  {fmt((Number(walletBankInput) || 0) + (Number(walletCashInput) || 0))} د.ع
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowWalletModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-bold text-xs hover:bg-gray-200 transition"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs shadow-md shadow-purple-500/20 active:scale-95 transition"
+                >
+                  حفظ الأرصدة ✓
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,4 +1,4 @@
-// Client-side receipt scanner using Google Gemini AI
+import { detectProductCategory, calculateWarrantyExpiryDate } from "../app/admin/home-finance/productCategories";
 
 const VALID_CATEGORIES = [
   "سوبر ماركت",
@@ -30,6 +30,12 @@ export interface ScannedReceiptData {
     name: string;
     quantity: number;
     price: number;
+    category?: string;
+    place?: string;
+    hasWarranty?: boolean;
+    warrantyPeriod?: string;
+    warrantyExpiryDate?: string;
+    warrantyCardImage?: string;
   }[];
 }
 
@@ -88,7 +94,10 @@ export async function scanReceiptWithGemini(
     {
       "name": "اسم المادة أو المنتج كاملاً وواضحاً",
       "quantity": 1, // الكمية كرقم (إذا غير واضحة تكون 1)
-      "price": 1000 // السعر الإجمالي لهذه المادة (الكمية × سعر المفرد) كرقم صحيح
+      "price": 1000, // السعر الإجمالي لهذه المادة (الكمية × سعر المفرد) كرقم صحيح
+      "category": "الفواكه والخضار", // اختر فئة المادة الأنسب من: ["الفواكه والخضار", "المخبوزات والمعجنات", "لحوم ودواجن", "مجمدات", "الألبان والأجبان", "المشروبات", "سناكات", "الشاي، القهوة والسكر", "الإفطار", "جاهز للأكل", "أساسيات الطبخ", "المياه", "المعلبات", "الصلصات", "القرطاسية واللوازم المدرسية", "العناية الشخصية", "منتجات صحية", "حلويات", "هواتف ذكية", "اللوازم المنزلية", "التوابل والاعشاب", "العناية بالطفل", "منظفات", "السكائر", "أجهزة منزلية", "صيدلية", "سفريات وورقيات", "كارتات"]
+      "hasWarranty": false, // true إذا ذكرت الفاتورة ضمان أو كفالة لهذا المنتج (خاصة للأجهزة والإلكترونيات)
+      "warrantyPeriod": "سنة واحدة" // فترة الضمان إن وجدت (مثال: "6 أشهر"، "سنة واحدة"، "سنتين")
     }
   ]
 }
@@ -96,8 +105,10 @@ export async function scanReceiptWithGemini(
 قواعد هامة جداً:
 1. استخرج كافة المواد في الفاتورة بدون أي استثناء أو إهمال.
 2. حقل "price" لكل مادة يجب أن يمثل السعر الإجمالي للمادة (الكمية × سعر المفرد).
-3. أزل علامات العملة مثل "د.ع" أو "IQD" أو الفواصل العشرية واجعل الأسعار أرقاماً صحيحة (مثال: 1,250 تصبح 1250).
-4. أرجع فقط كود JSON صالح تماماً، بدون أي نصوص تمهيدية أو ختامية.`;
+3. حدد فئة كل مادة (category) بدقة من قائمة الفئات أعلاه (مثال: طماطة -> الفواكه والخضار، روبة -> الألبان والأجبان، لحم -> لحوم ودواجن...).
+4. إذا ذكرت الفاتورة أو الإيصال ضماناً لأي جهاز أو مادة (مثال: ضمان سنة، كفالة 6 أشهر)، ضع hasWarranty: true واذكر warrantyPeriod.
+5. أزل علامات العملة مثل "د.ع" أو "IQD" أو الفواصل العشرية واجعل الأسعار أرقاماً صحيحة (مثال: 1,250 تصبح 1250).
+6. أرجع فقط كود JSON صالح تماماً، بدون أي نصوص تمهيدية أو ختامية.`;
 
   let resultText = "";
   let lastError: any = null;
@@ -156,13 +167,31 @@ export async function scanReceiptWithGemini(
 
   const parsed = JSON.parse(cleaned);
 
+  let cleanStoreName = (parsed.storeName || "").trim();
+  if (cleanStoreName === "غير محدد" || cleanStoreName === "فاتورة مشتريات" || cleanStoreName === "فاتورة" || cleanStoreName === "متجر" || !cleanStoreName) {
+    cleanStoreName = "";
+  }
+
   const normalizedItems = Array.isArray(parsed.items)
-    ? parsed.items.map((it: any, idx: number) => ({
-        id: `item-${Date.now()}-${idx}-${Math.random().toString(36).substring(7)}`,
-        name: String(it.name || `منتج ${idx + 1}`).trim(),
-        quantity: Number(it.quantity) || 1,
-        price: Number(it.price) || 0
-      }))
+    ? parsed.items.map((it: any, idx: number) => {
+        const itemName = String(it.name || `منتج ${idx + 1}`).trim();
+        const itemCat = String(it.category || "").trim() || detectProductCategory(itemName);
+        const hasWarr = Boolean(it.hasWarranty || itemName.includes("ضمان") || itemName.includes("كفالة"));
+        const warrPeriod = it.warrantyPeriod ? String(it.warrantyPeriod).trim() : (hasWarr ? "سنة واحدة" : undefined);
+        const warrExpiry = hasWarr && warrPeriod ? calculateWarrantyExpiryDate(parsed.date || "", warrPeriod) : undefined;
+
+        return {
+          id: `item-${Date.now()}-${idx}-${Math.random().toString(36).substring(7)}`,
+          name: itemName,
+          quantity: Number(it.quantity) || 1,
+          price: Number(it.price) || 0,
+          category: itemCat,
+          place: String(it.place || cleanStoreName || "").trim(),
+          hasWarranty: hasWarr,
+          warrantyPeriod: warrPeriod,
+          warrantyExpiryDate: warrExpiry
+        };
+      })
     : [];
 
   let total = Number(parsed.totalAmount);
@@ -194,11 +223,6 @@ export async function scanReceiptWithGemini(
     }
   } else {
     receiptDate = todayStr;
-  }
-
-  let cleanStoreName = (parsed.storeName || "").trim();
-  if (cleanStoreName === "غير محدد" || cleanStoreName === "فاتورة مشتريات" || cleanStoreName === "فاتورة" || cleanStoreName === "متجر" || !cleanStoreName) {
-    cleanStoreName = "";
   }
 
   return {

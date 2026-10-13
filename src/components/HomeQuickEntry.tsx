@@ -5,19 +5,34 @@ import {
   X, Home, Receipt, Users, ShoppingCart, ReceiptText,
   CreditCard, TrendingUp, Banknote, Calendar, Tag,
   Check, Loader2, Sparkles, Zap, Plus, ArrowRight,
-  Camera, Image as ImageIcon, ListPlus, Trash2, ScanLine
+  Camera, Image as ImageIcon, ListPlus, Trash2, ScanLine, Shield
 } from "lucide-react";
 import { doc, getDoc, setDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import FormattedNumberInput from "@/components/FormattedNumberInput";
 import { toast } from "sonner";
 import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
+import {
+  PRODUCT_CATEGORIES,
+  PRODUCT_CATEGORY_MAP,
+  detectProductCategory,
+  OUTING_PLACES_SUGGESTIONS,
+  sortItemsByCategoryPriority,
+  saveLearnedCategory
+} from "@/app/admin/home-finance/productCategories";
 
 interface ExpenseItem {
   id: string;
   name: string;
   quantity: number;
   price: number;
+  category?: string;
+  place?: string;
+  hasWarranty?: boolean;
+  warrantyPeriod?: string;
+  warrantyExpiryDate?: string;
+  warrantyCardImage?: string;
+  warrantyNotes?: string;
 }
 
 const compressImageFast = (file: File, maxDim = 1200, quality = 0.8): Promise<string> => {
@@ -295,7 +310,9 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
           id: it.id || `item-${Date.now()}-${idx}`,
           name: it.name || "",
           quantity: Number(it.quantity) || 1,
-          price: Number(it.price) || 0
+          price: Number(it.price) || 0,
+          category: it.category || detectProductCategory(it.name || ""),
+          place: it.place || (data.storeName && data.storeName !== "غير محدد" ? data.storeName : "سوبر ماركت")
         }));
         setExpenseItems(formattedItems);
         const sum = formattedItems.reduce((acc, curr) => acc + (curr.price || 0), 0);
@@ -364,7 +381,9 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
             id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
             name,
             quantity: 1,
-            price
+            price,
+            category: detectProductCategory(name),
+            place: expName.trim() || (expCategory === "طلعات وجولات" ? "سوق" : "سوبر ماركت")
           });
         }
       }
@@ -868,11 +887,33 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                         مسح الكل
                       </button>
                     )}
+                    {expenseItems.length > 1 && (
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          const sorted = sortItemsByCategoryPriority(expenseItems);
+                          setExpenseItems(sorted);
+                          toast.success("تم ترتيب المواد حسب أولوية الأقسام (المخضر والفواكه أولاً...) 🥗✨");
+                        }}
+                        className="text-xs flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-black bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1.5 rounded-xl hover:bg-emerald-100 transition active:scale-95 border border-emerald-200/60 dark:border-emerald-500/30"
+                        title="ترتيب المواد حسب الأولوية الغذائية والمنزلية (المخضر والفواكه بالبداية)"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>🥗 أولوية</span>
+                      </button>
+                    )}
                     <button 
                       type="button" 
                       onClick={() => {
                         const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-                        const updated = [...expenseItems, { id: newId, name: "", quantity: 1, price: 0 }];
+                        const updated = [...expenseItems, { 
+                          id: newId, 
+                          name: "", 
+                          quantity: 1, 
+                          price: 0,
+                          category: "",
+                          place: expName.trim() || (expCategory === "طلعات وجولات" ? "سوق" : "سوبر ماركت")
+                        }];
                         setExpenseItems(updated);
                         setTimeout(() => {
                           const input = document.getElementById(`quick-exp-item-name-${updated.length - 1}`);
@@ -890,13 +931,15 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                   <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 border border-gray-100 dark:border-zinc-800">
                     <div className="hidden sm:grid sm:grid-cols-12 gap-2 px-2 pb-2 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
                       <div className="col-span-1 text-center">#</div>
-                      <div className="col-span-5">اسم المادة / المنتج</div>
-                      <div className="col-span-2 text-center">الكمية</div>
-                      <div className="col-span-3 text-left">السعر (د.ع)</div>
+                      <div className="col-span-3">اسم المادة / المنتج</div>
+                      <div className="col-span-3">القسم (28 فئة)</div>
+                      <div className="col-span-2">المكان / المحل</div>
+                      <div className="col-span-1 text-center">الكمية</div>
+                      <div className="col-span-1 text-left">السعر</div>
                       <div className="col-span-1 text-center">حذف</div>
                     </div>
 
-                    <div className="space-y-2 mt-2 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
+                    <div className="space-y-2 mt-2 max-h-[260px] overflow-y-auto pr-1 custom-scrollbar">
                       {expenseItems.map((item, idx) => (
                         <div 
                           key={item.id} 
@@ -908,21 +951,26 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                           </div>
 
                           {/* Product Name with Suggestions */}
-                          <div className="w-full sm:col-span-5 relative">
+                          <div className="w-full sm:col-span-3 relative">
                             <input 
                               id={`quick-exp-item-name-${idx}`}
                               type="text" 
-                              placeholder="اسم المنتج (مثال: حليب، خضار...)" 
+                              placeholder="اسم المنتج (طماطة، روبة..)" 
                               value={item.name} 
                               autoComplete="off"
                               onFocus={() => setFocusedProductIdx(idx)}
                               onBlur={() => setTimeout(() => setFocusedProductIdx(null), 200)}
                               onChange={e => {
+                                const val = e.target.value;
                                 const newItems = [...expenseItems];
-                                newItems[idx].name = e.target.value;
+                                newItems[idx].name = val;
+                                const pred = detectProductCategory(val);
+                                if (pred) {
+                                  newItems[idx].category = pred;
+                                }
                                 setExpenseItems(newItems);
                               }} 
-                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
+                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
                               required 
                             />
                             {focusedProductIdx === idx && (item.name || "").length >= 1 && uniqueProductNames.filter(n => n.includes(item.name || "")).length > 0 && (
@@ -933,6 +981,8 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                                     onClick={() => { 
                                       const newItems = [...expenseItems];
                                       newItems[idx].name = suggestedName;
+                                      const pred = detectProductCategory(suggestedName);
+                                      if (pred) newItems[idx].category = pred;
                                       setExpenseItems(newItems);
                                       setFocusedProductIdx(null);
                                     }} 
@@ -945,9 +995,54 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                             )}
                           </div>
 
+                          {/* Category Selector (28 Priority Departments) */}
+                          <div className="w-full sm:col-span-3">
+                            <select
+                              value={item.category || ""}
+                              onChange={e => {
+                                const newCat = e.target.value;
+                                const newItems = [...expenseItems];
+                                newItems[idx].category = newCat;
+                                setExpenseItems(newItems);
+                                if (newItems[idx].name && newCat) {
+                                  saveLearnedCategory(newItems[idx].name, newCat);
+                                }
+                              }}
+                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
+                            >
+                              <option value="">اختر القسم (تنبؤ ذكي 🧠)</option>
+                              {PRODUCT_CATEGORIES.map(cat => (
+                                <option key={cat.id} value={cat.name}>
+                                  {cat.icon} {cat.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Place / Shop Selector */}
+                          <div className="w-full sm:col-span-2">
+                            <input
+                              type="text"
+                              list={`quick-places-list-${idx}`}
+                              placeholder="المحل (سوق، هايبر..)"
+                              value={item.place || ""}
+                              onChange={e => {
+                                const newItems = [...expenseItems];
+                                newItems[idx].place = e.target.value;
+                                setExpenseItems(newItems);
+                              }}
+                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
+                            />
+                            <datalist id={`quick-places-list-${idx}`}>
+                              {OUTING_PLACES_SUGGESTIONS.map((p, pIdx) => (
+                                <option key={pIdx} value={p} />
+                              ))}
+                            </datalist>
+                          </div>
+
                           {/* Quantity & Price */}
                           <div className="w-full flex sm:contents gap-2">
-                            <div className="w-24 sm:w-auto sm:col-span-2">
+                            <div className="w-20 sm:w-auto sm:col-span-1">
                               <input 
                                 type="number" 
                                 placeholder="الكمية" 
@@ -959,23 +1054,30 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                                   newItems[idx].quantity = Number(e.target.value);
                                   setExpenseItems(newItems);
                                 }} 
-                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-xs sm:text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
+                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-1.5 py-1.5 text-xs text-center outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
                                 required 
                               />
                             </div>
 
-                            <div className="flex-1 sm:col-span-3">
+                            <div className="flex-1 sm:col-span-1">
                               <input 
                                 id={`quick-exp-item-price-${idx}`}
                                 type="number" 
-                                placeholder="السعر (د.ع)" 
+                                placeholder="السعر" 
                                 value={item.price || ''} 
                                 onKeyDown={e => {
                                   if (e.key === "Enter") {
                                     e.preventDefault();
                                     if (idx === expenseItems.length - 1) {
                                       const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-                                      const updated = [...expenseItems, { id: newId, name: "", quantity: 1, price: 0 }];
+                                      const updated = [...expenseItems, { 
+                                        id: newId, 
+                                        name: "", 
+                                        quantity: 1, 
+                                        price: 0,
+                                        category: "",
+                                        place: expName.trim() || (expCategory === "طلعات وجولات" ? "سوق" : "سوبر ماركت")
+                                      }];
                                       setExpenseItems(updated);
                                       setTimeout(() => {
                                         const nextInput = document.getElementById(`quick-exp-item-name-${updated.length - 1}`);
@@ -994,7 +1096,7 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                                   const sum = newItems.reduce((acc, curr) => acc + (curr.price || 0), 0);
                                   setExpAmount(sum.toString());
                                 }} 
-                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-black text-rose-600 dark:text-rose-400 text-left transition" 
+                                className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/40 font-black text-rose-600 dark:text-rose-400 text-left transition" 
                                 required 
                               />
                             </div>

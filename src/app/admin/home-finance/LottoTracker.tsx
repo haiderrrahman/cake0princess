@@ -327,6 +327,17 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     return calculateLottoStats(currentDraws, selectedGame);
   }, [currentDraws, selectedGame]);
 
+  const safeSyncLottoDoc = (payload: any) => {
+    try {
+      const cleanPayload = JSON.parse(JSON.stringify(payload));
+      return setDoc(doc(db, "home_finance", "lotto_hub"), cleanPayload, { merge: true }).catch(e => {
+        console.error("Firestore lotto_hub async error:", e);
+      });
+    } catch (err) {
+      console.error("safeSyncLottoDoc sync error:", err);
+    }
+  };
+
   // Next Draw Date
   const nextDrawDate = useMemo(() => {
     return getNextDrawDate(selectedGame);
@@ -334,25 +345,27 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
 
   // Synchronize or load prediction for current game WITHOUT randomizing on refresh
   useEffect(() => {
+    const max = GAME_DETAILS[selectedGame].maxNumber;
+    const hasLucky = GAME_DETAILS[selectedGame].hasLuckyNumber;
     const saved = savedPredictions[selectedGame];
-    if (saved && saved.numbers && saved.numbers.length === 6) {
+    if (saved && saved.numbers && saved.numbers.length === 6 && saved.numbers.every(n => n >= 1 && n <= max)) {
       setSuggestedNumbers(saved.numbers);
-      setSuggestedLucky(saved.luckyNumber);
+      setSuggestedLucky(hasLucky ? saved.luckyNumber : undefined);
       setIsLocked(!!saved.isLocked);
       if (saved.strategy && saved.strategy !== "custom") setPredictionStrategy(saved.strategy as any);
       setPredictionAnalysis(saved.analysis || null);
     } else {
-      // Generate initial prediction once if none ever existed
+      // Generate initial prediction once if none ever existed or was invalid
       const pred = predictNextNumbers(currentDraws, selectedGame, predictionStrategy);
       setSuggestedNumbers(pred.numbers);
-      setSuggestedLucky(pred.luckyNumber);
+      setSuggestedLucky(hasLucky ? pred.luckyNumber : undefined);
       setPredictionAnalysis(pred.analysis);
       setIsLocked(false);
       
       const newSaved: SavedPrediction = {
         game: selectedGame,
         numbers: pred.numbers,
-        luckyNumber: pred.luckyNumber,
+        luckyNumber: hasLucky ? pred.luckyNumber : undefined,
         isLocked: false,
         strategy: predictionStrategy,
         confidenceScore: pred.analysis.confidenceScore,
@@ -364,9 +377,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
       try {
         localStorage.setItem("cache_lotto_predictions", JSON.stringify(updatedAll));
       } catch (e) {}
-      setDoc(doc(db, "home_finance", "lotto_hub"), {
-        savedPredictions: updatedAll
-      }, { merge: true }).catch(e => console.error("Save prediction error:", e));
+      safeSyncLottoDoc({ savedPredictions: updatedAll });
     }
   }, [selectedGame]);
 
@@ -384,10 +395,11 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
       setPredictionAnalysis(pred.analysis);
       setIsGenerating(false);
 
+      const hasLucky = GAME_DETAILS[selectedGame].hasLuckyNumber;
       const newSaved: SavedPrediction = {
         game: selectedGame,
         numbers: pred.numbers,
-        luckyNumber: pred.luckyNumber,
+        luckyNumber: hasLucky ? pred.luckyNumber : undefined,
         isLocked,
         strategy: strat,
         confidenceScore: pred.analysis.confidenceScore,
@@ -399,9 +411,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
       try {
         localStorage.setItem("cache_lotto_predictions", JSON.stringify(updatedAll));
       } catch (e) {}
-      setDoc(doc(db, "home_finance", "lotto_hub"), {
-        savedPredictions: updatedAll
-      }, { merge: true }).catch(e => console.error("Save prediction error:", e));
+      safeSyncLottoDoc({ savedPredictions: updatedAll });
       toast.success("تم تحديث التنبؤ الإحصائي وحفظه بنجاح 🎯");
     }, 200);
   };
@@ -410,11 +420,12 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
   const handleToggleLock = () => {
     const nextLocked = !isLocked;
     setIsLocked(nextLocked);
+    const hasLucky = GAME_DETAILS[selectedGame].hasLuckyNumber;
     const currentAnalysis = predictionAnalysis || analyzeCombination(suggestedNumbers, selectedGame, stats);
     const newSaved: SavedPrediction = {
       game: selectedGame,
       numbers: suggestedNumbers,
-      luckyNumber: suggestedLucky,
+      luckyNumber: hasLucky ? suggestedLucky : undefined,
       isLocked: nextLocked,
       strategy: predictionStrategy,
       confidenceScore: currentAnalysis.confidenceScore,
@@ -426,9 +437,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
     try {
       localStorage.setItem("cache_lotto_predictions", JSON.stringify(updatedAll));
     } catch (e) {}
-    setDoc(doc(db, "home_finance", "lotto_hub"), {
-      savedPredictions: updatedAll
-    }, { merge: true }).catch(e => console.error("Save prediction error:", e));
+    safeSyncLottoDoc({ savedPredictions: updatedAll });
 
     if (nextLocked) {
       toast.success("تم تثبيت وقفل أرقامك بنجاح! ستبقى ثابتة ولن تتغير بأي رفرش 🔒");
@@ -470,9 +479,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
       try {
         localStorage.setItem("cache_lotto_predictions", JSON.stringify(updatedAll));
       } catch (e) {}
-      setDoc(doc(db, "home_finance", "lotto_hub"), {
-        savedPredictions: updatedAll
-      }, { merge: true }).catch(e => console.error("Save custom prediction error:", e));
+      safeSyncLottoDoc({ savedPredictions: updatedAll });
       toast.success("تم تثبيت وحفظ توليفة الـ 6 أرقام الخاصة بك بنجاح 🔒🎯");
     }
   };
@@ -497,9 +504,7 @@ export default function LottoTracker({ isOpen, onClose, onAddExpenseLinked }: Lo
       try {
         localStorage.setItem("cache_lotto_predictions", JSON.stringify(updatedAll));
       } catch (e) {}
-      setDoc(doc(db, "home_finance", "lotto_hub"), {
-        savedPredictions: updatedAll
-      }, { merge: true }).catch(e => console.error("Save custom lucky error:", e));
+      safeSyncLottoDoc({ savedPredictions: updatedAll });
       toast.success(`تم اختيار وتثبيت رقم الحظ (${luckyNum}) 🌟`);
     }
   };
