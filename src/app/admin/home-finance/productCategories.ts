@@ -15,6 +15,17 @@ export interface ProductCategoryDef {
 
 export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
   {
+    id: "supermarket",
+    name: "سوبر ماركت",
+    icon: "🛒",
+    color: "text-emerald-700 dark:text-emerald-300",
+    bgLight: "bg-emerald-50 border-emerald-200",
+    bgDark: "dark:bg-emerald-950/40 dark:border-emerald-800/60",
+    keywords: [
+      "سوبر ماركت", "سوبرماركت", "ماركت", "هايبر ماركت", "اسواق", "مسواك", "مشتريات", "جمعية", "ماركت البركات", "تعاون ماركت"
+    ]
+  },
+  {
     id: "fruits_veg",
     name: "الفواكه والخضار",
     icon: "🍌",
@@ -43,7 +54,7 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
   },
   {
     id: "meat_poultry",
-    name: "لحوم ودواجن",
+    name: "لحوم ودواجن وأسماك",
     icon: "🥩",
     color: "text-rose-700 dark:text-rose-300",
     bgLight: "bg-rose-50 border-rose-200",
@@ -52,18 +63,6 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
       "لحم", "دجاج", "كباب", "كفتة", "ستيك", "شاورما", "كص", "مفروم", "همبرغر", "اجنحة",
       "افخاذ", "صدر دجاج", "سودة", "معلاك", "فشة", "سمك", "روبيان", "ريش", "موزات", "كراعين",
       "قوزي", "دجاج فريش", "دجاج كامل", "سفاين", "لحم غنم", "لحم عجل", "مجزرة", "شيش طاووق"
-    ]
-  },
-  {
-    id: "frozen",
-    name: "مجمدات",
-    icon: "🍟",
-    color: "text-sky-700 dark:text-sky-300",
-    bgLight: "bg-sky-50 border-sky-200",
-    bgDark: "dark:bg-sky-950/40 dark:border-sky-800/60",
-    keywords: [
-      "مجمدات", "بطاطا مجمدة", "اصابع بطاطا", "برغر مجمد", "ناجتس", "فش فيليه", "كبة مجمدة",
-      "بازلاء مجمدة", "ذرة مجمدة", "فول مجمد", "بامية مجمدة", "سمبوسة مجمدة", "بورك مجمد", "ايس كريم", "مثلجات", "موطا"
     ]
   },
   {
@@ -80,8 +79,82 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
     ]
   },
   {
+    id: "cooking_basics",
+    name: "أساسيات ومؤونة الطبخ",
+    icon: "🍳",
+    color: "text-lime-700 dark:text-lime-300",
+    bgLight: "bg-lime-50 border-lime-200",
+    bgDark: "dark:bg-lime-950/40 dark:border-lime-800/60",
+    keywords: [
+      "زيت", "زيت نباتي", "زيت زيتون", "طحين", "معجون", "معجون طماطة", "رز", "تمن",
+      "برغل", "عدس", "حمص", "فاصوليا", "ماش", "معكرونة", "شعرية", "ملح طعام", "خل",
+      "ماجي", "مرقة دجاج", "سمنة", "دهن حر", "نشا", "بيكنج باودر", "خميرة", "فانيلا"
+    ]
+  },
+  {
+    id: "canned_food",
+    name: "المعلبات والبقوليات",
+    icon: "🥫",
+    color: "text-red-700 dark:text-red-300",
+    bgLight: "bg-red-50 border-red-200",
+    bgDark: "dark:bg-red-950/40 dark:border-red-800/60",
+    keywords: [
+      "معلبات", "تونة", "سردين", "ذرة معلبة", "حمص بطحينة", "فطر معلب", "مشروم",
+      "فول مدمس", "اناناس معلب", "لحم معلب", "لانشون", "بلوبيف", "قشطة معلبة", "فول", "فاصوليا حمراء"
+    ]
+  },
+  {
+    id: "breakfast",
+    name: "الإفطار والمربيات",
+    icon: "🥚",
+    color: "text-orange-600 dark:text-orange-300",
+    bgLight: "bg-orange-50 border-orange-200",
+    bgDark: "dark:bg-orange-950/40 dark:border-orange-800/60",
+    keywords: [
+      "بيض", "بيض مائدة", "مربى", "عسل", "كورن فليكس", "نوتيلا", "حلاوة طحينية", "راشي",
+      "دبس", "سيريال", "شوفان فطور", "بان كيك", "وافل", "زبدة فول سوداني"
+    ]
+  },
+  {
+    id: "frozen",
+    name: "مجمدات ومثلجات",
+    icon: "🍟",
+    color: "text-sky-700 dark:text-sky-300",
+    bgLight: "bg-sky-50 border-sky-200",
+    bgDark: "dark:bg-sky-950/40 dark:border-sky-800/60",
+    keywords: [
+      "مجمدات", "بطاطا مجمدة", "اصابع بطاطا", "برغر مجمد", "ناجتس", "فش فيليه", "كبة مجمدة",
+      "بازلاء مجمدة", "ذرة مجمدة", "فول مجمد", "بامية مجمدة", "سمبوسة مجمدة", "بورك مجمد", "ايس كريم", "مثلجات", "موطا"
+    ]
+  },
+  {
+    id: "sauces",
+    name: "الصلصات والمقبلات",
+    icon: "🍅",
+    color: "text-rose-800 dark:text-rose-200",
+    bgLight: "bg-rose-100/60 border-rose-300",
+    bgDark: "dark:bg-rose-950/50 dark:border-rose-700/60",
+    keywords: [
+      "صلصة", "صوص", "كاتشب", "مايونيز", "خردل", "ماسترد", "دبس رمان", "صويا صوص",
+      "شطة", "طحينية", "صلصة باربيكيو", "رانش", "سيراتشا", "صلصة صويا", "صوص ثوم", "دريسينج"
+    ]
+  },
+  {
+    id: "spices_herbs",
+    name: "التوابل والأعشاب",
+    icon: "🧂",
+    color: "text-yellow-800 dark:text-yellow-200",
+    bgLight: "bg-yellow-100/60 border-yellow-300",
+    bgDark: "dark:bg-yellow-950/50 dark:border-yellow-700/60",
+    keywords: [
+      "بهارات", "كمون", "كركم", "كاري", "فلفل اسود", "فلفل حار", "بابريكا", "كزبرة",
+      "دارسين", "قرفة", "زنجبيل", "سماق", "نومي بصرة", "زعتر", "توابل", "زعفران",
+      "قرنفل", "مسمار", "جوزة الطيب", "ورق غار", "كراوية", "حبة حلوة", "ينسون"
+    ]
+  },
+  {
     id: "beverages",
-    name: "المشروبات",
+    name: "المشروبات والعصائر",
     icon: "🥤",
     color: "text-blue-700 dark:text-blue-300",
     bgLight: "bg-blue-50 border-blue-200",
@@ -93,15 +166,14 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
     ]
   },
   {
-    id: "snacks",
-    name: "سناكات",
-    icon: "🥔",
-    color: "text-orange-700 dark:text-orange-300",
-    bgLight: "bg-orange-50 border-orange-200",
-    bgDark: "dark:bg-orange-950/40 dark:border-orange-800/60",
+    id: "water",
+    name: "المياه والشرب",
+    icon: "💧",
+    color: "text-cyan-700 dark:text-cyan-300",
+    bgLight: "bg-cyan-50 border-cyan-200",
+    bgDark: "dark:bg-cyan-950/40 dark:border-cyan-800/60",
     keywords: [
-      "شيبس", "جبس", "ليز", "شيتوس", "دوريتوس", "بفك", "كرانشي", "مكسرات", "حب شمس",
-      "فستق", "كازو", "لوز", "بندق", "جوز", "كرزات", "فشار", "شامية", "بريتزل", "مقرمشات", "سناك"
+      "ماء", "مياه", "بطل مي", "كرتونة ماء", "شربت ماء", "غالون ماء", "جلكان ماء", "ماء معدني", "ماء صحي"
     ]
   },
   {
@@ -117,117 +189,8 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
     ]
   },
   {
-    id: "breakfast",
-    name: "الإفطار",
-    icon: "🥚",
-    color: "text-orange-600 dark:text-orange-300",
-    bgLight: "bg-orange-50 border-orange-200",
-    bgDark: "dark:bg-orange-950/40 dark:border-orange-800/60",
-    keywords: [
-      "بيض", "بيض مائدة", "مربى", "عسل", "كورن فليكس", "نوتيلا", "حلاوة طحينية", "راشي",
-      "دبس", "سيريال", "شوفان فطور", "بان كيك", "وافل", "زبدة فول سوداني"
-    ]
-  },
-  {
-    id: "ready_to_eat",
-    name: "جاهز للأكل",
-    icon: "🥪",
-    color: "text-teal-700 dark:text-teal-300",
-    bgLight: "bg-teal-50 border-teal-200",
-    bgDark: "dark:bg-teal-950/40 dark:border-teal-800/60",
-    keywords: [
-      "ساندويش", "صاج", "وجبة سريعة", "بيتزا جاهزة", "سلطة جاهزة", "اندومي", "نودلز",
-      "معكرونة جاهزة", "وجبة خفيفة", "شوربة جاهزة", "برغر جاهز", "فلافل", "سوشي"
-    ]
-  },
-  {
-    id: "cooking_basics",
-    name: "أساسيات الطبخ",
-    icon: "🍳",
-    color: "text-lime-700 dark:text-lime-300",
-    bgLight: "bg-lime-50 border-lime-200",
-    bgDark: "dark:bg-lime-950/40 dark:border-lime-800/60",
-    keywords: [
-      "زيت", "زيت نباتي", "زيت زيتون", "طحين", "معجون", "معجون طماطة", "رز", "تمن",
-      "برغل", "عدس", "حمص", "فاصوليا", "ماش", "معكرونة", "شعرية", "ملح طعام", "خل",
-      "ماجي", "مرقة دجاج", "سمنة", "دهن حر", "نشا", "بيكنج باودر", "خميرة", "فانيلا"
-    ]
-  },
-  {
-    id: "water",
-    name: "المياه",
-    icon: "💧",
-    color: "text-cyan-700 dark:text-cyan-300",
-    bgLight: "bg-cyan-50 border-cyan-200",
-    bgDark: "dark:bg-cyan-950/40 dark:border-cyan-800/60",
-    keywords: [
-      "ماء", "مياه", "بطل مي", "كرتونة ماء", "شربت ماء", "غالون ماء", "جلكان ماء", "ماء معدني", "ماء صحي"
-    ]
-  },
-  {
-    id: "canned_food",
-    name: "المعلبات",
-    icon: "🥫",
-    color: "text-red-700 dark:text-red-300",
-    bgLight: "bg-red-50 border-red-200",
-    bgDark: "dark:bg-red-950/40 dark:border-red-800/60",
-    keywords: [
-      "معلبات", "تونة", "سردين", "ذرة معلبة", "حمص بطحينة", "فطر معلب", "مشروم",
-      "فول مدمس", "اناناس معلب", "لحم معلب", "لانشون", "بلوبيف", "قشطة معلبة", "فول", "فاصوليا حمراء"
-    ]
-  },
-  {
-    id: "sauces",
-    name: "الصلصات",
-    icon: "🍅",
-    color: "text-rose-800 dark:text-rose-200",
-    bgLight: "bg-rose-100/60 border-rose-300",
-    bgDark: "dark:bg-rose-950/50 dark:border-rose-700/60",
-    keywords: [
-      "صلصة", "صوص", "كاتشب", "مايونيز", "خردل", "ماسترد", "دبس رمان", "صويا صوص",
-      "شطة", "طحينية", "صلصة باربيكيو", "رانش", "سيراتشا", "صلصة صويا", "صوص ثوم", "دريسينج"
-    ]
-  },
-  {
-    id: "stationery",
-    name: "القرطاسية واللوازم المدرسية",
-    icon: "✏️",
-    color: "text-indigo-700 dark:text-indigo-300",
-    bgLight: "bg-indigo-50 border-indigo-200",
-    bgDark: "dark:bg-indigo-950/40 dark:border-indigo-800/60",
-    keywords: [
-      "دفتر", "قلم", "مساحة", "مبراة", "مسطرة", "قرطاسية", "تجليد", "الوان", "ملف",
-      "فايل", "لاصق", "غراء", "حقيبة مدرسية", "اقلام جاف", "قلم رصاص", "طباشير", "لوحة", "مقص مدرسي"
-    ]
-  },
-  {
-    id: "personal_care",
-    name: "العناية الشخصية",
-    icon: "🧴",
-    color: "text-purple-700 dark:text-purple-300",
-    bgLight: "bg-purple-50 border-purple-200",
-    bgDark: "dark:bg-purple-950/40 dark:border-purple-800/60",
-    keywords: [
-      "شامبو", "بلسم", "شاور جل", "صابون يد", "معجون اسنان", "فرشاة اسنان", "مزيل عرق",
-      "ديودرنت", "غسول وجه", "كريم ترطيب", "شفرات حلاقة", "فوط صحية", "قطن", "عطر",
-      "لوشن", "مكياج", "واقي شمس", "صابون استحمام", "سيروم"
-    ]
-  },
-  {
-    id: "healthy_products",
-    name: "منتجات صحية",
-    icon: "🌾",
-    color: "text-emerald-800 dark:text-emerald-200",
-    bgLight: "bg-emerald-100/60 border-emerald-300",
-    bgDark: "dark:bg-emerald-950/50 dark:border-emerald-700/60",
-    keywords: [
-      "دايت", "بديل سكر", "ستيفيا", "بروتين", "بذور الشيا", "بذور الكتان", "كينوا",
-      "خالي من الغلوتين", "عضوي", "شاي اخضر", "منتجات صحية", "مكمل غذائي", "شوفان حبة كاملة"
-    ]
-  },
-  {
     id: "sweets",
-    name: "حلويات",
+    name: "حلويات وشوكولاته",
     icon: "🍫",
     color: "text-pink-700 dark:text-pink-300",
     bgLight: "bg-pink-50 border-pink-200",
@@ -239,41 +202,110 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
     ]
   },
   {
-    id: "smartphones",
-    name: "هواتف ذكية",
-    icon: "📱",
-    color: "text-violet-700 dark:text-violet-300",
-    bgLight: "bg-violet-50 border-violet-200",
-    bgDark: "dark:bg-violet-950/40 dark:border-violet-800/60",
+    id: "snacks",
+    name: "سناكات ومكسرات",
+    icon: "🥔",
+    color: "text-orange-700 dark:text-orange-300",
+    bgLight: "bg-orange-50 border-orange-200",
+    bgDark: "dark:bg-orange-950/40 dark:border-orange-800/60",
     keywords: [
-      "كفر", "شاحن", "كيبل", "سماعة", "ايفون", "سامسونج", "لاصق حماية", "ستاند هاتف",
-      "باور بانك", "هواتف ذكية", "اكسسوارات موبايل", "شاشة حماية", "وصلة"
+      "شيبس", "جبس", "ليز", "شيتوس", "دوريتوس", "بفك", "كرانشي", "مكسرات", "حب شمس",
+      "فستق", "كازو", "لوز", "بندق", "جوز", "كرزات", "فشار", "شامية", "بريتزل", "مقرمشات", "سناك"
     ]
   },
   {
-    id: "home_supplies",
-    name: "اللوازم المنزلية",
-    icon: "🍳",
-    color: "text-stone-700 dark:text-stone-300",
-    bgLight: "bg-stone-50 border-stone-200",
-    bgDark: "dark:bg-stone-900/60 dark:border-stone-700/60",
+    id: "ready_to_eat",
+    name: "جاهز للأكل وسندويشات",
+    icon: "🥪",
+    color: "text-teal-700 dark:text-teal-300",
+    bgLight: "bg-teal-50 border-teal-200",
+    bgDark: "dark:bg-teal-950/40 dark:border-teal-800/60",
     keywords: [
-      "جدر", "طاوه", "صحن", "كلاص", "خواشيك", "ملاعق", "شوك", "سكين", "طاسة", "ابريق",
-      "دلة", "ترمس", "سلة", "منشر", "مكبسة", "تبسي", "صينية", "منزلية", "طقم صحون",
-      "ترامس", "حافظات طعام", "قدر ضغط", "مفرش", "وسادة", "ملاعق خشب"
+      "ساندويش", "صاج", "وجبة سريعة", "بيتزا جاهزة", "سلطة جاهزة", "اندومي", "نودلز",
+      "معكرونة جاهزة", "وجبة خفيفة", "شوربة جاهزة", "برغر جاهز", "فلافل", "سوشي"
     ]
   },
   {
-    id: "spices_herbs",
-    name: "التوابل والاعشاب",
-    icon: "🧂",
-    color: "text-yellow-800 dark:text-yellow-200",
-    bgLight: "bg-yellow-100/60 border-yellow-300",
-    bgDark: "dark:bg-yellow-950/50 dark:border-yellow-700/60",
+    id: "restaurants_cafes",
+    name: "مطاعم وكافيهات",
+    icon: "🍽️",
+    color: "text-amber-800 dark:text-amber-300",
+    bgLight: "bg-amber-50 border-amber-300",
+    bgDark: "dark:bg-amber-950/50 dark:border-amber-700/60",
     keywords: [
-      "بهارات", "كمون", "كركم", "كاري", "فلفل اسود", "فلفل حار", "بابريكا", "كزبرة",
-      "دارسين", "قرفة", "زنجبيل", "سماق", "نومي بصرة", "زعتر", "توابل", "زعفران",
-      "قرنفل", "مسمار", "جوزة الطيب", "ورق غار", "كراوية", "حبة حلوة", "ينسون"
+      "مطعم", "كافيه", "مقهى", "كوفي", "كوفي شوب", "شاورما", "كباب", "كص", "برغر", "برجر",
+      "همبرجر", "همبرغر", "بيتزا", "فلافل", "قوزي", "مندي", "مشويات", "فاست فود", "عشاء", "غداء",
+      "ريوق", "ريووق", "وجبة", "سناك", "اسبريسو", "قهوة كافيه", "عصير فريش", "بوفيه",
+      "توصيل طلبات", "طلبات", "دلفري", "دليفري", "بروستد", "كنتاكي", "سوشي", "منسف", "برياني سفري", "وجبة مطعم"
+    ]
+  },
+  {
+    id: "car_transport",
+    name: "السيارة والنقل",
+    icon: "🚗",
+    color: "text-blue-800 dark:text-blue-300",
+    bgLight: "bg-blue-50 border-blue-300",
+    bgDark: "dark:bg-blue-950/50 dark:border-blue-700/60",
+    keywords: [
+      "كراج", "كراجات", "باركنك", "باركنج", "موقف سيارات", "موقف", "بنزين", "بانزين", "محطة وقود",
+      "غسل سيارة", "غسيل سيارة", "دهن محرك", "تبديل دهن", "تبديل زيت", "بنشر", "بنجر", "تاير", "تايرات",
+      "عجلات", "اطارات", "بطارية سيارة", "فيتر", "ميكانيك", "فيترجي", "كهربائي سيارات", "حدادية",
+      "سفايف", "بريك", "دسك", "فلتر هواء", "فلتر دهن", "كروة", "كروة باص", "تكسي", "تاكسي",
+      "اجرة", "اوبر", "كريم", "باص", "كيا", "قطار", "طيران", "تذكرة سفر", "وقود", "صبغ سيارة",
+      "مرور", "سنوية", "هزة", "فحص دوري", "غرامة مرور", "رسم مرور", "طريق سريع", "سيارة", "سيارات"
+    ]
+  },
+  {
+    id: "bills_services",
+    name: "فواتير وخدمات منزلية",
+    icon: "⚡",
+    color: "text-yellow-700 dark:text-yellow-300",
+    bgLight: "bg-yellow-50 border-yellow-300",
+    bgDark: "dark:bg-yellow-950/40 dark:border-yellow-700/60",
+    keywords: [
+      "مولدة", "امبيرات", "امبير", "سحب مولد", "كهرباء وطنية", "فاتورة كهرباء", "فاتورة ماء",
+      "ماء اسالة", "فاتورة انترنت", "اشتراك انترنت", "واي فاي", "قنينة غاز", "تبديل غاز",
+      "عمال تنظيف", "بلدية", "ضريبة", "تنظيف خزانات", "حراسة", "خدمات"
+    ]
+  },
+  {
+    id: "home_maintenance",
+    name: "صيانة وترميم المنزل",
+    icon: "🔧",
+    color: "text-cyan-800 dark:text-cyan-300",
+    bgLight: "bg-cyan-50 border-cyan-300",
+    bgDark: "dark:bg-cyan-950/50 dark:border-cyan-700/60",
+    keywords: [
+      "صيانة", "تصليح", "صيانة منزلية", "كهربائي", "سباك", "تأسيسات صحية", "بوري", "بواريك",
+      "حنفية", "خلاط ماء", "ماطور ماء", "دينمو", "سبالت", "سبليت", "مكيف", "تكييف", "تنظيف سبالت",
+      "غاز تبريد", "غسالة", "ثلاجة", "طباخ", "صباغ", "صبغ جدران", "دهان", "سيراميك", "كاشي",
+      "دريل", "برغي", "براغي", "واير", "اسلاك", "فيش", "بلك", "قاطع دورة", "قفل", "مفتاح", "يدة باب", "زجاج", "شباك", "نجار", "حداد"
+    ]
+  },
+  {
+    id: "clothing_shoes",
+    name: "ملابس وأحذية",
+    icon: "👔",
+    color: "text-indigo-700 dark:text-indigo-300",
+    bgLight: "bg-indigo-50 border-indigo-200",
+    bgDark: "dark:bg-indigo-950/40 dark:border-indigo-800/60",
+    keywords: [
+      "ملابس", "قميص", "بنطلون", "تيشرت", "تي شيرت", "دشداشة", "بدلة", "فستان", "تنورة",
+      "حذاء", "قندرة", "بوت", "صندل", "نعال", "شحاطة", "جواريب", "جرابات", "شال", "حجاب",
+      "عباءة", "سترة", "قمصلة", "جاكيت", "كوت", "بجامة", "ملابس نوم", "ملابس داخلية", "حزام", "دريس", "ملابس اطفال", "بلوز", "شورت"
+    ]
+  },
+  {
+    id: "pharmacy",
+    name: "صيدلية وعلاج",
+    icon: "💊",
+    color: "text-emerald-700 dark:text-emerald-300",
+    bgLight: "bg-emerald-50 border-emerald-200",
+    bgDark: "dark:bg-emerald-950/40 dark:border-emerald-800/60",
+    keywords: [
+      "بندول", "باراسيتول", "براسيتول", "مسكن", "فيتامين", "دواء", "علاج", "شاش",
+      "بلاستر", "شراب سعلة", "قطرة", "مرهم", "صيدلية", "مضاد حيوي", "اوميغا 3", "زنك",
+      "اسبرين", "مسكن الام", "ابرة", "كانونة", "ميزان حرارة", "فحص سكر", "جهاز ضغط"
     ]
   },
   {
@@ -285,12 +317,25 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
     bgDark: "dark:bg-sky-950/40 dark:border-sky-800/60",
     keywords: [
       "حفاضات", "بامبرز", "حليب اطفال", "سيريلاك", "ببيونه", "لهاية", "مناديل مبللة اطفال",
-      "بودرة اطفال", "شامبو اطفال", "زيت اطفال", "لهاية اطفال", "عضاضة", "العناية بالطفل"
+      "بودرة اطفال", "شامبو اطفال", "زيت اطفال", "عضاضة", "العناية بالطفل", "كرسي اطفال", "عربة اطفال"
+    ]
+  },
+  {
+    id: "personal_care",
+    name: "العناية الشخصية",
+    icon: "🧴",
+    color: "text-purple-700 dark:text-purple-300",
+    bgLight: "bg-purple-50 border-purple-200",
+    bgDark: "dark:bg-purple-950/40 dark:border-purple-800/60",
+    keywords: [
+      "شامبو", "بلسم", "شاور جل", "صابون يد", "معجون اسنان", "فرشاة اسنان", "مزيل عرق",
+      "ديودرنت", "غسول وجه", "كريم ترطيب", "شفرات حلاقة", "فوط صحية", "قطن",
+      "لوشن", "مكياج", "واقي شمس", "صابون استحمام", "سيروم", "حلاقة", "صالون"
     ]
   },
   {
     id: "detergents",
-    name: "منظفات",
+    name: "منظفات ومعقمات",
     icon: "🧼",
     color: "text-cyan-800 dark:text-cyan-200",
     bgLight: "bg-cyan-50 border-cyan-200",
@@ -298,42 +343,20 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
     keywords: [
       "زاهي", "مسحوق غسيل", "تايد", "اريال", "برسيل", "كلور", "قاصر", "فلاش", "معطر ارضيات",
       "ملمع زجاج", "داوني", "منظف دهون", "دافى", "دافنى", "اسفنج مواعين", "سيم مواعين",
-      "اكياس زبالة", "منظف حمامات", "صابون جلي", "مبيد حشرات", "معقم"
+      "اكياس زبالة", "منظف حمامات", "صابون جلي", "مبيد حشرات", "معقم", "ديتول"
     ]
   },
   {
-    id: "cigarettes",
-    name: "السكائر",
-    icon: "🚬",
-    color: "text-zinc-700 dark:text-zinc-300",
-    bgLight: "bg-zinc-100 border-zinc-300",
-    bgDark: "dark:bg-zinc-800 dark:border-zinc-700",
+    id: "home_supplies",
+    name: "اللوازم المنزلية والأواني",
+    icon: "🍳",
+    color: "text-stone-700 dark:text-stone-300",
+    bgLight: "bg-stone-50 border-stone-200",
+    bgDark: "dark:bg-stone-900/60 dark:border-stone-700/60",
     keywords: [
-      "سكائر", "سجائر", "باكيت سكائر", "تبغ", "معسل", "ارگيلة", "ولاعة", "فحم اركيلة"
-    ]
-  },
-  {
-    id: "home_appliances",
-    name: "أجهزة منزلية",
-    icon: "🔌",
-    color: "text-rose-600 dark:text-rose-300",
-    bgLight: "bg-rose-50 border-rose-200",
-    bgDark: "dark:bg-rose-950/40 dark:border-rose-800/60",
-    keywords: [
-      "خلاط", "مكواة", "استشوار", "سخان", "فرن كهربائي", "غلاية", "مفرمة", "مروحة",
-      "صوبة", "قلاية هوائية", "عصارة", "توستر", "مكنسة كهربائية", "ميزان منزلي"
-    ]
-  },
-  {
-    id: "pharmacy",
-    name: "صيدلية",
-    icon: "💊",
-    color: "text-emerald-700 dark:text-emerald-300",
-    bgLight: "bg-emerald-50 border-emerald-200",
-    bgDark: "dark:bg-emerald-950/40 dark:border-emerald-800/60",
-    keywords: [
-      "بندول", "باراسيتول", "براسيتول", "مسكن", "فيتامين", "دواء", "علاج", "شاش",
-      "بلاستر", "شراب سعلة", "قطرة", "مرهم", "صيدلية", "مضاد حيوي", "اوميغا 3", "زنك"
+      "جدر", "طاوه", "صحن", "كلاص", "خواشيك", "ملاعق", "شوك", "سكين", "طاسة", "ابريق",
+      "دلة", "ترمس", "سلة", "منشر", "مكبسة", "تبسي", "صينية", "منزلية", "طقم صحون",
+      "ترامس", "حافظات طعام", "قدر ضغط", "مفرش", "وسادة", "ملاعق خشب"
     ]
   },
   {
@@ -349,14 +372,166 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
     ]
   },
   {
+    id: "furniture_furnishings",
+    name: "أثاث ومفروشات",
+    icon: "🛋️",
+    color: "text-amber-900 dark:text-amber-200",
+    bgLight: "bg-amber-50 border-amber-300",
+    bgDark: "dark:bg-amber-950/50 dark:border-amber-800/60",
+    keywords: [
+      "اثاث", "أثاث", "قنفة", "تخم قنفات", "ميز", "طاولة", "كرسي", "كراسي", "دولاب", "خزانة",
+      "كاونتر", "سرير", "جرباية", "دوشك", "مرتبة", "ستائر", "بردة", "سجاد", "زولية", "موكيت", "مرآة", "لوحة جدارية", "رفوف"
+    ]
+  },
+  {
+    id: "home_appliances",
+    name: "أجهزة كهربائية ومنزلية",
+    icon: "🔌",
+    color: "text-rose-600 dark:text-rose-300",
+    bgLight: "bg-rose-50 border-rose-200",
+    bgDark: "dark:bg-rose-950/40 dark:border-rose-800/60",
+    keywords: [
+      "خلاط", "مكواة", "استشوار", "سخان", "فرن كهربائي", "غلاية", "مفرمة", "مروحة",
+      "صوبة", "قلاية هوائية", "عصارة", "توستر", "مكنسة كهربائية", "ميزان منزلي", "مبرد", "مكرويف", "مايكرويف"
+    ]
+  },
+  {
+    id: "electronics_pc",
+    name: "إلكترونيات وكمبيوتر",
+    icon: "💻",
+    color: "text-slate-800 dark:text-slate-200",
+    bgLight: "bg-slate-100 border-slate-300",
+    bgDark: "dark:bg-slate-900 dark:border-slate-700",
+    keywords: [
+      "لابتوب", "كمبيوتر", "حاسبة", "طابعة", "شاشة", "تلفزيون", "رسيفر", "ستلايت", "كاميرا",
+      "كيبورد", "ماوس", "هارد", "فلاش ميموري", "فلاشة", "راوتر", "يوبي اس", "ups", "عاكسة", "شاحنة لابتوب", "مايك", "سبيكر", "مكبر صوت"
+    ]
+  },
+  {
+    id: "smartphones",
+    name: "هواتف واكسسوارات",
+    icon: "📱",
+    color: "text-violet-700 dark:text-violet-300",
+    bgLight: "bg-violet-50 border-violet-200",
+    bgDark: "dark:bg-violet-950/40 dark:border-violet-800/60",
+    keywords: [
+      "كفر", "شاحن", "كيبل", "سماعة", "ايفون", "سامسونج", "لاصق حماية", "ستاند هاتف",
+      "باور بانك", "هواتف ذكية", "اكسسوارات موبايل", "شاشة حماية", "وصلة", "ايربودز", "سماعات بلوتوث"
+    ]
+  },
+  {
+    id: "stationery",
+    name: "القرطاسية واللوازم المدرسية",
+    icon: "✏️",
+    color: "text-indigo-700 dark:text-indigo-300",
+    bgLight: "bg-indigo-50 border-indigo-200",
+    bgDark: "dark:bg-indigo-950/40 dark:border-indigo-800/60",
+    keywords: [
+      "دفتر", "قلم", "مساحة", "مبراة", "مسطرة", "قرطاسية", "تجليد", "الوان", "ملف",
+      "فايل", "لاصق", "غراء", "حقيبة مدرسية", "اقلام جاف", "قلم رصاص", "طباشير", "لوحة", "مقص مدرسي"
+    ]
+  },
+  {
+    id: "education_books",
+    name: "تعليم ودورات وكتب",
+    icon: "📚",
+    color: "text-emerald-800 dark:text-emerald-300",
+    bgLight: "bg-emerald-50 border-emerald-300",
+    bgDark: "dark:bg-emerald-950/50 dark:border-emerald-800/60",
+    keywords: [
+      "كتاب", "كتب", "رواية", "ملزمة", "ملازم", "دورة", "كورس", "تسجيل مدرسة", "قسط مدرسة",
+      "روضة", "حضانة", "تدريس خصوصي", "معهد", "جامعة", "امتحانات", "شهادة"
+    ]
+  },
+  {
+    id: "gifts_events",
+    name: "هدايا ومناسبات",
+    icon: "🎁",
+    color: "text-pink-800 dark:text-pink-300",
+    bgLight: "bg-pink-50 border-pink-300",
+    bgDark: "dark:bg-pink-950/50 dark:border-pink-800/60",
+    keywords: [
+      "هدية", "هدايا", "ورد", "باقة ورد", "زهور", "تغليف هدايا", "كيكة مناسبة", "كيكة ميلاد",
+      "عيد ميلاد", "زينة", "بالونات", "بطاقة تهنئة", "حفل", "توزيعات", "ضيافة مناسبات"
+    ]
+  },
+  {
+    id: "perfumes_accessories",
+    name: "عطور وإكسسوارات وساعات",
+    icon: "💍",
+    color: "text-purple-800 dark:text-purple-300",
+    bgLight: "bg-purple-50 border-purple-300",
+    bgDark: "dark:bg-purple-950/50 dark:border-purple-800/60",
+    keywords: [
+      "عطر", "برفيوم", "بخور", "دهن عود", "عود", "ساعة", "ساعات", "محبس", "خاتم", "قلادة",
+      "سوار", "اسوارة", "محبس فضة", "ذهب", "نظارة", "نظارة شمسية", "شنطة يد", "حقيبة نسائية", "اكسسوارات", "بروش"
+    ]
+  },
+  {
+    id: "healthy_products",
+    name: "منتجات صحية ورياضية",
+    icon: "🌾",
+    color: "text-emerald-800 dark:text-emerald-200",
+    bgLight: "bg-emerald-100/60 border-emerald-300",
+    bgDark: "dark:bg-emerald-950/50 dark:border-emerald-700/60",
+    keywords: [
+      "دايت", "بديل سكر", "ستيفيا", "بروتين", "واي بروتين", "بذور الشيا", "بذور الكتان", "كينوا",
+      "خالي من الغلوتين", "عضوي", "مكمل غذائي", "شوفان حبة كاملة", "اشتراك جيم", "نادي رياضي"
+    ]
+  },
+  {
     id: "cards",
-    name: "كارتات",
+    name: "كارتات وشحن",
     icon: "💳",
     color: "text-purple-600 dark:text-purple-300",
     bgLight: "bg-purple-50 border-purple-200",
     bgDark: "dark:bg-purple-950/40 dark:border-purple-800/60",
     keywords: [
-      "كارت رصيد", "اسياسيل", "زين", "كورك", "كارت شحن", "بطاقة العاب", "كارت انترنت", "كارتات", "ايتونز", "بلايستيشن"
+      "كارت رصيد", "اسياسيل", "زين", "كورك", "كارت شحن", "بطاقة العاب", "كارت انترنت", "كارتات", "ايتونز", "بلايستيشن", "رصيد هاتف"
+    ]
+  },
+  {
+    id: "cigarettes",
+    name: "السكائر والمعسل",
+    icon: "🚬",
+    color: "text-zinc-700 dark:text-zinc-300",
+    bgLight: "bg-zinc-100 border-zinc-300",
+    bgDark: "dark:bg-zinc-800 dark:border-zinc-700",
+    keywords: [
+      "سكائر", "سجائر", "باكيت سكائر", "تبغ", "معسل", "ارگيلة", "اركيلة", "ولاعة", "فحم اركيلة", "فحم"
+    ]
+  },
+  {
+    id: "pets_veterinary",
+    name: "حيوانات أليفة وبيطرة",
+    icon: "🐾",
+    color: "text-amber-700 dark:text-amber-400",
+    bgLight: "bg-amber-50 border-amber-300",
+    bgDark: "dark:bg-amber-950/40 dark:border-amber-800/60",
+    keywords: [
+      "اكل بزازين", "طعام قطط", "دراي فود", "اكل جلاب", "طعام كلاب", "عصفور", "طيور", "بلبل", "قفص", "بيطري", "علاج بيطري", "رمل قطط"
+    ]
+  },
+  {
+    id: "donations_charity",
+    name: "تبرعات وصدقات",
+    icon: "🤲",
+    color: "text-teal-700 dark:text-teal-300",
+    bgLight: "bg-teal-50 border-teal-300",
+    bgDark: "dark:bg-teal-950/40 dark:border-teal-800/60",
+    keywords: [
+      "صدقة", "تبرع", "زكاة", "خيرات", "ثواب", "مساعدة", "كفالة يتيم", "اطعام مسكين", "نذر", "جامع", "مسجد"
+    ]
+  },
+  {
+    id: "other_misc",
+    name: "أخرى ومتفرقات",
+    icon: "📦",
+    color: "text-gray-700 dark:text-gray-300",
+    bgLight: "bg-gray-100 border-gray-300",
+    bgDark: "dark:bg-zinc-800 dark:border-zinc-700",
+    keywords: [
+      "اخرى", "أخرى", "متفرقات", "مصاريف عامة", "عام", "طوارئ", "متنوع", "حاجة عامة"
     ]
   }
 ];
@@ -384,8 +559,10 @@ export function getCategoryPriorityIndex(categoryName?: string): number {
   if (categoryName.includes("خضار") || categoryName.includes("فواكه") || categoryName.includes("مخضر")) return 0;
   if (categoryName.includes("خبز") || categoryName.includes("مخبوزات")) return 1;
   if (categoryName.includes("لحم") || categoryName.includes("دواجن") || categoryName.includes("سمك")) return 2;
-  if (categoryName.includes("مجمد")) return 3;
-  if (categoryName.includes("لبن") || categoryName.includes("جبن") || categoryName.includes("ألبان")) return 4;
+  if (categoryName.includes("لبن") || categoryName.includes("جبن") || categoryName.includes("ألبان")) return 3;
+  if (categoryName.includes("مجمد")) return 7;
+  if (categoryName.includes("مطعم") || categoryName.includes("كافيه")) return 16;
+  if (categoryName.includes("سيار") || categoryName.includes("نقل") || categoryName.includes("بنزين")) return 17;
   return 999;
 }
 
@@ -448,26 +625,56 @@ export function saveLearnedCategory(name: string, category: string): void {
  * دالة التنبؤ الذكي التلقائي بالفئة حسب اسم المادة (مع دعم التعلم المسبق)
  */
 export function detectProductCategory(name: string): string {
-  if (!name || typeof name !== "string") return "الفواكه والخضار";
+  if (!name || typeof name !== "string") return "";
   const cleaned = name.trim().toLowerCase();
+  if (!cleaned) return "";
 
   // 1. Check user learned memory first
   const learned = getLearnedCategory(cleaned);
   if (learned) return learned;
 
-  // 2. Exact or partial keyword matching in prioritized order
+  // 2. Exact match in prioritized order
   for (const cat of PRODUCT_CATEGORIES) {
     for (const kw of cat.keywords) {
       const kwLower = kw.toLowerCase();
-      // Match exact word or substring
-      if (cleaned === kwLower || cleaned.includes(kwLower) || kwLower.includes(cleaned)) {
+      if (cleaned === kwLower) {
         return cat.name;
       }
     }
   }
 
-  // 3. Fallback defaults (fruits/veg if grocery context, or general)
-  return "الفواكه والخضار";
+  // 3. Partial keyword matching (e.g. "كراج سيارة" matches "كراج" or "سيارة")
+  for (const cat of PRODUCT_CATEGORIES) {
+    for (const kw of cat.keywords) {
+      const kwLower = kw.toLowerCase();
+      if (cleaned.includes(kwLower)) {
+        return cat.name;
+      }
+      if (cleaned.length >= 3 && kwLower.includes(cleaned)) {
+        return cat.name;
+      }
+    }
+  }
+
+  // 4. Heuristic fallbacks for key Iraqi terms:
+  if (cleaned.includes("كراج") || cleaned.includes("بانزين") || cleaned.includes("بنزين") || cleaned.includes("سيار") || cleaned.includes("دهن محرك") || cleaned.includes("فيتر") || cleaned.includes("تاير") || cleaned.includes("غسل سيارة")) {
+    return "السيارة والنقل";
+  }
+  if (cleaned.includes("مطعم") || cleaned.includes("كافيه") || cleaned.includes("كوفي") || cleaned.includes("شاورما") || cleaned.includes("برغر") || cleaned.includes("بيتزا") || cleaned.includes("مشويات") || cleaned.includes("ريوق") || cleaned.includes("عشاء") || cleaned.includes("غداء")) {
+    return "مطاعم وكافيهات";
+  }
+  if (cleaned.includes("ماركت") || cleaned.includes("سوبر")) {
+    return "سوبر ماركت";
+  }
+  if (cleaned.includes("صيدلية") || cleaned.includes("دواء") || cleaned.includes("علاج") || cleaned.includes("بندول")) {
+    return "صيدلية وعلاج";
+  }
+  if (cleaned.includes("مولدة") || cleaned.includes("امبير") || cleaned.includes("انترنت") || cleaned.includes("كهرباء")) {
+    return "فواتير وخدمات منزلية";
+  }
+
+  // 5. No match found - do not arbitrarily return fruits & veg!
+  return "";
 }
 
 /**
@@ -482,6 +689,9 @@ export const OUTING_PLACES_SUGGESTIONS = [
   "حلويات ومعجنات",
   "أجهزة كهربائية وإلكترونيات",
   "محطة بنزين",
+  "كراج وميكانيك سيارات",
+  "صيانة وخدمات منزلية",
+  "ملابس وأزياء",
   "صيدلية وعلاج",
   "ألعاب وترفيه",
   "أخرى"
@@ -586,4 +796,3 @@ export function getWarrantyStatus(expiryDateStr?: string): {
     badgeClass: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200"
   };
 }
-

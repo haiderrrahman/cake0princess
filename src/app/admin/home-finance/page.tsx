@@ -23,7 +23,7 @@ import LottoTracker from "./LottoTracker";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
-import { uploadImageResiliently, compressToTinyThumbnail } from "@/lib/hfImageStore";
+import { uploadImageResiliently, compressToTinyThumbnail, cleanForFirestore } from "@/lib/hfImageStore";
 import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
 import { scanNeedItemWithGemini, cropItemFromImage, ScannedNeedItem } from "@/lib/scanNeedItemClient";
 import {
@@ -223,48 +223,83 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 const today = () => new Date().toISOString().split("T")[0];
 
 const EXPENSE_CATEGORIES = [
+  { label: "سوبر ماركت", icon: "🛒", color: "from-emerald-500 to-teal-500" },
+  { label: "الفواكه والخضار", icon: "🍌", color: "from-emerald-500 to-green-600" },
+  { label: "المخبوزات والمعجنات", icon: "🥐", color: "from-amber-500 to-orange-500" },
+  { label: "لحوم ودواجن وأسماك", icon: "🥩", color: "from-rose-500 to-red-600" },
+  { label: "الألبان والأجبان", icon: "🧀", color: "from-yellow-400 to-amber-500" },
+  { label: "أساسيات ومؤونة الطبخ", icon: "🍳", color: "from-lime-500 to-emerald-600" },
+  { label: "المعلبات والبقوليات", icon: "🥫", color: "from-red-500 to-rose-600" },
+  { label: "الإفطار والمربيات", icon: "🥚", color: "from-orange-400 to-amber-500" },
+  { label: "مجمدات ومثلجات", icon: "🍟", color: "from-sky-500 to-blue-500" },
+  { label: "الصلصات والمقبلات", icon: "🍅", color: "from-rose-600 to-red-600" },
+  { label: "التوابل والأعشاب", icon: "🧂", color: "from-yellow-600 to-amber-700" },
+  { label: "المشروبات والعصائر", icon: "🥤", color: "from-blue-500 to-cyan-500" },
+  { label: "المياه والشرب", icon: "💧", color: "from-cyan-400 to-blue-500" },
+  { label: "الشاي، القهوة والسكر", icon: "☕", color: "from-amber-700 to-amber-900" },
+  { label: "حلويات وشوكولاته", icon: "🍫", color: "from-pink-500 to-rose-500" },
+  { label: "سناكات ومكسرات", icon: "🥔", color: "from-orange-500 to-amber-600" },
+  { label: "جاهز للأكل وسندويشات", icon: "🥪", color: "from-teal-500 to-emerald-600" },
+  { label: "مطاعم وكافيهات", icon: "🍽️", color: "from-amber-500 to-orange-600" },
+  { label: "السيارة والنقل", icon: "🚗", color: "from-blue-600 to-cyan-600" },
+  { label: "فواتير وخدمات منزلية", icon: "⚡", color: "from-yellow-500 to-amber-500" },
+  { label: "صيانة وترميم المنزل", icon: "🔧", color: "from-stone-500 to-slate-600" },
+  { label: "ملابس وأحذية", icon: "👔", color: "from-indigo-500 to-purple-600" },
+  { label: "صيدلية وعلاج", icon: "💊", color: "from-emerald-600 to-teal-600" },
+  { label: "العناية بالطفل", icon: "👶", color: "from-sky-400 to-blue-400" },
+  { label: "العناية الشخصية", icon: "🧴", color: "from-purple-500 to-pink-500" },
+  { label: "منظفات ومعقمات", icon: "🧼", color: "from-cyan-600 to-teal-600" },
+  { label: "اللوازم والأواني المنزلية", icon: "🍳", color: "from-stone-600 to-zinc-700" },
+  { label: "سفريات وورقيات", icon: "🧻", color: "from-blue-400 to-indigo-500" },
+  { label: "أثاث ومفروشات", icon: "🛋️", color: "from-amber-600 to-yellow-600" },
+  { label: "أجهزة كهربائية ومنزلية", icon: "🔌", color: "from-rose-500 to-orange-500" },
+  { label: "إلكترونيات وكمبيوتر", icon: "💻", color: "from-slate-700 to-indigo-800" },
+  { label: "هواتف واكسسوارات", icon: "📱", color: "from-violet-500 to-purple-600" },
+  { label: "القرطاسية واللوازم المدرسية", icon: "✏️", color: "from-indigo-600 to-blue-600" },
+  { label: "تعليم ودورات وكتب", icon: "📚", color: "from-emerald-700 to-teal-800" },
+  { label: "هدايا ومناسبات", icon: "🎁", color: "from-pink-500 to-rose-400" },
+  { label: "عطور وإكسسوارات وساعات", icon: "💍", color: "from-purple-600 to-indigo-600" },
+  { label: "منتجات صحية ورياضية", icon: "🌾", color: "from-emerald-500 to-lime-600" },
+  { label: "كارتات وشحن", icon: "💳", color: "from-purple-500 to-violet-600" },
+  { label: "السكائر والمعسل", icon: "🚬", color: "from-zinc-600 to-stone-700" },
+  { label: "حيوانات أليفة وبيطرة", icon: "🐾", color: "from-amber-600 to-orange-600" },
+  { label: "تبرعات وصدقات", icon: "🤲", color: "from-teal-600 to-emerald-600" },
+  { label: "طلعات وجولات", icon: "🎡", color: "from-emerald-500 via-teal-500 to-cyan-600" },
+  { label: "ألعاب ويانصيب", icon: "🎲", color: "from-indigo-500 to-purple-500" },
+  { label: "أقساط وسلف", icon: "💳", color: "from-indigo-600 to-blue-700" },
+  { label: "سفر ورحلات", icon: "✈️", color: "from-sky-500 to-blue-600" },
+  { label: "أخرى ومتفرقات", icon: "📦", color: "from-gray-500 to-slate-600" },
+  // Backward compatibility aliases for existing data in database:
+  { label: "سيارة", icon: "🚗", color: "from-blue-500 to-cyan-500" },
   { label: "مطاعم وكوفيهات", icon: "🍽️", color: "from-orange-500 to-amber-500" },
   { label: "مخضر وفواكه", icon: "🍎", color: "from-green-400 to-emerald-400" },
   { label: "لحوم ودجاج", icon: "🥩", color: "from-red-600 to-rose-700" },
   { label: "خبز وصمون", icon: "🥖", color: "from-amber-600 to-yellow-600" },
-  { label: "حلويات ومعجنات", icon: "🍰", color: "from-pink-500 to-rose-500" },
-  { label: "كرزات", icon: "🥜", color: "from-orange-700 to-amber-700" },
-  { label: "طرشي ومخللات", icon: "🥒", color: "from-green-600 to-emerald-700" },
   { label: "اجبان والبان", icon: "🧀", color: "from-yellow-400 to-yellow-500" },
-  { label: "حاسوب", icon: "💻", color: "from-blue-600 to-indigo-600" },
-  { label: "سفر", icon: "✈️", color: "from-sky-400 to-blue-500" },
-  { label: "سوبر ماركت", icon: "🛒", color: "from-green-500 to-emerald-500" },
-  { label: "سيارة", icon: "🚗", color: "from-blue-500 to-cyan-500" },
   { label: "صحة وطب", icon: "❤️", color: "from-red-500 to-pink-500" },
   { label: "ملابس", icon: "👕", color: "from-purple-500 to-violet-500" },
   { label: "تعليم", icon: "📚", color: "from-indigo-500 to-blue-500" },
-  { label: "احتياجات مدرسية", icon: "🎒", color: "from-yellow-500 to-orange-500" },
   { label: "ترفيه", icon: "🎮", color: "from-pink-500 to-rose-500" },
   { label: "أثاث", icon: "🛋️", color: "from-amber-500 to-yellow-500" },
   { label: "ترميم", icon: "🔧", color: "from-gray-500 to-slate-500" },
   { label: "عائلة", icon: "👪", color: "from-sky-500 to-blue-500" },
-  { label: "أقساط وسلف", icon: "💳", color: "from-indigo-500 to-purple-500" },
   { label: "كهرباء", icon: "⚡", color: "from-yellow-400 to-yellow-600" },
   { label: "ماء", icon: "💧", color: "from-blue-400 to-blue-600" },
   { label: "إنترنت", icon: "🌐", color: "from-sky-400 to-sky-600" },
   { label: "إيجار", icon: "🏠", color: "from-emerald-400 to-emerald-600" },
   { label: "هاتف", icon: "📱", color: "from-gray-400 to-gray-600" },
   { label: "تنظيف", icon: "🧹", color: "from-teal-400 to-teal-600" },
-  { label: "عناية بالبشرة والجسم", icon: "✨", color: "from-pink-400 to-rose-400" },
-  { label: "مكياج", icon: "💄", color: "from-fuchsia-400 to-pink-500" },
-  { label: "تبرعات", icon: "🤲", color: "from-emerald-400 to-teal-500" },
   { label: "غاز", icon: "🔥", color: "from-orange-500 to-red-500" },
-  { label: "إكسسوارات", icon: "💍", color: "from-amber-400 to-rose-400" },
   { label: "عطور", icon: "🌸", color: "from-purple-400 to-pink-500" },
   { label: "ألعاب", icon: "🧸", color: "from-amber-400 to-yellow-500" },
   { label: "مفروشات", icon: "🛏️", color: "from-teal-400 to-emerald-500" },
-  { label: "ألعاب ويانصيب", icon: "🎲", color: "from-indigo-500 to-purple-500" },
-  { label: "بنوك وصراف", icon: "🏦", color: "from-blue-600 to-sky-700" },
-  { label: "انشائية", icon: "🏗️", color: "from-amber-700 to-stone-600" },
-  { label: "مواد سفري", icon: "🥡", color: "from-orange-500 to-amber-600" },
   { label: "منزلية", icon: "🏡", color: "from-cyan-600 to-blue-600" },
   { label: "كهربائية", icon: "🔌", color: "from-amber-400 to-yellow-500" },
-  { label: "طلعات وجولات", icon: "🎡", color: "from-emerald-500 via-teal-500 to-cyan-600" },
+  { label: "انشائية", icon: "🏗️", color: "from-amber-700 to-stone-600" },
+  { label: "مواد سفري", icon: "🥡", color: "from-orange-500 to-amber-600" },
+  { label: "بنوك وصراف", icon: "🏦", color: "from-blue-600 to-sky-700" },
+  { label: "تبرعات", icon: "🤲", color: "from-emerald-400 to-teal-500" },
+  { label: "سفر", icon: "✈️", color: "from-sky-400 to-blue-500" }
 ];
 
 const BILL_CATEGORIES = ["كهرباء", "ماء", "إنترنت", "إيجار", "هاتف", "تنظيف", "غاز"];
@@ -306,18 +341,18 @@ const FAMILY_MEMBERS = ["حيدر", "إيمان", "رقية", "قنوت", "إي�
 
 const syncToFirebase = async (key: string, data: any) => {
   try {
-    const syncPromise = setDoc(doc(db, "home_finance", key), { data });
-    
-    await Promise.race([
-      syncPromise,
-      new Promise(resolve => setTimeout(resolve, 1500))
-    ]);
-    
-    if (!navigator.onLine) {
-      toast.success("تم الحفظ محلياً (قيد المزامنة)");
+    const cleanData = cleanForFirestore(data);
+    await setDoc(doc(db, "home_finance", key), { data: cleanData });
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`cached_hf_${key}`, JSON.stringify(cleanData));
+      } catch (e) {
+        // Ignore quota limits
+      }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Error saving ${key} to firebase:`, error);
+    toast.error(`خطأ أثناء الحفظ في السحابة: ${error?.message || "يرجى التحقق من الاتصال"}`);
   }
 };
 
@@ -507,6 +542,8 @@ export default function HomeFinanceDashboard() {
   const [showQuickPasteModal, setShowQuickPasteModal] = useState(false);
   const [quickPasteText, setQuickPasteText] = useState("");
   const [viewingReceiptExpense, setViewingReceiptExpense] = useState<Expense | null>(null);
+  const [attachedReceiptImages, setAttachedReceiptImages] = useState<string[]>([]);
+  const [isSavingExpense, setIsSavingExpense] = useState<boolean>(false);
   const [receiptItemFilter, setReceiptItemFilter] = useState("");
   const receiptCameraInputRef = useRef<HTMLInputElement | null>(null);
   const receiptGalleryInputRef = useRef<HTMLInputElement | null>(null);
@@ -631,11 +668,17 @@ export default function HomeFinanceDashboard() {
       setExpCategoryInput("سوبر ماركت");
       setExpDateInput(today());
       setExpenseItems([]);
+      setAttachedReceiptImages([]);
     } else if (showExpenseModal && editExpense) {
       setExpNameInput(editExpense.name || "");
       setExpCategoryInput(editExpense.category || "سوبر ماركت");
       setExpDateInput(editExpense.date || today());
       setExpenseItems(editExpense.items || []);
+      setAttachedReceiptImages(
+        editExpense.receiptImages && editExpense.receiptImages.length > 0
+          ? editExpense.receiptImages
+          : (editExpense.imageUrl ? [editExpense.imageUrl] : [])
+      );
     }
   }, [showExpenseModal, editExpense]);
 
@@ -667,17 +710,6 @@ export default function HomeFinanceDashboard() {
   // LOAD / SAVE / FIREBASE SYNC
   // ──────────────────────────────────────────
   useEffect(() => {
-    // Clear stale cached financial data to prevent showing wrong/old numbers on refresh
-    if (typeof window !== "undefined") {
-      try {
-        [
-          "installments", "bills", "expenses", "incomes", "inventory", 
-          "carInventory", "travelInventory", "needs", "debts", 
-          "familyNeeds", "travelTrips", "travelExpenses", "futurePlans"
-        ].forEach(k => localStorage.removeItem(`cache_hf_${k}`));
-      } catch (e) {}
-    }
-
     const keys: ("installments" | "bills" | "expenses" | "incomes" | "inventory" | "carInventory" | "travelInventory" | "needs" | "debts" | "familyNeeds" | "travelTrips" | "travelExpenses" | "futurePlans" | "settings")[] = [
       "installments", "bills", "expenses", "incomes", "inventory", "carInventory", "travelInventory", "needs", "debts", "familyNeeds", "travelTrips", "travelExpenses", "futurePlans", "settings"
     ];
@@ -698,6 +730,21 @@ export default function HomeFinanceDashboard() {
       settings: setSettings,
     };
 
+    // 1. Instantly hydrate from local cache on mount so user sees their saved lists and invoices immediately on refresh
+    if (typeof window !== "undefined") {
+      keys.forEach(k => {
+        try {
+          const cached = localStorage.getItem(`cached_hf_${k}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed) {
+              setters[k](parsed);
+            }
+          }
+        } catch (e) {}
+      });
+    }
+
     const loadedKeys = new Set<string>();
     let cakeExpensesLoaded = false;
 
@@ -717,10 +764,15 @@ export default function HomeFinanceDashboard() {
 
     const unsubscribers = keys.map(k => {
       return onSnapshot(doc(db, "home_finance", k), (snap) => {
-        if (snap.exists() && snap.data().data) {
+        if (snap.exists() && snap.data()?.data) {
           const val = snap.data().data;
           setters[k](val);
-        } else {
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem(`cached_hf_${k}`, JSON.stringify(val));
+            } catch (e) {}
+          }
+        } else if (!snap.exists()) {
           setters[k]([]);
         }
         loadedKeys.add(k);
@@ -1598,7 +1650,10 @@ setEditFuturePlan(null);
       // Compress images fast (<100ms each) for AI analysis
       const dataUrls = await Promise.all(files.map(f => compressImageFast(f, 1200, 0.8)));
 
-      // Pass images to Gemini for data extraction (does not store attached photos)
+      // Keep scanned photos in attached images state immediately so user sees and retains them
+      setAttachedReceiptImages(prev => append ? [...prev, ...dataUrls] : [...prev, ...dataUrls]);
+
+      // Pass images to Gemini for data extraction
       const data = await scanReceiptWithGemini(dataUrls, (status) => setScanStatusText(status));
 
       const determinedPlace = customPlace || (selectedOutingPlace !== "كل المحطات" ? selectedOutingPlace : data.storeName) || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت");
@@ -1759,6 +1814,7 @@ setEditFuturePlan(null);
 
   const handleSaveExpense = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSavingExpense) return;
     const form = e.currentTarget;
     const fd = new FormData(form);
     const isEdit = !!editExpense;
@@ -1780,6 +1836,40 @@ setEditFuturePlan(null);
     const hasAnyWarranty = validItems.some(i => i.hasWarranty);
     const warrantiesCount = validItems.filter(i => i.hasWarranty).length;
 
+    setIsSavingExpense(true);
+
+    // Upload receipt images resiliently (Firebase Storage HTTPS URL or tiny thumbnail fallback)
+    let finalReceiptImages = [...attachedReceiptImages];
+    if (finalReceiptImages.some(img => img.startsWith("data:image"))) {
+      toast("جاري حفظ وتخزين صور الفاتورة في السحابة... ⏳", { id: "uploading_receipt", duration: 8000 });
+      try {
+        finalReceiptImages = await Promise.all(
+          finalReceiptImages.map((img, idx) => 
+            uploadImageResiliently("receipts", `rec_${Date.now()}_${idx}`, img)
+          )
+        );
+        toast.dismiss("uploading_receipt");
+      } catch (uploadErr) {
+        console.warn("Receipt upload issue, using safe fallback:", uploadErr);
+        toast.dismiss("uploading_receipt");
+      }
+    }
+
+    // Clean and validate items to guarantee zero undefined values for Firestore
+    const cleanedItems: ExpenseItem[] = validItems.map((vit, idx) => ({
+      id: vit.id || `item-${Date.now()}-${idx}`,
+      name: (vit.name || "").trim(),
+      quantity: Number(vit.quantity) || 1,
+      price: Number(vit.price) || 0,
+      category: vit.category || category,
+      place: vit.place || name,
+      hasWarranty: Boolean(vit.hasWarranty),
+      warrantyPeriod: vit.warrantyPeriod || "",
+      warrantyExpiryDate: vit.warrantyExpiryDate || "",
+      warrantyCardImage: vit.warrantyCardImage || "",
+      warrantyNotes: vit.warrantyNotes || ""
+    }));
+
     const item: Expense = {
       id: isEdit ? editExpense!.id : Date.now().toString(),
       name,
@@ -1788,22 +1878,24 @@ setEditFuturePlan(null);
       date,
       createdAt: isEdit ? editExpense!.createdAt : new Date().toISOString(),
       hasWarranty: hasAnyWarranty || Boolean(isEdit && editExpense?.hasWarranty),
-      warrantiesCount: warrantiesCount || (isEdit ? editExpense?.warrantiesCount : 0)
+      warrantiesCount: warrantiesCount || (isEdit ? editExpense?.warrantiesCount : 0),
+      imageUrl: finalReceiptImages[0] || (isEdit ? editExpense?.imageUrl : "") || "",
+      receiptImages: finalReceiptImages.length > 0 ? finalReceiptImages : (isEdit ? (editExpense?.receiptImages || []) : [])
     };
-    if (validItems.length > 0) {
-      item.items = validItems;
+    if (cleanedItems.length > 0) {
+      item.items = cleanedItems;
     }
     let updatedList = expenses;
     if (isEdit) {
       updatedList = expenses.map(x => x.id === item.id ? item : x);
       setExpenses(updatedList);
-      syncToFirebase("expenses", updatedList);
-      toast.success("تم تعديل المصروف");
+      await syncToFirebase("expenses", updatedList);
+      toast.success("تم تعديل المصروف وحفظه بنجاح ✅");
     } else {
       updatedList = [item, ...expenses];
       setExpenses(updatedList);
-      syncToFirebase("expenses", updatedList);
-      toast.success("تم تسجيل المصروف");
+      await syncToFirebase("expenses", updatedList);
+      toast.success("تم تسجيل المصروف وحفظه بنجاح ✅");
 
       // Auto-switch to cycle containing the expense date if currently in another cycle
       const matchingCycle = cycles.find(c => {
@@ -1878,6 +1970,8 @@ setEditFuturePlan(null);
     setExpCategoryInput("سوبر ماركت");
     setExpDateInput(today());
     setExpenseItems([]);
+    setAttachedReceiptImages([]);
+    setIsSavingExpense(false);
     setShowExpenseModal(false);
     setEditExpense(null);
   };
@@ -3606,97 +3700,6 @@ setEditTrip(null);
           </div>
         </div>
 
-        {/* Real Liquidity Wallet Card (Bank + Cash Pocket) */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white rounded-[2rem] p-4 sm:p-5 border border-purple-500/30 shadow-xl mb-3 relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="relative z-10">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-white/10 text-amber-300 flex items-center justify-center text-xl font-black shadow-inner">
-                  💼
-                </div>
-                <div>
-                  <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                    <span>محفظة السيولة والنقد الفعلي المتوفر</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-                      نقد حي
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-purple-200/80 font-bold">
-                    إجمالي أموالك الحقيقية المتاحة بين المصرف وجيبك
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWalletBankInput(wallet.bankBalance);
-                    setWalletCashInput(wallet.cashBalance);
-                    setShowWalletModal(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-black text-xs transition border border-white/20 active:scale-95 flex items-center gap-1.5"
-                >
-                  <Edit2 className="w-3.5 h-3.5 text-amber-300" />
-                  <span>تحديث رصيد المحفظة ✏️</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Wallet Balance Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-              {/* Bank Account */}
-              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-                <div className="flex items-center justify-between text-gray-400 text-xs mb-1">
-                  <span className="font-bold flex items-center gap-1 text-[11px]">
-                    <span>💳</span> رصيد المصرف / كي كارد
-                  </span>
-                  <span className="text-[10px] text-indigo-300 font-bold">حساب بنكي</span>
-                </div>
-                <div className="text-lg sm:text-xl font-black text-cyan-300">
-                  {fmt(wallet.bankBalance)} <span className="text-xs font-normal text-cyan-300/70">د.ع</span>
-                </div>
-              </div>
-
-              {/* Cash in Pocket */}
-              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-                <div className="flex items-center justify-between text-gray-400 text-xs mb-1">
-                  <span className="font-bold flex items-center gap-1 text-[11px]">
-                    <span>💵</span> نقد بالجيب / كاش المحفظة
-                  </span>
-                  <span className="text-[10px] text-emerald-300 font-bold">كاش حي</span>
-                </div>
-                <div className="text-lg sm:text-xl font-black text-emerald-300">
-                  {fmt(wallet.cashBalance)} <span className="text-xs font-normal text-emerald-300/70">د.ع</span>
-                </div>
-              </div>
-
-              {/* Total Available Liquidity */}
-              <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/20 via-purple-500/20 to-emerald-500/20 border border-amber-400/40 backdrop-blur-md">
-                <div className="flex items-center justify-between text-amber-200 text-xs mb-1">
-                  <span className="font-black flex items-center gap-1 text-[11px]">
-                    <span>✨</span> إجمالي السيولة الحقيقية
-                  </span>
-                  <span className="text-[10px] text-amber-300 font-black">مجموع النقد</span>
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-amber-300">
-                  {fmt(wallet.bankBalance + wallet.cashBalance)} <span className="text-xs font-normal text-amber-300/80">د.ع</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Reconciliation Note Pill */}
-            <div className="mt-3 pt-2.5 border-t border-white/10 flex items-start gap-2 text-[11px] text-purple-200/90 font-bold">
-              <span className="text-amber-300 text-sm shrink-0">💡</span>
-              <p className="leading-relaxed">
-                <span>توضيح المطابقة: رصيد دورة الشهر الحسابي ({fmt(balance)} د.ع) يمثل حركة الوارد والمنصرف منذ بداية الدورة، بينما </span>
-                <strong className="text-amber-300 font-black">السيولة الحقيقية ({fmt(wallet.bankBalance + wallet.cashBalance)} د.ع)</strong>
-                <span> تمثل نقدك الفعلي المتبقي في المصرف ({fmt(wallet.bankBalance)} د.ع) وفي جيبك ({fmt(wallet.cashBalance)} د.ع) بعد تسديد الديون.</span>
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* ═══════════════ TABS AS APP ICONS ═══════════════ */}
@@ -5014,15 +5017,18 @@ setEditTrip(null);
                         </div>
 
                         {/* Items badge / view receipt button */}
-                        {exp.items && exp.items.length > 0 && (
+                        {((exp.items && exp.items.length > 0) || (exp.receiptImages && exp.receiptImages.length > 0) || exp.imageUrl) && (
                           <button
                             type="button"
                             onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
                             className="w-full mt-1.5 py-1 px-2.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-[10px] font-black flex items-center justify-between border border-indigo-100 dark:border-indigo-800/40 transition active:scale-[0.98]"
                           >
-                            <span className="flex items-center gap-1.5">
+                            <span className="flex items-center gap-1.5 truncate">
                               <Receipt className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                              <span>تفاصيل القائمة ({exp.items.length} مواد)</span>
+                              <span className="truncate">
+                                {exp.items && exp.items.length > 0 ? `قائمة المواد (${exp.items.length})` : "عرض الفاتورة"}
+                                {((exp.receiptImages && exp.receiptImages.length > 0) || exp.imageUrl) ? " 📸" : ""}
+                              </span>
                             </span>
                             <ChevronLeft className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                           </button>
@@ -7424,6 +7430,48 @@ setEditTrip(null);
               </button>
             </div>
 
+            {/* Attached Receipt Images Preview */}
+            {attachedReceiptImages.length > 0 && (
+              <div className="mb-3.5 p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                    صور الفاتورة المرفقة ({attachedReceiptImages.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachedReceiptImages([])}
+                    className="text-[11px] font-bold text-rose-500 hover:text-rose-700 hover:underline"
+                  >
+                    حذف الصور
+                  </button>
+                </div>
+                <div className="flex gap-2.5 overflow-x-auto pb-1 custom-scrollbar">
+                  {attachedReceiptImages.map((img, i) => (
+                    <div key={i} className="relative group shrink-0 w-20 h-20 rounded-xl overflow-hidden border border-indigo-200 dark:border-indigo-800 bg-black/5">
+                      <img src={img} alt={`فاتورة ${i + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setAttachedReceiptImages(prev => prev.filter((_, idx) => idx !== i))}
+                        className="absolute top-1 right-1 w-5 h-5 bg-rose-600 text-white rounded-full flex items-center justify-center text-xs opacity-90 hover:opacity-100 shadow cursor-pointer"
+                        title="حذف هذه الصورة"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => receiptGalleryInputRef.current?.click()}
+                    className="shrink-0 w-20 h-20 rounded-xl border-2 border-dashed border-indigo-300 dark:border-indigo-700 flex flex-col items-center justify-center text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/30 transition text-[11px] font-bold cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 mb-0.5" />
+                    إضافة
+                  </button>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSaveExpense} className="space-y-3.5">
               {/* Main Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -7436,8 +7484,13 @@ setEditTrip(null);
                     autoComplete="off" 
                     value={expNameInput}
                     onChange={e => {
-                      setExpNameInput(e.target.value);
-                      setShowExpSuggestions(e.target.value.length >= 1);
+                      const val = e.target.value;
+                      setExpNameInput(val);
+                      setShowExpSuggestions(val.length >= 1);
+                      const pred = detectProductCategory(val);
+                      if (pred) {
+                        setExpCategoryInput(pred);
+                      }
                     }}
                     onFocus={() => setShowExpSuggestions(expNameInput.length >= 1)}
                     onBlur={() => setTimeout(() => setShowExpSuggestions(false), 200)}
@@ -7450,7 +7503,12 @@ setEditTrip(null);
                       {uniqueNames.filter(n => n.includes(expNameInput)).map((suggestedName, idx) => (
                         <div 
                           key={idx} 
-                          onClick={() => { setExpNameInput(suggestedName); setShowExpSuggestions(false); }} 
+                          onClick={() => { 
+                            setExpNameInput(suggestedName); 
+                            setShowExpSuggestions(false); 
+                            const pred = detectProductCategory(suggestedName);
+                            if (pred) setExpCategoryInput(pred);
+                          }} 
                           className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-sm font-bold text-gray-800 dark:text-gray-200"
                         >
                           {suggestedName}
@@ -7468,7 +7526,10 @@ setEditTrip(null);
                     onChange={e => setExpCategoryInput(e.target.value)} 
                     className="input-field"
                   >
-                    {EXPENSE_CATEGORIES.map(c => <option key={c.label} value={c.label}>{c.icon} {c.label}</option>)}
+                    {Array.from(new Set(EXPENSE_CATEGORIES.map(c => c.label))).map(label => {
+                      const c = EXPENSE_CATEGORIES.find(item => item.label === label);
+                      return <option key={label} value={label}>{c?.icon || "📌"} {label}</option>;
+                    })}
                   </select>
                 </div>
               </div>
@@ -7849,9 +7910,8 @@ setEditTrip(null);
                   <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 border border-gray-100 dark:border-zinc-800">
                     <div className="hidden sm:grid sm:grid-cols-12 gap-2 px-2 pb-2 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
                       <div className="col-span-1 text-center">#</div>
-                      <div className="col-span-3">اسم المادة / المنتج</div>
-                      <div className="col-span-3">القسم / الفئة (تنبؤ ذكي 🧠)</div>
-                      <div className="col-span-2">المكان / المحطة 📍</div>
+                      <div className="col-span-5">اسم المادة / المنتج</div>
+                      <div className="col-span-3">المكان / المحطة 📍</div>
                       <div className="col-span-1 text-center">الكمية</div>
                       <div className="col-span-2 text-left">السعر والضمان 🛡️</div>
                     </div>
@@ -7868,7 +7928,7 @@ setEditTrip(null);
                           </div>
 
                           {/* Product Name with Suggestions */}
-                          <div className="w-full sm:col-span-3 relative">
+                          <div className="w-full sm:col-span-5 relative">
                             <input 
                               id={`exp-item-name-${idx}`}
                               type="text" 
@@ -7884,6 +7944,9 @@ setEditTrip(null);
                                 const pred = detectProductCategory(val);
                                 if (pred) {
                                   newItems[idx].category = pred;
+                                  if (idx === 0 && (!expNameInput.trim() || expCategoryInput === "سوبر ماركت")) {
+                                    setExpCategoryInput(pred);
+                                  }
                                 }
                                 setExpenseItems(newItems);
                               }} 
@@ -7899,7 +7962,12 @@ setEditTrip(null);
                                       const newItems = [...expenseItems];
                                       newItems[idx].name = suggestedName;
                                       const pred = detectProductCategory(suggestedName);
-                                      if (pred) newItems[idx].category = pred;
+                                      if (pred) {
+                                        newItems[idx].category = pred;
+                                        if (idx === 0 && (!expNameInput.trim() || expCategoryInput === "سوبر ماركت")) {
+                                          setExpCategoryInput(pred);
+                                        }
+                                      }
                                       setExpenseItems(newItems);
                                       setFocusedProductIdx(null);
                                     }} 
@@ -7912,36 +7980,12 @@ setEditTrip(null);
                             )}
                           </div>
 
-                          {/* Category Selector (28 Priority Departments) */}
-                          <div className="w-full sm:col-span-3">
-                            <select
-                              value={item.category || ""}
-                              onChange={e => {
-                                const newCat = e.target.value;
-                                const newItems = [...expenseItems];
-                                newItems[idx].category = newCat;
-                                setExpenseItems(newItems);
-                                if (newItems[idx].name && newCat) {
-                                  saveLearnedCategory(newItems[idx].name, newCat);
-                                }
-                              }}
-                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
-                            >
-                              <option value="">اختر القسم (تنبؤ ذكي 🧠)</option>
-                              {PRODUCT_CATEGORIES.map(cat => (
-                                <option key={cat.id} value={cat.name}>
-                                  {cat.icon} {cat.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
                           {/* Place / Shop Selector */}
-                          <div className="w-full sm:col-span-2">
+                          <div className="w-full sm:col-span-3">
                             <input
                               type="text"
                               list={`places-list-${idx}`}
-                              placeholder="المحل (سوق، هايبر..)"
+                              placeholder="المحل (سوق، كراج، مطعم..)"
                               value={item.place || ""}
                               onChange={e => {
                                 const newItems = [...expenseItems];
@@ -8100,10 +8144,20 @@ setEditTrip(null);
               {/* Submit Button */}
               <button 
                 type="submit" 
-                className="w-full bg-gradient-to-l from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-black py-3.5 rounded-2xl shadow-lg shadow-rose-500/25 mt-3 active:scale-[0.98] transition flex items-center justify-center gap-2 text-base"
+                disabled={isSavingExpense}
+                className="w-full bg-gradient-to-l from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 disabled:opacity-60 text-white font-black py-3.5 rounded-2xl shadow-lg shadow-rose-500/25 mt-3 active:scale-[0.98] transition flex items-center justify-center gap-2 text-base cursor-pointer"
               >
-                <Check className="w-5 h-5" />
-                <span>{editExpense ? "تحديث وحفظ المصروف" : "حفظ المصروف"}</span>
+                {isSavingExpense ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>جاري حفظ المصروف في السحابة...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" />
+                    <span>{editExpense ? "تحديث وحفظ المصروف" : "حفظ المصروف"}</span>
+                  </>
+                )}
               </button>
             </form>
           </div>
@@ -8609,6 +8663,41 @@ setEditTrip(null);
               </button>
             </div>
 
+            {/* Invoice Photos Preview Gallery */}
+            {(() => {
+              const images = (viewingReceiptExpense.receiptImages && viewingReceiptExpense.receiptImages.length > 0)
+                ? viewingReceiptExpense.receiptImages
+                : (viewingReceiptExpense.imageUrl ? [viewingReceiptExpense.imageUrl] : []);
+              if (images.length === 0) return null;
+              return (
+                <div className="mb-4 p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-zinc-900 border border-indigo-100 dark:border-zinc-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                      <Camera className="w-4 h-4 text-indigo-600" />
+                      <span>صور الفاتورة المرفقة ({images.length})</span>
+                    </h4>
+                    <span className="text-[10px] text-gray-500 font-bold">اضغط للاستعراض والتكبير</span>
+                  </div>
+                  <div className="flex gap-2.5 overflow-x-auto pb-1 custom-scrollbar">
+                    {images.map((img, i) => (
+                      <a
+                        key={i}
+                        href={img}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group relative shrink-0 w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border border-indigo-200 dark:border-zinc-700 bg-black/5 hover:scale-102 transition shadow-xs cursor-pointer"
+                      >
+                        <img src={img} alt={`فاتورة ${i + 1}`} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[11px] font-bold transition">
+                          🔍 تكبير
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Grouping Mode Switcher */}
             <div className="flex flex-wrap gap-1.5 items-center mb-3">
               <span className="text-[11px] font-black text-gray-500 dark:text-gray-400 ml-1">عرض المواد:</span>
@@ -8906,86 +8995,7 @@ setEditTrip(null);
         </div>
       )}
 
-      {/* ─── Edit Real Liquidity Wallet Modal ─── */}
-      {showWalletModal && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white dark:bg-zinc-950 w-full max-w-md rounded-3xl p-6 shadow-2xl border border-gray-100 dark:border-zinc-800 text-right">
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100 dark:border-zinc-800">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-300 font-black">
-                  💼
-                </div>
-                <h3 className="font-black text-base text-gray-900 dark:text-white">
-                  تحديث محفظة السيولة والنقد الفعلي
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowWalletModal(false)}
-                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-500"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            <form onSubmit={handleSaveWallet} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
-                  <span>💳</span>
-                  <span>الرصيد في المصرف / الحساب البنكي / كي كارد (د.ع):</span>
-                </label>
-                <input
-                  type="number"
-                  value={walletBankInput}
-                  onChange={e => setWalletBankInput(Number(e.target.value))}
-                  placeholder="مثال: 410000"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900 text-sm font-black text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
-                  <span>💵</span>
-                  <span>النقد الفعلي في الجيب / كاش المحفظة (د.ع):</span>
-                </label>
-                <input
-                  type="number"
-                  value={walletCashInput}
-                  onChange={e => setWalletCashInput(Number(e.target.value))}
-                  placeholder="مثال: 50000"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900 text-sm font-black text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
-                  required
-                />
-              </div>
-
-              {/* Calculated Total Display */}
-              <div className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 flex items-center justify-between text-xs">
-                <span className="font-bold text-purple-900 dark:text-purple-200">إجمالي السيولة النقدية:</span>
-                <span className="font-black text-sm text-purple-700 dark:text-purple-300">
-                  {fmt((Number(walletBankInput) || 0) + (Number(walletCashInput) || 0))} د.ع
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowWalletModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-bold text-xs hover:bg-gray-200 transition"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs shadow-md shadow-purple-500/20 active:scale-95 transition"
-                >
-                  حفظ الأرصدة ✓
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ─── Income Modal ─── */}
       {(showIncomeModal || !!editIncome) && (

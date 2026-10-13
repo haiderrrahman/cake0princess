@@ -12,6 +12,7 @@ import { db } from "@/lib/firebase";
 import FormattedNumberInput from "@/components/FormattedNumberInput";
 import { toast } from "sonner";
 import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
+import { cleanForFirestore, uploadImageResiliently } from "@/lib/hfImageStore";
 import {
   PRODUCT_CATEGORIES,
   PRODUCT_CATEGORY_MAP,
@@ -143,9 +144,15 @@ const HOME_TABS: TabItem[] = [
 ];
 
 const EXPENSE_CATEGORIES = [
-  "سوبر ماركت", "لحوم ودجاج", "خضار وفواكه", "أطفال وحفائض",
-  "صحة وأدوية", "نقل وبنزين", "مطاعم وكافيهات", "صيانة منزل",
-  "فواتير ومولدة", "ملابس وأحذية", "هدايا ومناسبات", "أخرى"
+  "سوبر ماركت", "الفواكه والخضار", "المخبوزات والمعجنات", "لحوم ودواجن وأسماك",
+  "الألبان والأجبان", "أساسيات ومؤونة الطبخ", "المعلبات والبقوليات", "الإفطار والمربيات",
+  "مجمدات ومثلجات", "مطاعم وكافيهات", "السيارة والنقل", "فواتير وخدمات منزلية",
+  "صيانة وترميم المنزل", "ملابس وأحذية", "صيدلية وعلاج", "العناية بالطفل",
+  "العناية الشخصية", "منظفات ومعقمات", "اللوازم والأواني المنزلية", "سفريات وورقيات",
+  "أثاث ومفروشات", "أجهزة كهربائية ومنزلية", "إلكترونيات وكمبيوتر", "هواتف واكسسوارات",
+  "القرطاسية واللوازم المدرسية", "تعليم ودورات وكتب", "هدايا ومناسبات", "عطور وإكسسوارات وساعات",
+  "كارتات وشحن", "السكائر والمعسل", "تبرعات وصدقات", "حيوانات أليفة وبيطرة",
+  "طلعات وجولات", "ألعاب ويانصيب", "أقساط وسلف", "سفر ورحلات", "أخرى ومتفرقات"
 ];
 
 const FAMILY_MEMBERS = ["العائلة", "حيدر", "إيمان", "رقية", "قنوت", "إيڤا"];
@@ -158,7 +165,8 @@ async function appendToHomeDoc(collectionKey: string, newItem: any) {
     list = snap.data().data;
   }
   const updated = [newItem, ...list];
-  await setDoc(docRef, { data: updated, updatedAt: new Date() }, { merge: true });
+  const cleanData = cleanForFirestore(updated);
+  await setDoc(docRef, { data: cleanData, updatedAt: new Date() }, { merge: true });
   return updated;
 }
 
@@ -175,6 +183,7 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
 
   // Expense AI & Items details state
   const [expenseItems, setExpenseItems] = useState<ExpenseItem[]>([]);
+  const [attachedReceiptImages, setAttachedReceiptImages] = useState<string[]>([]);
   const [isScanningReceipt, setIsScanningReceipt] = useState(false);
   const [scanStatusText, setScanStatusText] = useState("");
   const [showQuickPasteModal, setShowQuickPasteModal] = useState(false);
@@ -273,6 +282,7 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
       setScanStatusText(files.length > 1 ? `جاري قراءة واستخراج البيانات من ${files.length} صور بالذكاء الاصطناعي 🧠...` : "جاري قراءة واستخراج بيانات الفاتورة بالذكاء الاصطناعي 🧠...");
 
       const dataUrls = await Promise.all(files.map(f => compressImageFast(f, 1200, 0.8)));
+      setAttachedReceiptImages(prev => [...prev, ...dataUrls]);
       const data = await scanReceiptWithGemini(dataUrls, (status) => setScanStatusText(status));
 
       if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
@@ -415,7 +425,29 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
     }
     setSubmitting(true);
     try {
+      let finalReceiptImages = [...attachedReceiptImages];
+      if (finalReceiptImages.some(img => img.startsWith("data:image"))) {
+        try {
+          finalReceiptImages = await Promise.all(
+            finalReceiptImages.map((img, idx) => 
+              uploadImageResiliently("receipts", `quick_rec_${Date.now()}_${idx}`, img)
+            )
+          );
+        } catch (uploadErr) {
+          console.warn("Receipt upload issue, using safe fallback:", uploadErr);
+        }
+      }
+
       const finalName = expName.trim() || (expCategory === "سوبر ماركت" ? "تعاون ماركت" : expCategory);
+      const cleanedItems: ExpenseItem[] = validItems.map((vit, idx) => ({
+        id: vit.id || `item-${Date.now()}-${idx}`,
+        name: vit.name.trim(),
+        quantity: Number(vit.quantity) || 1,
+        price: Number(vit.price) || 0,
+        category: vit.category || expCategory,
+        place: vit.place || finalName
+      }));
+
       const newExp: any = {
         id: Date.now().toString(),
         name: finalName,
@@ -423,13 +455,16 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
         amount: totalAmount,
         date: expDate || new Date().toISOString().split("T")[0],
         notes: expNotes.trim(),
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        imageUrl: finalReceiptImages[0] || "",
+        receiptImages: finalReceiptImages
       };
-      if (validItems.length > 0) {
-        newExp.items = validItems;
+      if (cleanedItems.length > 0) {
+        newExp.items = cleanedItems;
       }
       await appendToHomeDoc("expenses", newExp);
-      toast.success("تم تسجيل المصروف بنجاح 💸");
+      toast.success("تم تسجيل المصروف وحفظه بنجاح 💸");
+      setAttachedReceiptImages([]);
       onSuccess();
       onClose();
     } catch (e) {
@@ -769,6 +804,47 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                 </button>
               </div>
 
+              {/* Attached Receipt Images Preview */}
+              {attachedReceiptImages.length > 0 && (
+                <div className="p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      صور الفاتورة المرفقة ({attachedReceiptImages.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedReceiptImages([])}
+                      className="text-[11px] font-bold text-rose-500 hover:text-rose-700 hover:underline"
+                    >
+                      حذف الصور
+                    </button>
+                  </div>
+                  <div className="flex gap-2.5 overflow-x-auto pb-1 custom-scrollbar">
+                    {attachedReceiptImages.map((img, i) => (
+                      <div key={i} className="relative group shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-indigo-200 dark:border-indigo-800 bg-black/5">
+                        <img src={img} alt={`فاتورة ${i + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setAttachedReceiptImages(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute top-1 right-1 w-5 h-5 bg-rose-600 text-white rounded-full flex items-center justify-center text-xs opacity-90 hover:opacity-100 shadow cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => receiptGalleryInputRef.current?.click()}
+                      className="shrink-0 w-16 h-16 rounded-xl border-2 border-dashed border-indigo-300 dark:border-indigo-700 flex flex-col items-center justify-center text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/30 transition text-[10px] font-bold cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 mb-0.5" />
+                      إضافة
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Store / Description with Suggestions */}
               <div className="relative">
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم أو وجه المصروف</label>
@@ -931,9 +1007,8 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                   <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 border border-gray-100 dark:border-zinc-800">
                     <div className="hidden sm:grid sm:grid-cols-12 gap-2 px-2 pb-2 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
                       <div className="col-span-1 text-center">#</div>
-                      <div className="col-span-3">اسم المادة / المنتج</div>
-                      <div className="col-span-3">القسم (28 فئة)</div>
-                      <div className="col-span-2">المكان / المحل</div>
+                      <div className="col-span-5">اسم المادة / المنتج</div>
+                      <div className="col-span-3">المكان / المحل</div>
                       <div className="col-span-1 text-center">الكمية</div>
                       <div className="col-span-1 text-left">السعر</div>
                       <div className="col-span-1 text-center">حذف</div>
@@ -951,7 +1026,7 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                           </div>
 
                           {/* Product Name with Suggestions */}
-                          <div className="w-full sm:col-span-3 relative">
+                          <div className="w-full sm:col-span-5 relative">
                             <input 
                               id={`quick-exp-item-name-${idx}`}
                               type="text" 
@@ -995,32 +1070,8 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                             )}
                           </div>
 
-                          {/* Category Selector (28 Priority Departments) */}
-                          <div className="w-full sm:col-span-3">
-                            <select
-                              value={item.category || ""}
-                              onChange={e => {
-                                const newCat = e.target.value;
-                                const newItems = [...expenseItems];
-                                newItems[idx].category = newCat;
-                                setExpenseItems(newItems);
-                                if (newItems[idx].name && newCat) {
-                                  saveLearnedCategory(newItems[idx].name, newCat);
-                                }
-                              }}
-                              className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
-                            >
-                              <option value="">اختر القسم (تنبؤ ذكي 🧠)</option>
-                              {PRODUCT_CATEGORIES.map(cat => (
-                                <option key={cat.id} value={cat.name}>
-                                  {cat.icon} {cat.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
                           {/* Place / Shop Selector */}
-                          <div className="w-full sm:col-span-2">
+                          <div className="w-full sm:col-span-3">
                             <input
                               type="text"
                               list={`quick-places-list-${idx}`}
