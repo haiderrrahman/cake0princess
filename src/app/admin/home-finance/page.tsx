@@ -1031,6 +1031,22 @@ export default function HomeFinanceDashboard() {
     });
   };
   
+  // عدد الأشهر المتأخرة للفاتورة: الأشهر التي حل موعدها منذ إنشاء الفاتورة ناقص عدد الدفعات المسجلة
+  const getBillOverdueMonths = (bill: Bill) => {
+    if (!bill.createdAt) return 0;
+    const start = new Date(bill.createdAt);
+    if (isNaN(start.getTime())) return 0;
+    const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const now = new Date();
+    let due = 0;
+    const totalMonths = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+    for (let k = 0; k <= totalMonths; k++) {
+      const dueDate = new Date(start.getFullYear(), start.getMonth() + k, bill.dueDay || 1);
+      if (dueDate >= startDay && dueDate <= now) due++;
+    }
+    return Math.max(0, due - (bill.paidDates?.length || 0));
+  };
+
   const getInstallmentDelayMonths = (i: Installment) => {
     if (i.remainingAmount <= 0) return 0;
     if (!i.startDate) {
@@ -5169,6 +5185,17 @@ setEditTrip(null);
             {/* Bills Progress + Filter */}
             {bills.length > 0 && (
               <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4 space-y-3">
+                {(() => {
+                  const lateBills = bills.filter(b => getBillOverdueMonths(b) > 0);
+                  if (lateBills.length === 0) return null;
+                  const lateTotal = lateBills.reduce((s, b) => s + getBillOverdueMonths(b) * b.amount, 0);
+                  return (
+                    <div className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl px-3 py-2">
+                      <span className="text-xs font-black text-red-700 dark:text-red-300">⚠️ متأخر: {lateBills.length} فاتورة</span>
+                      <span className="text-sm font-black text-red-600 dark:text-red-400">{fmt(lateTotal)} <span className="text-[10px]">د.ع</span></span>
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-gray-500">المدفوعة هذه الدورة</span>
                   <span className="text-xs font-black text-gray-800 dark:text-white">{bills.filter(b => isBillPaidThisCycle(b)).length}/{bills.length}</span>
@@ -5230,6 +5257,7 @@ setEditTrip(null);
                   const c = billColors[idx % billColors.length];
                   const billEmoji = billEmojis[idx % billEmojis.length];
                   const paidThisCycle = isBillPaidThisCycle(bill);
+                  const overdueMonths = getBillOverdueMonths(bill);
                   const isBillHistory = showBillHistory === bill.id;
                   const paidDates = bill.paidDates || [];
                   return (
@@ -5277,6 +5305,12 @@ setEditTrip(null);
                           ) : null}
                           {paidDates.length > 0 && <span className="text-[9px] text-gray-400">{new Date(paidDates[paidDates.length - 1].date).toLocaleDateString("ar-IQ")}</span>}
                         </div>
+                        {overdueMonths > 0 && (
+                          <div className="rounded-xl bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800/50 px-2 py-1.5 text-center">
+                            <div className="text-[10px] font-black text-red-700 dark:text-red-300">متلكئ {overdueMonths} {overdueMonths === 1 ? 'شهر' : overdueMonths === 2 ? 'شهرين' : overdueMonths <= 10 ? 'أشهر' : 'شهر'}</div>
+                            <div className="text-[11px] font-black text-red-600 dark:text-red-400">المتأخر: {fmt(overdueMonths * bill.amount)} د.ع</div>
+                          </div>
+                        )}
                         {/* Pay/Undo button */}
                         {!paidThisCycle ? (
                           <button onClick={() => handlePayBill(bill)}
