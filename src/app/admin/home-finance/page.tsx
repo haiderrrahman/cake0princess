@@ -8813,10 +8813,10 @@ setEditTrip(null);
             <div className="bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
               <div className="grid grid-cols-12 gap-2 px-3 py-2.5 bg-gray-100/70 dark:bg-zinc-800/60 text-[11px] font-black text-gray-500 border-b border-gray-200 dark:border-zinc-800 text-right">
                 <div className="col-span-1 text-center">#</div>
-                <div className="col-span-5">اسم المادة والقسم</div>
-                <div className="col-span-2">المكان / المحل 📍</div>
-                <div className="col-span-1 text-center">الكمية</div>
-                <div className="col-span-3 text-left">الإجمالي (د.ع)</div>
+                <div className="col-span-4">اسم المادة والقسم</div>
+                <div className="col-span-3">المكان / المحل 📍</div>
+                <div className="col-span-2 text-center">الكمية</div>
+                <div className="col-span-2 text-left">الإجمالي (د.ع)</div>
               </div>
 
               <div className="divide-y divide-gray-100 dark:divide-zinc-800/80 max-h-[350px] overflow-y-auto custom-scrollbar">
@@ -8852,7 +8852,7 @@ setEditTrip(null);
                       <div key={item.id || idx} className="grid grid-cols-12 gap-2 px-3 py-2.5 text-xs items-center hover:bg-white dark:hover:bg-zinc-800/50 transition">
                         <div className="col-span-1 text-center font-bold text-gray-400 text-[11px]">{idx + 1}</div>
                         
-                        <div className="col-span-5 font-bold text-gray-800 dark:text-gray-200">
+                        <div className="col-span-4 min-w-0 font-bold text-gray-800 dark:text-gray-200">
                           <div className="truncate font-black">{item.name}</div>
                           {resolvedCat && (
                             <div className="mt-0.5">
@@ -8864,22 +8864,22 @@ setEditTrip(null);
                           )}
                         </div>
 
-                        <div className="col-span-2 text-gray-600 dark:text-gray-300">
+                        <div className="col-span-3 min-w-0 overflow-hidden text-gray-600 dark:text-gray-300">
                           {item.place ? (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50">
-                              <span>📍</span>
-                              <span className="truncate">{item.place}</span>
+                            <span className="flex items-center gap-0.5 max-w-full min-w-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50">
+                              <span className="shrink-0">📍</span>
+                              <span className="truncate min-w-0">{item.place}</span>
                             </span>
                           ) : (
                             <span className="text-[10px] text-gray-400">-</span>
                           )}
                         </div>
 
-                        <div className="col-span-1 text-center font-black text-gray-600 dark:text-gray-300 bg-gray-200/60 dark:bg-zinc-800 px-1 py-0.5 rounded-md text-[11px]">
+                        <div className="col-span-2 justify-self-center text-center font-black text-gray-600 dark:text-gray-300 bg-gray-200/60 dark:bg-zinc-800 px-2 py-0.5 rounded-md text-[11px] whitespace-nowrap">
                           {item.quantity}
                         </div>
 
-                        <div className="col-span-3 text-left font-black text-rose-600 dark:text-rose-400">
+                        <div className="col-span-2 text-left whitespace-nowrap font-black text-rose-600 dark:text-rose-400">
                           {fmt(item.price)} <span className="text-[9px] font-bold text-gray-400">د.ع</span>
                         </div>
                       </div>
