@@ -654,6 +654,10 @@ export default function HomeFinanceDashboard() {
   const [showAllDates, setShowAllDates] = useState(false);
   const [inventorySearch, setInventorySearch] = useState("");
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
+  const [installmentFilter, setInstallmentFilter] = useState<"active" | "all" | "completed">("active");
+  const [showCompletedInstallments, setShowCompletedInstallments] = useState(false);
+  const [debtFilter, setDebtFilter] = useState<"active" | "all" | "completed">("active");
+  const [showCompletedDebts, setShowCompletedDebts] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -1667,23 +1671,24 @@ setEditFuturePlan(null);
       // Compress images fast (<100ms each) for AI analysis
       const dataUrls = await Promise.all(files.map(f => compressImageFast(f, 1200, 0.8)));
 
-      // Keep scanned photos in attached images state immediately so user sees and retains them
-      setAttachedReceiptImages(prev => append ? [...prev, ...dataUrls] : [...prev, ...dataUrls]);
+      // Note: We DO NOT attach the scanned images per user request:
+      // "والصورة مال فاتورة الي اضيفها ما اريد ترفقها يعني بس ياخذ بياناتها وميرفقها"
+      // dataUrls are used only by Gemini for OCR/parsing, without storing in attachedReceiptImages
 
       // Pass images to Gemini for data extraction
       const data = await scanReceiptWithGemini(dataUrls, (status) => setScanStatusText(status));
 
       const determinedPlace = customPlace || (selectedOutingPlace !== "كل المحطات" ? selectedOutingPlace : data.storeName) || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت");
 
-      if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
-        if (!expNameInput || expNameInput === "غير محدد") {
+      if (!expNameInput.trim() || expNameInput === "غير محدد") {
+        if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
           setExpNameInput(data.storeName);
+        } else {
+          setExpNameInput(expCategoryInput === "طلعات وجولات" ? "طلعة بغداد" : "تعاون ماركت");
         }
-      } else if (!expNameInput || expNameInput === "غير محدد") {
-        setExpNameInput(expCategoryInput === "طلعات وجولات" ? "طلعة بغداد" : "تعاون ماركت");
       }
 
-      if (data.category && expCategoryInput !== "طلعات وجولات") {
+      if (data.category && expCategoryInput !== "طلعات وجولات" && (!expCategoryInput || expCategoryInput === "سوبر ماركت")) {
         setExpCategoryInput(data.category);
       }
 
@@ -1708,20 +1713,27 @@ setEditFuturePlan(null);
       setExpDateInput(extractedDate);
 
       if (Array.isArray(data.items) && data.items.length > 0) {
-        const itemsWithPlace = data.items.map(it => {
-          const itemPlace = it.place || determinedPlace;
+        const itemsWithPlace = data.items.map((it, idx) => {
+          const itemPlace = it.place || determinedPlace || data.storeName || "سوبر ماركت";
           const cat = it.category || detectProductCategory(it.name);
           return {
-            ...it,
+            id: it.id || `item-${Date.now()}-${idx}-${Math.random().toString(36).substring(7)}`,
+            name: it.name || "",
+            quantity: Number(it.quantity) || 1,
+            price: Number(it.price) || 0,
             place: itemPlace,
             category: cat
           };
         });
 
-        // If in outing or append mode and we already have items, append them!
-        if (append || (expCategoryInput === "طلعات وجولات" && expenseItems.length > 0)) {
-          setExpenseItems(prev => [...prev, ...itemsWithPlace]);
-          toast.success(`تمت إضافة ${itemsWithPlace.length} مادة لفاتورة محطة (${determinedPlace}) بنجاح! ⚡✨`, {
+        // Filter out empty placeholder rows that might already exist
+        const existingValidItems = expenseItems.filter(it => (it.name || "").trim() !== "" || (Number(it.price) || 0) > 0);
+
+        if (existingValidItems.length > 0) {
+          // Merge / Append with existing items
+          const combined = [...existingValidItems, ...itemsWithPlace];
+          setExpenseItems(combined);
+          toast.success(`تم دمج وإضافة ${itemsWithPlace.length} مادة مع القائمة السابقة بنجاح! ⚡✨`, {
             duration: 4000
           });
         } else {
@@ -4571,207 +4583,402 @@ setEditTrip(null);
         )}
 
         {/* ═══════════════ INSTALLMENTS TAB ═══════════════ */}
-        {activeTab === "installments" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-black text-gray-800 dark:text-white flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-indigo-500" />
-                الأقساط والسلف
-              </h2>
-              <button onClick={() => setShowInstallmentModal(true)}
-                className="bg-indigo-500 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-lg shadow-indigo-500/25 active:scale-95 transition">
-                <Plus className="w-3.5 h-3.5" /> إضافة
-              </button>
-            </div>
+        {activeTab === "installments" && (() => {
+          // Helper to calculate exact stats for an installment
+          const getInstStats = (inst: Installment) => {
+            const paymentsActualTotal = inst.payments.reduce((s, p) => s + p.amount, 0);
+            const initialPaidAmount = (inst.initialPaidMonths || 0) * inst.monthlyInstallment;
+            const downPaymentAmount = inst.downPayment || 0;
+            const totalPaidAmount = paymentsActualTotal + initialPaidAmount + downPaymentAmount;
+            const computedRemaining = Math.max(0, inst.totalAmount - totalPaidAmount);
+            const progress = inst.totalAmount > 0 ? Math.min(100, (totalPaidAmount / inst.totalAmount) * 100) : 0;
+            const paidMonths = (inst.initialPaidMonths || 0) + inst.payments.length;
+            const monthsLeft = inst.totalMonths 
+              ? Math.max(0, inst.totalMonths - paidMonths)
+              : (inst.monthlyInstallment > 0 ? Math.ceil(computedRemaining / inst.monthlyInstallment) : 0);
+            const delayMonths = getInstallmentDelayMonths(inst);
+            const isCompleted = computedRemaining <= 0;
+            return {
+              paymentsActualTotal,
+              initialPaidAmount,
+              downPaymentAmount,
+              totalPaidAmount,
+              computedRemaining,
+              progress,
+              paidMonths,
+              monthsLeft,
+              delayMonths,
+              isCompleted
+            };
+          };
 
-            {installments.length === 0 ? (
-              <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
-                <CreditCard className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-400 font-bold text-sm">لا توجد أقساط أو سلف مسجلة</p>
-              </div>
-            ) : (
-              installments.map((inst, idx) => {
-                // ── حساب المبالغ الفعلية بدقة ──
-                // المبلغ المدفوع فعلياً من الدفعات المسجلة + المقدمة + الأشهر المدفوعة مسبقاً
-                const paymentsActualTotal = inst.payments.reduce((s, p) => s + p.amount, 0);
-                const initialPaidAmount = (inst.initialPaidMonths || 0) * inst.monthlyInstallment;
-                const downPaymentAmount = inst.downPayment || 0;
-                const totalPaidAmount = paymentsActualTotal + initialPaidAmount + downPaymentAmount;
-                
-                // المتبقي الفعلي = الكلي - كل ما دُفع
-                const computedRemaining = Math.max(0, inst.totalAmount - totalPaidAmount);
-                
-                // التقدم
-                const progress = inst.totalAmount > 0 ? Math.min(100, (totalPaidAmount / inst.totalAmount) * 100) : 0;
-                
-                // الأشهر المدفوعة والمتبقية
-                const paidMonths = (inst.initialPaidMonths || 0) + inst.payments.length;
-                const monthsLeft = inst.totalMonths 
-                  ? Math.max(0, inst.totalMonths - paidMonths)
-                  : (inst.monthlyInstallment > 0 ? Math.ceil(computedRemaining / inst.monthlyInstallment) : 0);
-                const delayMonths = getInstallmentDelayMonths(inst);
-                const gradients = [
-                  "from-indigo-600 to-violet-700",
-                  "from-blue-600 to-cyan-700",
-                  "from-purple-600 to-pink-700",
-                  "from-teal-600 to-emerald-700",
-                ];
-                const grad = gradients[idx % gradients.length];
-                const isHistory = showInstallmentHistory === inst.id;
+          const activeInstallments = installments.filter(inst => getInstStats(inst).computedRemaining > 0);
+          const completedInstallments = installments.filter(inst => getInstStats(inst).computedRemaining <= 0);
 
-                return (
-                  <div key={inst.id} className={`bg-gradient-to-br ${grad} rounded-3xl p-5 text-white shadow-xl relative overflow-hidden`}>
-                    <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+          const renderSingleInstallment = (inst: Installment, idx: number, isCompleted: boolean) => {
+            const stats = getInstStats(inst);
+            const gradients = [
+              "from-indigo-600 to-violet-700",
+              "from-blue-600 to-cyan-700",
+              "from-purple-600 to-pink-700",
+              "from-teal-600 to-emerald-700",
+            ];
+            const grad = gradients[idx % gradients.length];
+            const isHistory = showInstallmentHistory === inst.id;
 
-                    {/* Header */}
-                    <div className="relative z-10 flex items-start justify-between mb-4">
-                      <div>
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${inst.type === "قسط" ? "bg-white/20" : "bg-amber-400/30"} mb-1 inline-block`}>
+            if (isCompleted) {
+              return (
+                <div key={inst.id} className="bg-slate-100/90 dark:bg-zinc-900/90 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-5 text-slate-800 dark:text-zinc-200 shadow-sm opacity-50 hover:opacity-100 grayscale-[0.6] hover:grayscale-0 relative overflow-hidden transition-all duration-300">
+                  <div className="relative z-10 flex items-start justify-between mb-4">
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 inline-block">
                           {inst.type === "قسط" ? "💳 قسط" : "💰 سلفة"}
                         </span>
-                        <h3 className="font-black text-lg">{inst.name}</h3>
-                        {/* Date Range: Start → End */}
-                        {inst.startDate && (
-                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                            <div className="flex items-center gap-1 bg-white/15 backdrop-blur-sm rounded-lg px-2 py-1">
-                              <Calendar className="w-3 h-3 text-white/70" />
-                              <span className="text-white/80 text-[10px] font-bold">
-                                بداية: {new Date(inst.startDate).toLocaleDateString("ar-IQ", { year: 'numeric', month: 'numeric', day: 'numeric' })}
-                              </span>
-                            </div>
-                            {inst.totalMonths && (() => {
-                              const endDate = new Date(inst.startDate);
-                              endDate.setMonth(endDate.getMonth() + (inst.totalMonths));
-                              return (
-                                <div className="flex items-center gap-1 bg-white/15 backdrop-blur-sm rounded-lg px-2 py-1">
-                                  <Flag className="w-3 h-3 text-white/70" />
-                                  <span className="text-white/80 text-[10px] font-bold">
-                                    نهاية: {endDate.toLocaleDateString("ar-IQ", { year: 'numeric', month: 'numeric', day: 'numeric' })}
-                                  </span>
-                                </div>
-                              );
-                            })()}
+                        <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300/50 inline-block">
+                          ✅ تم السداد بالكامل / منتهي
+                        </span>
+                      </div>
+                      <h3 className="font-black text-lg line-through text-slate-500 dark:text-zinc-400">{inst.name}</h3>
+                      {inst.startDate && (
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          <div className="flex items-center gap-1 bg-slate-200/70 dark:bg-zinc-800/70 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-600 dark:text-zinc-400">
+                            <Calendar className="w-3 h-3 text-slate-400" />
+                            <span>بداية: {new Date(inst.startDate).toLocaleDateString("ar-IQ", { year: 'numeric', month: 'numeric', day: 'numeric' })}</span>
                           </div>
-                        )}
-                      </div>
-                      <div className="flex gap-1.5">
-                        <button onClick={() => { 
-                           setEditInstallment(inst); 
-                           setShowInstallmentModal(true); 
-                        }}
-                          className="p-2 bg-white/15 rounded-xl hover:bg-white/25 transition backdrop-blur-sm">
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => handleDeleteInstallment(inst.id)}
-                          className="p-2 bg-white/15 rounded-xl hover:bg-red-500/50 transition backdrop-blur-sm">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Stats Grid - 2x2 */}
-                    <div className="relative z-10 grid grid-cols-2 gap-2 mb-3">
-                      <div className="bg-white/10 rounded-2xl p-2.5 text-center backdrop-blur-sm">
-                        <div className="text-[10px] text-white/60 font-bold mb-0.5">القسط الشهري</div>
-                        <div className="font-black text-sm">{fmt(inst.monthlyInstallment)}</div>
-                      </div>
-                      <div className="bg-emerald-500/25 border border-emerald-400/30 rounded-2xl p-2.5 text-center backdrop-blur-sm">
-                        <div className="text-[10px] text-emerald-200 font-bold mb-0.5">المدفوع</div>
-                        <div className="font-black text-sm text-emerald-200">{fmt(totalPaidAmount)}</div>
-                      </div>
-                      <div className="bg-red-500/20 border border-red-400/25 rounded-2xl p-2.5 text-center backdrop-blur-sm">
-                        <div className="text-[10px] text-red-200 font-bold mb-0.5">المتبقي</div>
-                        <div className="font-black text-sm text-red-200">{fmt(computedRemaining)}</div>
-                      </div>
-                      <div className="bg-white/10 rounded-2xl p-2.5 text-center backdrop-blur-sm">
-                        <div className="text-[10px] text-white/60 font-bold mb-0.5">باقي أشهر</div>
-                        <div className="font-black text-sm">{monthsLeft}</div>
-                      </div>
-                    </div>
-                    {inst.downPayment ? (
-                      <div className="relative z-10 bg-white/10 rounded-2xl p-2 text-center mb-3 backdrop-blur-sm">
-                        <span className="text-[10px] text-white/60 font-bold">المقدمة: </span>
-                        <span className="font-black text-sm">{fmt(inst.downPayment)} د.ع</span>
-                      </div>
-                    ) : null}
-
-                    {/* Delay Alert */}
-                    {delayMonths > 0 && (
-                      <div className="relative z-10 bg-red-500/30 border border-red-400/40 rounded-2xl p-2.5 mb-3 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-red-300 animate-pulse flex-shrink-0" />
-                        <span className="text-red-200 text-xs font-black">حالة تلكؤ: {delayMonths} شهر غير مدفوع!</span>
-                      </div>
-                    )}
-                    
-                    {/* Advance Alert */}
-                    {(() => {
-                      const advanceMonths = getInstallmentAdvanceMonths(inst);
-                      if (advanceMonths > 0) {
-                        return (
-                          <div className="relative z-10 bg-emerald-500/30 border border-emerald-400/40 rounded-2xl p-2.5 mb-3 flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-emerald-300 flex-shrink-0" />
-                            <span className="text-emerald-200 text-xs font-black">حالة متقدمة: دفعة مقدمة لـ {advanceMonths} شهر!</span>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-
-                    {/* Progress */}
-                    <div className="relative z-10 mb-4">
-                      <div className="flex justify-between text-[10px] text-white/70 font-bold mb-1.5">
-                        <span>التقدم: {progress.toFixed(1)}%</span>
-                        <span>الإجمالي: {fmt(inst.totalAmount)} د.ع</span>
-                      </div>
-                      <div className="h-2.5 bg-black/25 rounded-full overflow-hidden">
-                        <div className="h-full bg-white rounded-full transition-all" style={{ width: `${Math.min(100, progress)}%` }} />
-                      </div>
-                      {inst.totalMonths && (
-                        <div className="text-[10px] text-white/50 mt-1">{paidMonths} أشهر مدفوعة من {inst.totalMonths}</div>
+                        </div>
                       )}
                     </div>
-
-                    {/* Actions */}
-                    <div className="relative z-10 flex gap-2">
-                      {computedRemaining > 0 && (
-                        <button onClick={() => handlePayInstallment(inst)}
-                          className="flex-1 bg-white text-gray-900 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-white/90 active:scale-95 transition shadow-sm">
-                          <Check className="w-3.5 h-3.5" /> دفع القسط
-                        </button>
-                      )}
-                      {inst.payments.length > 0 && (
-                        <button onClick={() => handleUndoInstallmentPayment(inst)}
-                          className="px-3 bg-white/15 rounded-xl text-xs font-bold hover:bg-white/25 active:scale-95 transition">
-                          تراجع
-                        </button>
-                      )}
-                      <button onClick={() => setShowInstallmentHistory(isHistory ? null : inst.id)}
-                        className="px-3 bg-white/15 rounded-xl text-xs font-bold hover:bg-white/25 active:scale-95 transition flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {inst.payments.length}
+                    <div className="flex gap-1.5">
+                      <button onClick={() => { setEditInstallment(inst); setShowInstallmentModal(true); }} className="p-2 bg-slate-200 dark:bg-zinc-800 rounded-xl hover:bg-slate-300 dark:hover:bg-zinc-700 transition">
+                        <Edit2 className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-400" />
+                      </button>
+                      <button onClick={() => handleDeleteInstallment(inst.id)} className="p-2 bg-slate-200 dark:bg-zinc-800 rounded-xl hover:bg-red-500/20 text-red-500 transition">
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
+                  </div>
 
-                    {isHistory && inst.payments.length > 0 && (
-                      <div className="relative z-10 mt-3 border-t border-white/15 pt-3 space-y-1 max-h-40 overflow-y-auto">
-                        <p className="text-[10px] text-white/60 font-bold mb-2">سجل الدفعات ({inst.payments.length} دفعة)</p>
-                        {[...inst.payments].reverse().map((pay, pi) => (
-                          <div key={pi} className="flex justify-between text-[11px] bg-white/10 rounded-xl px-3 py-1.5">
-                            <span className="text-white/80 font-bold">{fmt(pay.amount)} د.ع</span>
-                            <span className="text-white/50">{new Date(pay.date).toLocaleString("ar-IQ", { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                          </div>
-                        ))}
+                  {/* Stats Grid */}
+                  <div className="relative z-10 grid grid-cols-2 gap-2 mb-3">
+                    <div className="bg-slate-200/60 dark:bg-zinc-800/60 rounded-2xl p-2.5 text-center">
+                      <div className="text-[10px] text-slate-500 dark:text-zinc-400 font-bold mb-0.5">القسط الشهري</div>
+                      <div className="font-black text-sm">{fmt(inst.monthlyInstallment)}</div>
+                    </div>
+                    <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300/50 dark:border-emerald-800/40 rounded-2xl p-2.5 text-center">
+                      <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold mb-0.5">المسدد الكلي</div>
+                      <div className="font-black text-sm text-emerald-700 dark:text-emerald-300">{fmt(inst.totalAmount)}</div>
+                    </div>
+                    <div className="bg-slate-200/60 dark:bg-zinc-800/60 rounded-2xl p-2.5 text-center">
+                      <div className="text-[10px] text-slate-500 dark:text-zinc-400 font-bold mb-0.5">المتبقي</div>
+                      <div className="font-black text-sm text-emerald-600 dark:text-emerald-400">0 د.ع (خالص)</div>
+                    </div>
+                    <div className="bg-slate-200/60 dark:bg-zinc-800/60 rounded-2xl p-2.5 text-center">
+                      <div className="text-[10px] text-slate-500 dark:text-zinc-400 font-bold mb-0.5">الحالة</div>
+                      <div className="font-black text-sm text-emerald-600 dark:text-emerald-400">مكتمل 100%</div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="relative z-10 flex gap-2">
+                    {inst.payments.length > 0 && (
+                      <button onClick={() => handleUndoInstallmentPayment(inst)} className="px-3 py-1.5 bg-slate-200 dark:bg-zinc-800 rounded-xl text-xs font-bold hover:bg-slate-300 dark:hover:bg-zinc-700 transition">
+                        تراجع عن آخر دفعة
+                      </button>
+                    )}
+                    <button onClick={() => setShowInstallmentHistory(isHistory ? null : inst.id)} className="px-3 py-1.5 bg-slate-200 dark:bg-zinc-800 rounded-xl text-xs font-bold hover:bg-slate-300 dark:hover:bg-zinc-700 transition flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-400" />
+                      <span>سجل الدفعات ({inst.payments.length})</span>
+                    </button>
+                  </div>
+
+                  {isHistory && inst.payments.length > 0 && (
+                    <div className="relative z-10 mt-3 border-t border-slate-200 dark:border-zinc-800 pt-3 space-y-1 max-h-40 overflow-y-auto">
+                      <p className="text-[10px] text-slate-500 font-bold mb-2">سجل الدفعات ({inst.payments.length} دفعة)</p>
+                      {[...inst.payments].reverse().map((pay, pi) => (
+                        <div key={pi} className="flex justify-between text-[11px] bg-slate-200/60 dark:bg-zinc-800/60 rounded-xl px-3 py-1.5">
+                          <span className="font-bold">{fmt(pay.amount)} د.ع</span>
+                          <span className="text-slate-400">{new Date(pay.date).toLocaleDateString("ar-IQ")}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <div key={inst.id} className={`bg-gradient-to-br ${grad} rounded-3xl p-5 text-white shadow-xl relative overflow-hidden`}>
+                <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+
+                {/* Header */}
+                <div className="relative z-10 flex items-start justify-between mb-4">
+                  <div>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${inst.type === "قسط" ? "bg-white/20" : "bg-amber-400/30"} mb-1 inline-block`}>
+                      {inst.type === "قسط" ? "💳 قسط" : "💰 سلفة"}
+                    </span>
+                    <h3 className="font-black text-lg">{inst.name}</h3>
+                    {inst.startDate && (
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <div className="flex items-center gap-1 bg-white/15 backdrop-blur-sm rounded-lg px-2 py-1">
+                          <Calendar className="w-3 h-3 text-white/70" />
+                          <span className="text-white/80 text-[10px] font-bold">
+                            بداية: {new Date(inst.startDate).toLocaleDateString("ar-IQ", { year: 'numeric', month: 'numeric', day: 'numeric' })}
+                          </span>
+                        </div>
+                        {inst.totalMonths && (() => {
+                          const endDate = new Date(inst.startDate);
+                          endDate.setMonth(endDate.getMonth() + (inst.totalMonths));
+                          return (
+                            <div className="flex items-center gap-1 bg-white/15 backdrop-blur-sm rounded-lg px-2 py-1">
+                              <Flag className="w-3 h-3 text-white/70" />
+                              <span className="text-white/80 text-[10px] font-bold">
+                                نهاية: {endDate.toLocaleDateString("ar-IQ", { year: 'numeric', month: 'numeric', day: 'numeric' })}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
-                    {isHistory && inst.payments.length === 0 && (
-                      <div className="relative z-10 mt-3 border-t border-white/15 pt-3 text-center text-[11px] text-white/50">لا توجد دفعات مسجلة</div>
-                    )}
                   </div>
-                );
-              })
-            )}
-          </div>
-        )}
+                  <div className="flex gap-1.5">
+                    <button onClick={() => { 
+                       setEditInstallment(inst); 
+                       setShowInstallmentModal(true); 
+                    }}
+                      className="p-2 bg-white/15 rounded-xl hover:bg-white/25 transition backdrop-blur-sm">
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => handleDeleteInstallment(inst.id)}
+                      className="p-2 bg-white/15 rounded-xl hover:bg-red-500/50 transition backdrop-blur-sm">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Stats Grid - 2x2 */}
+                <div className="relative z-10 grid grid-cols-2 gap-2 mb-3">
+                  <div className="bg-white/10 rounded-2xl p-2.5 text-center backdrop-blur-sm">
+                    <div className="text-[10px] text-white/60 font-bold mb-0.5">القسط الشهري</div>
+                    <div className="font-black text-sm">{fmt(inst.monthlyInstallment)}</div>
+                  </div>
+                  <div className="bg-emerald-500/25 border border-emerald-400/30 rounded-2xl p-2.5 text-center backdrop-blur-sm">
+                    <div className="text-[10px] text-emerald-200 font-bold mb-0.5">المدفوع</div>
+                    <div className="font-black text-sm text-emerald-200">{fmt(stats.totalPaidAmount)}</div>
+                  </div>
+                  <div className="bg-red-500/20 border border-red-400/25 rounded-2xl p-2.5 text-center backdrop-blur-sm">
+                    <div className="text-[10px] text-red-200 font-bold mb-0.5">المتبقي</div>
+                    <div className="font-black text-sm text-red-200">{fmt(stats.computedRemaining)}</div>
+                  </div>
+                  <div className="bg-white/10 rounded-2xl p-2.5 text-center backdrop-blur-sm">
+                    <div className="text-[10px] text-white/60 font-bold mb-0.5">باقي أشهر</div>
+                    <div className="font-black text-sm">{stats.monthsLeft}</div>
+                  </div>
+                </div>
+                {inst.downPayment ? (
+                  <div className="relative z-10 bg-white/10 rounded-2xl p-2 text-center mb-3 backdrop-blur-sm">
+                    <span className="text-[10px] text-white/60 font-bold">المقدمة: </span>
+                    <span className="font-black text-sm">{fmt(inst.downPayment)} د.ع</span>
+                  </div>
+                ) : null}
+
+                {/* Delay Alert */}
+                {stats.delayMonths > 0 && (
+                  <div className="relative z-10 bg-red-500/30 border border-red-400/40 rounded-2xl p-2.5 mb-3 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-300 animate-pulse flex-shrink-0" />
+                    <span className="text-red-200 text-xs font-black">حالة تلكؤ: {stats.delayMonths} شهر غير مدفوع!</span>
+                  </div>
+                )}
+                
+                {/* Advance Alert */}
+                {(() => {
+                  const advanceMonths = getInstallmentAdvanceMonths(inst);
+                  if (advanceMonths > 0) {
+                    return (
+                      <div className="relative z-10 bg-emerald-500/30 border border-emerald-400/40 rounded-2xl p-2.5 mb-3 flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-300 flex-shrink-0" />
+                        <span className="text-emerald-200 text-xs font-black">حالة متقدمة: دفعة مقدمة لـ {advanceMonths} شهر!</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* Progress */}
+                <div className="relative z-10 mb-4">
+                  <div className="flex justify-between text-[10px] text-white/70 font-bold mb-1.5">
+                    <span>التقدم: {stats.progress.toFixed(1)}%</span>
+                    <span>الإجمالي: {fmt(inst.totalAmount)} د.ع</span>
+                  </div>
+                  <div className="h-2.5 bg-black/25 rounded-full overflow-hidden">
+                    <div className="h-full bg-white rounded-full transition-all" style={{ width: `${Math.min(100, stats.progress)}%` }} />
+                  </div>
+                  {inst.totalMonths && (
+                    <div className="text-[10px] text-white/50 mt-1">{stats.paidMonths} أشهر مدفوعة من {inst.totalMonths}</div>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="relative z-10 flex gap-2">
+                  {stats.computedRemaining > 0 && (
+                    <button onClick={() => handlePayInstallment(inst)}
+                      className="flex-1 bg-white text-gray-900 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-white/90 active:scale-95 transition shadow-sm">
+                      <Check className="w-3.5 h-3.5" /> دفع القسط
+                    </button>
+                  )}
+                  {inst.payments.length > 0 && (
+                    <button onClick={() => handleUndoInstallmentPayment(inst)}
+                      className="px-3 bg-white/15 rounded-xl text-xs font-bold hover:bg-white/25 active:scale-95 transition">
+                      تراجع
+                    </button>
+                  )}
+                  <button onClick={() => setShowInstallmentHistory(isHistory ? null : inst.id)}
+                    className="px-3 bg-white/15 rounded-xl text-xs font-bold hover:bg-white/25 active:scale-95 transition flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {inst.payments.length}
+                  </button>
+                </div>
+
+                {isHistory && inst.payments.length > 0 && (
+                  <div className="relative z-10 mt-3 border-t border-white/15 pt-3 space-y-1 max-h-40 overflow-y-auto">
+                    <p className="text-[10px] text-white/60 font-bold mb-2">سجل الدفعات ({inst.payments.length} دفعة)</p>
+                    {[...inst.payments].reverse().map((pay, pi) => (
+                      <div key={pi} className="flex justify-between text-[11px] bg-white/10 rounded-xl px-3 py-1.5">
+                        <span className="text-white/80 font-bold">{fmt(pay.amount)} د.ع</span>
+                        <span className="text-white/50">{new Date(pay.date).toLocaleString("ar-IQ", { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {isHistory && inst.payments.length === 0 && (
+                  <div className="relative z-10 mt-3 border-t border-white/15 pt-3 text-center text-[11px] text-white/50">لا توجد دفعات مسجلة</div>
+                )}
+              </div>
+            );
+          };
+
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-black text-gray-800 dark:text-white flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-indigo-500" />
+                  الأقساط والسلف
+                </h2>
+                <button onClick={() => setShowInstallmentModal(true)}
+                  className="bg-indigo-500 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-lg shadow-indigo-500/25 active:scale-95 transition">
+                  <Plus className="w-3.5 h-3.5" /> إضافة
+                </button>
+              </div>
+
+              {/* Filter Tabs */}
+              {installments.length > 0 && (
+                <div className="flex bg-gray-100 dark:bg-zinc-900 p-1 rounded-2xl gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setInstallmentFilter("active")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition ${
+                      installmentFilter === "active"
+                        ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    النشطة المستمرة ({activeInstallments.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInstallmentFilter("completed")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition ${
+                      installmentFilter === "completed"
+                        ? "bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    المنتهية / المسددة ({completedInstallments.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInstallmentFilter("all")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition ${
+                      installmentFilter === "all"
+                        ? "bg-white dark:bg-zinc-800 text-gray-800 dark:text-white shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    الكل ({installments.length})
+                  </button>
+                </div>
+              )}
+
+              {installments.length === 0 ? (
+                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
+                  <CreditCard className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-400 font-bold text-sm">لا توجد أقساط أو سلف مسجلة</p>
+                </div>
+              ) : installmentFilter === "completed" ? (
+                completedInstallments.length === 0 ? (
+                  <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
+                    <p className="text-gray-400 font-bold text-sm">لا توجد أقساط أو سلف منتهية حتى الآن</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {completedInstallments.map((inst, idx) => renderSingleInstallment(inst, idx, true))}
+                  </div>
+                )
+              ) : installmentFilter === "all" ? (
+                <div className="space-y-4">
+                  {activeInstallments.map((inst, idx) => renderSingleInstallment(inst, idx, false))}
+                  {completedInstallments.length > 0 && (
+                    <div className="pt-4 border-t border-gray-200 dark:border-zinc-800 space-y-3">
+                      <div className="text-xs font-black text-gray-400 flex items-center gap-1.5 px-1">
+                        <span>✅</span>
+                        <span>الأقساط والسلف المنتهية بالكامل ({completedInstallments.length}):</span>
+                      </div>
+                      {completedInstallments.map((inst, idx) => renderSingleInstallment(inst, idx, true))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Default "active" view */
+                <div className="space-y-4">
+                  {activeInstallments.length === 0 ? (
+                    <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-3xl p-8 text-center">
+                      <span className="text-4xl block mb-2">🎉</span>
+                      <h4 className="font-black text-emerald-800 dark:text-emerald-300 text-base">لا توجد أي أقساط أو سلف مستمرة!</h4>
+                      <p className="text-xs font-bold text-emerald-600/80 dark:text-emerald-400 mt-1">جميع الأقساط والسلف مسددة بالكامل بنجاح</p>
+                    </div>
+                  ) : (
+                    activeInstallments.map((inst, idx) => renderSingleInstallment(inst, idx, false))
+                  )}
+
+                  {/* Finished / Completed Section at Bottom with faded look */}
+                  {completedInstallments.length > 0 && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowCompletedInstallments(prev => !prev)}
+                        className="w-full py-2.5 px-4 rounded-2xl bg-gray-100/80 dark:bg-zinc-900/80 hover:bg-gray-200/80 dark:hover:bg-zinc-800/80 text-xs font-black text-gray-500 dark:text-gray-400 flex items-center justify-between transition border border-gray-200/60 dark:border-zinc-800/60 active:scale-[0.99]"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span>✅</span>
+                          <span>الأقساط والسلف المنتهية بالكامل</span>
+                          <span className="text-[10px] bg-gray-200 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-bold">({completedInstallments.length})</span>
+                        </span>
+                        <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                          {showCompletedInstallments ? "إخفاء ▲" : "عرض بالأسفل (ظل خافت) ▼"}
+                        </span>
+                      </button>
+                      {showCompletedInstallments && (
+                        <div className="space-y-3 mt-3">
+                          {completedInstallments.map((inst, idx) => renderSingleInstallment(inst, idx, true))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ═══════════════ NEEDS TAB ═══════════════ */}
         {activeTab === "needs" && (
@@ -5356,214 +5563,427 @@ setEditTrip(null);
         )}
 
         {/* ═══════════════ DEBTS TAB ═══════════════ */}
-        {activeTab === "debts" && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="font-black text-gray-800 dark:text-white flex items-center gap-2">
-                <Banknote className="w-5 h-5 text-indigo-500" />
-                الديون والفائض
-              </h2>
-              <button onClick={() => setShowDebtModal(true)}
-                className="bg-indigo-500 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-lg shadow-indigo-500/25 active:scale-95 transition">
-                <Plus className="w-3.5 h-3.5" /> إضافة
-              </button>
-            </div>
+        {activeTab === "debts" && (() => {
+          const getDebtStats = (debt: Debt) => {
+            const isVirtualCake = debt.id === "virtual-cake-debt";
             
-            {effectiveDebts.length === 0 ? (
-              <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
-                <Banknote className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-400 font-bold text-sm">لا توجد ديون أو فائض مسجل</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {[...effectiveDebts].sort((a, b) => b.date.localeCompare(a.date)).map(debt => {
-                  const isVirtualCake = debt.id === "virtual-cake-debt";
-                  
-                  const paidOnMe = debt.payments
-                    .filter(p => p.type === "دين علي" || (!p.type && debt.type === "دين علي"))
-                    .reduce((s, p) => s + p.amount, 0);
+            const paidOnMe = debt.payments
+              .filter(p => p.type === "دين علي" || (!p.type && debt.type === "دين علي"))
+              .reduce((s, p) => s + p.amount, 0);
 
-                  const paidForMe = debt.payments
-                    .filter(p => p.type === "دين لي" || (!p.type && debt.type === "دين لي"))
-                    .reduce((s, p) => s + p.amount, 0);
+            const paidForMe = debt.payments
+              .filter(p => p.type === "دين لي" || (!p.type && debt.type === "دين لي"))
+              .reduce((s, p) => s + p.amount, 0);
 
-                  const net = debt.type === "دين علي"
-                    ? (debt.amount - paidOnMe) + paidForMe
-                    : (debt.amount - paidForMe) + paidOnMe;
+            const net = debt.type === "دين علي"
+              ? (debt.amount - paidOnMe) + paidForMe
+              : (debt.amount - paidForMe) + paidOnMe;
 
-                  const isPaid = net <= 0;
-                  const isOwedToMe = debt.type === "دين لي";
-                  const c = isOwedToMe 
-                    ? { bg: "bg-emerald-500", text: "text-emerald-500", border: "border-emerald-200 dark:border-emerald-800/50", lightBg: "bg-emerald-50 dark:bg-emerald-900/20" }
-                    : { bg: "bg-rose-500", text: "text-rose-500", border: "border-rose-200 dark:border-rose-800/50", lightBg: "bg-rose-50 dark:bg-rose-900/20" };
-                  
-                  return (
-                    <div key={debt.id} className={`bg-white dark:bg-zinc-900 rounded-3xl p-3 sm:p-4 border ${isPaid ? "border-gray-200/80 dark:border-zinc-800 opacity-85" : c.border} shadow-sm overflow-hidden relative flex flex-col justify-between transition-all min-h-[260px]`}>
-                      <div>
-                        {/* Header */}
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-1 flex-wrap">
-                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg ${c.lightBg} ${c.text}`}>
-                              {debt.type === "دين لي" ? "دين لي (أطلب)" : "دين عليّ (مطلوب)"}
-                            </span>
-                            {isPaid && (
-                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
-                                خالص ✅
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[9px] text-gray-400 font-bold">{new Date(debt.date).toLocaleDateString("ar-IQ")}</span>
-                        </div>
+            const isPaid = net <= 0;
+            const isOwedToMe = debt.type === "دين لي";
+            const c = isOwedToMe 
+              ? { bg: "bg-emerald-500", text: "text-emerald-500", border: "border-emerald-200 dark:border-emerald-800/50", lightBg: "bg-emerald-50 dark:bg-emerald-900/20" }
+              : { bg: "bg-rose-500", text: "text-rose-500", border: "border-rose-200 dark:border-rose-800/50", lightBg: "bg-rose-50 dark:bg-rose-900/20" };
 
-                        {/* Person & Initial Amount */}
-                        <div className="mb-2">
-                          <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base truncate" title={debt.person}>{debt.person}</h3>
-                          <div className="flex items-center justify-between mt-0.5">
-                            <span className="text-[9px] text-gray-400 font-bold">المبلغ الأساسي:</span>
-                            <span className="font-black text-xs text-gray-700 dark:text-gray-200">{fmt(debt.amount)} <span className="text-[8px] text-gray-400">د.ع</span></span>
-                          </div>
-                        </div>
+            return { isVirtualCake, paidOnMe, paidForMe, net, isPaid, isOwedToMe, c };
+          };
 
-                        {/* Center Box: Financial Balance in Compact Square format */}
-                        {!!debt.monthlyInstallment && !!debt.totalMonths ? (
-                          <div className="grid grid-cols-2 gap-1.5 mb-2.5">
-                            <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-xl p-1.5 text-center">
-                              <div className="text-[8px] text-gray-500 font-bold">القسط</div>
-                              <div className="font-black text-gray-700 dark:text-gray-300 text-[10px] sm:text-xs">{fmt(debt.monthlyInstallment)}</div>
-                            </div>
-                            <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-1.5 text-center">
-                              <div className="text-[8px] text-emerald-600 dark:text-emerald-500 font-bold">المسدد</div>
-                              <div className="font-black text-emerald-600 dark:text-emerald-500 text-[10px] sm:text-xs">{fmt(debt.type === "دين علي" ? paidOnMe : paidForMe)}</div>
-                            </div>
-                            <div className="bg-rose-50 dark:bg-rose-900/10 rounded-xl p-1.5 text-center col-span-2">
-                              <div className="text-[8px] text-rose-600 dark:text-rose-500 font-bold">المتبقي الصافي</div>
-                              <div className="font-black text-rose-600 dark:text-rose-500 text-xs sm:text-sm">{fmt(Math.max(0, net))} د.ع</div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="bg-gray-50/80 dark:bg-zinc-800/50 rounded-2xl p-2 mb-2.5 border border-gray-100 dark:border-zinc-800/80">
-                            <div className="flex justify-between items-center text-[9px] pb-1.5 mb-1.5 border-b border-gray-200/50 dark:border-zinc-700/50">
-                              <span className="text-gray-500 dark:text-gray-400 font-bold">
-                                {debt.type === "دين علي" ? "المسدد الإجمالي:" : "المقبوض الإجمالي:"}
-                              </span>
-                              <span className="font-black text-emerald-600 dark:text-emerald-400 text-[10px]">
-                                {fmt(debt.type === "دين علي" ? paidOnMe : paidForMe)} د.ع
-                              </span>
-                            </div>
-                            
-                            {/* Net Balance Status */}
-                            <div className="text-center pt-0.5">
-                              <span className="text-[8px] font-bold text-gray-400 block mb-0.5">صافي الحساب:</span>
-                              <div className="font-black text-xs leading-tight">
-                                {net > 0 ? (
-                                  debt.type === "دين علي" ? (
-                                    <span className="text-rose-600 dark:text-rose-400">بذمتك له: {fmt(net)} د.ع</span>
-                                  ) : (
-                                    <span className="text-emerald-600 dark:text-emerald-400">بذمته لك: {fmt(net)} د.ع</span>
-                                  )
-                                ) : net === 0 ? (
-                                  <span className="text-emerald-500 dark:text-emerald-400 text-[11px]">خالص تماماً (0 د.ع) ✅</span>
-                                ) : (
-                                  debt.type === "دين علي" ? (
-                                    <span className="text-emerald-600 dark:text-emerald-400 text-[11px]">تطلبه بالصافي: {fmt(Math.abs(net))} 🟢</span>
-                                  ) : (
-                                    <span className="text-rose-600 dark:text-rose-400 text-[11px]">يطلبك بالصافي: {fmt(Math.abs(net))} 🔴</span>
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          </div>
+          const activeDebts = [...effectiveDebts]
+            .filter(d => !getDebtStats(d).isPaid)
+            .sort((a, b) => b.date.localeCompare(a.date));
+
+          const completedDebts = [...effectiveDebts]
+            .filter(d => getDebtStats(d).isPaid)
+            .sort((a, b) => b.date.localeCompare(a.date));
+
+          const renderSingleDebt = (debt: Debt, isCompleted: boolean) => {
+            const { isVirtualCake, paidOnMe, paidForMe, net, isPaid, isOwedToMe, c } = getDebtStats(debt);
+
+            if (isCompleted) {
+              return (
+                <div 
+                  key={debt.id} 
+                  className="bg-slate-100/90 dark:bg-zinc-900/90 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-3 sm:p-4 text-slate-800 dark:text-zinc-200 shadow-sm opacity-50 hover:opacity-100 grayscale-[0.6] hover:grayscale-0 relative overflow-hidden transition-all duration-300 min-h-[260px] flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Header */}
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-lg bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                          {debt.type === "دين لي" ? "دين لي (أطلب)" : "دين عليّ (مطلوب)"}
+                        </span>
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300/50">
+                          ✅ خالص ومسدد
+                        </span>
+                      </div>
+                      <span className="text-[9px] text-gray-400 font-bold">{new Date(debt.date).toLocaleDateString("ar-IQ")}</span>
+                    </div>
+
+                    {/* Person & Initial Amount */}
+                    <div className="mb-2">
+                      <h3 className="font-black line-through text-slate-500 dark:text-zinc-400 text-sm sm:text-base truncate" title={debt.person}>{debt.person}</h3>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-[9px] text-gray-400 font-bold">المبلغ الأساسي:</span>
+                        <span className="font-black text-xs text-gray-500 dark:text-zinc-400 line-through">{fmt(debt.amount)} <span className="text-[8px] text-gray-400">د.ع</span></span>
+                      </div>
+                    </div>
+
+                    {/* Center Box: Settled Status */}
+                    <div className="bg-white/80 dark:bg-zinc-800/60 rounded-2xl p-2.5 mb-2.5 border border-slate-200 dark:border-zinc-700/60 text-center">
+                      <span className="text-[9px] font-bold text-gray-400 block mb-0.5">حالة الحساب النهائية:</span>
+                      <div className="font-black text-xs text-emerald-600 dark:text-emerald-400">
+                        {net === 0 ? "خالص تماماً (0 د.ع) ✅" : net < 0 ? (
+                          debt.type === "دين علي" ? `فائض لصالحك: ${fmt(Math.abs(net))} د.ع 🟢` : `فائض لصالحه: ${fmt(Math.abs(net))} د.ع 🔴`
+                        ) : "مسدد ✅"}
+                      </div>
+                      <div className="text-[9px] text-gray-400 font-bold mt-1">
+                        إجمالي {debt.type === "دين علي" ? "المسدد" : "المقبوض"}: {fmt(debt.type === "دين علي" ? paidOnMe : paidForMe)} د.ع
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions & History */}
+                  <div>
+                    <div className="flex items-center justify-between pt-1.5 border-t border-gray-200 dark:border-zinc-800 text-[9px]">
+                      <div className="flex items-center gap-1">
+                        {!isVirtualCake && (
+                          <>
+                            <button onClick={() => { setEditDebt(debt); setShowDebtModal(true); }} className="p-1 bg-white dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition text-gray-500" title="تعديل">
+                              <Edit2 className="w-2.5 h-2.5" />
+                            </button>
+                            <button onClick={() => handleDeleteDebt(debt.id)} className="p-1 bg-white dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition text-gray-500" title="حذف">
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </>
+                        )}
+                        {debt.payments.length > 0 && (
+                          <button onClick={() => setShowDebtHistory(showDebtHistory === debt.id ? null : debt.id)} className="px-1.5 py-0.5 bg-white dark:bg-zinc-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition text-gray-600 dark:text-gray-300 font-bold text-[9px]">
+                            {showDebtHistory === debt.id ? "إخفاء" : `سجل (${debt.payments.length})`}
+                          </button>
                         )}
                       </div>
+
+                      {debt.payments.length > 0 && !isVirtualCake && (
+                        <button onClick={() => handleUndoDebtPayment(debt)}
+                          className="bg-white hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[9px] font-bold px-1.5 py-0.5 rounded-lg active:scale-95 transition"
+                          title="تراجع عن آخر دفعة">
+                          تراجع ↩️
+                        </button>
+                      )}
+                    </div>
+
+                    {showDebtHistory === debt.id && debt.payments.length > 0 && (
+                      <div className="mt-2 rounded-xl p-2 bg-white dark:bg-zinc-800/80 max-h-32 overflow-y-auto space-y-1 border border-slate-200 dark:border-zinc-800">
+                        <div className="text-[9px] font-bold text-gray-500 mb-0.5 px-0.5">سجل التسديدات ({debt.payments.length}):</div>
+                        {[...debt.payments].reverse().map((pay, pi) => {
+                          const isPayForMe = pay.type ? pay.type === "دين لي" : debt.type === "دين لي";
+                          return (
+                            <div key={pi} className="flex justify-between items-center text-[9px] bg-slate-50 dark:bg-zinc-900 rounded-lg px-2 py-1 border border-gray-100 dark:border-zinc-800 shadow-xs">
+                              <div className="flex items-center gap-1 font-bold">
+                                <span className={`px-1 py-0.2 rounded text-[7px] font-black ${isPayForMe ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400'}`}>
+                                  {isPayForMe ? 'قبض' : 'دفع'}
+                                </span>
+                                <span className="text-gray-800 dark:text-gray-200">{fmt(pay.amount)} د.ع</span>
+                              </div>
+                              <span className="text-gray-400 text-[8px]">{new Date(pay.date).toLocaleDateString("ar-IQ")}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={debt.id} className={`bg-white dark:bg-zinc-900 rounded-3xl p-3 sm:p-4 border ${c.border} shadow-sm overflow-hidden relative flex flex-col justify-between transition-all min-h-[260px]`}>
+                <div>
+                  {/* Header */}
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg ${c.lightBg} ${c.text}`}>
+                        {debt.type === "دين لي" ? "دين لي (أطلب)" : "دين عليّ (مطلوب)"}
+                      </span>
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-bold">{new Date(debt.date).toLocaleDateString("ar-IQ")}</span>
+                  </div>
+
+                  {/* Person & Initial Amount */}
+                  <div className="mb-2">
+                    <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base truncate" title={debt.person}>{debt.person}</h3>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <span className="text-[9px] text-gray-400 font-bold">المبلغ الأساسي:</span>
+                      <span className="font-black text-xs text-gray-700 dark:text-gray-200">{fmt(debt.amount)} <span className="text-[8px] text-gray-400">د.ع</span></span>
+                    </div>
+                  </div>
+
+                  {/* Center Box: Financial Balance */}
+                  {!!debt.monthlyInstallment && !!debt.totalMonths ? (
+                    <div className="grid grid-cols-2 gap-1.5 mb-2.5">
+                      <div className="bg-gray-50 dark:bg-zinc-800/50 rounded-xl p-1.5 text-center">
+                        <div className="text-[8px] text-gray-500 font-bold">القسط</div>
+                        <div className="font-black text-gray-700 dark:text-gray-300 text-[10px] sm:text-xs">{fmt(debt.monthlyInstallment)}</div>
+                      </div>
+                      <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-1.5 text-center">
+                        <div className="text-[8px] text-emerald-600 dark:text-emerald-500 font-bold">المسدد</div>
+                        <div className="font-black text-emerald-600 dark:text-emerald-500 text-[10px] sm:text-xs">{fmt(debt.type === "دين علي" ? paidOnMe : paidForMe)}</div>
+                      </div>
+                      <div className="bg-rose-50 dark:bg-rose-900/10 rounded-xl p-1.5 text-center col-span-2">
+                        <div className="text-[8px] text-rose-600 dark:text-rose-500 font-bold">المتبقي الصافي</div>
+                        <div className="font-black text-rose-600 dark:text-rose-500 text-xs sm:text-sm">{fmt(Math.max(0, net))} د.ع</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50/80 dark:bg-zinc-800/50 rounded-2xl p-2 mb-2.5 border border-gray-100 dark:border-zinc-800/80">
+                      <div className="flex justify-between items-center text-[9px] pb-1.5 mb-1.5 border-b border-gray-200/50 dark:border-zinc-700/50">
+                        <span className="text-gray-500 dark:text-gray-400 font-bold">
+                          {debt.type === "دين علي" ? "المسدد الإجمالي:" : "المقبوض الإجمالي:"}
+                        </span>
+                        <span className="font-black text-emerald-600 dark:text-emerald-400 text-[10px]">
+                          {fmt(debt.type === "دين علي" ? paidOnMe : paidForMe)} د.ع
+                        </span>
+                      </div>
                       
-                      {/* Dual Settlement Buttons */}
-                      <div>
-                        {isVirtualCake ? (
-                          !isPaid && (
-                            <button onClick={() => handlePayDebt(debt)}
-                              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-black py-2 rounded-xl active:scale-95 transition shadow-sm flex items-center justify-center gap-1">
-                              <Check className="w-3.5 h-3.5" /> تسديد دين الكيك
-                            </button>
-                          )
-                        ) : (
-                          <div className="grid grid-cols-2 gap-1.5 pt-1.5 border-t border-gray-100 dark:border-zinc-800">
-                            <button 
-                              type="button"
-                              onClick={() => handlePayDebt(debt, "دين علي")}
-                              className="w-full bg-rose-500 hover:bg-rose-600 active:scale-95 text-white text-[10px] font-black py-1.5 px-1 rounded-xl transition shadow-xs flex items-center justify-center gap-1"
-                              title="تسديد دين عليّ (دفع نقود من جيبي - يُسجل كمصروف)"
-                            >
-                              <span>دفع (عليّ)</span>
-                            </button>
-
-                            <button 
-                              type="button"
-                              onClick={() => handlePayDebt(debt, "دين لي")}
-                              className="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-[10px] font-black py-1.5 px-1 rounded-xl transition shadow-xs flex items-center justify-center gap-1"
-                              title="تسديد دين لي (استلام نقود في جيبي - يُسجل كدخل)"
-                            >
-                              <span>قبض (لي)</span>
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Bottom Actions Bar */}
-                        <div className="flex items-center justify-between pt-1.5 mt-1.5 border-t border-gray-100 dark:border-zinc-800 text-[9px]">
-                          <div className="flex items-center gap-1">
-                            {!isVirtualCake && (
-                              <>
-                                <button onClick={() => { setEditDebt(debt); setShowDebtModal(true); }} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition text-gray-500" title="تعديل">
-                                  <Edit2 className="w-2.5 h-2.5" />
-                                </button>
-                                <button onClick={() => handleDeleteDebt(debt.id)} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition text-gray-500" title="حذف">
-                                  <Trash2 className="w-2.5 h-2.5" />
-                                </button>
-                              </>
-                            )}
-                            {debt.payments.length > 0 && (
-                              <button onClick={() => setShowDebtHistory(showDebtHistory === debt.id ? null : debt.id)} className="px-1.5 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition text-gray-600 dark:text-gray-300 font-bold text-[9px]">
-                                {showDebtHistory === debt.id ? "إخفاء" : `سجل (${debt.payments.length})`}
-                              </button>
-                            )}
-                          </div>
-
-                          {debt.payments.length > 0 && !isVirtualCake && (
-                            <button onClick={() => handleUndoDebtPayment(debt)}
-                              className="bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[9px] font-bold px-1.5 py-0.5 rounded-lg active:scale-95 transition"
-                              title="تراجع عن آخر دفعة">
-                              تراجع ↩️
-                            </button>
+                      {/* Net Balance Status */}
+                      <div className="text-center pt-0.5">
+                        <span className="text-[8px] font-bold text-gray-400 block mb-0.5">صافي الحساب:</span>
+                        <div className="font-black text-xs leading-tight">
+                          {net > 0 ? (
+                            debt.type === "دين علي" ? (
+                              <span className="text-rose-600 dark:text-rose-400">بذمتك له: {fmt(net)} د.ع</span>
+                            ) : (
+                              <span className="text-emerald-600 dark:text-emerald-400">بذمته لك: {fmt(net)} د.ع</span>
+                            )
+                          ) : net === 0 ? (
+                            <span className="text-emerald-500 dark:text-emerald-400 text-[11px]">خالص تماماً (0 د.ع) ✅</span>
+                          ) : (
+                            debt.type === "دين علي" ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 text-[11px]">تطلبه بالصافي: {fmt(Math.abs(net))} 🟢</span>
+                            ) : (
+                              <span className="text-rose-600 dark:text-rose-400 text-[11px]">يطلبك بالصافي: {fmt(Math.abs(net))} 🔴</span>
+                            )
                           )}
                         </div>
                       </div>
-                      
-                      {/* Payment History Expandable List */}
-                      {showDebtHistory === debt.id && debt.payments.length > 0 && (
-                        <div className="mt-2 rounded-xl p-2 bg-gray-50 dark:bg-zinc-800/80 max-h-32 overflow-y-auto space-y-1 border border-gray-100 dark:border-zinc-800">
-                          <div className="text-[9px] font-bold text-gray-500 mb-0.5 px-0.5">سجل التسديدات ({debt.payments.length}):</div>
-                          {[...debt.payments].reverse().map((pay, pi) => {
-                            const isPayForMe = pay.type ? pay.type === "دين لي" : debt.type === "دين لي";
-                            return (
-                              <div key={pi} className="flex justify-between items-center text-[9px] bg-white dark:bg-zinc-900 rounded-lg px-2 py-1 border border-gray-100 dark:border-zinc-800 shadow-xs">
-                                <div className="flex items-center gap-1 font-bold">
-                                  <span className={`px-1 py-0.2 rounded text-[7px] font-black ${isPayForMe ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400'}`}>
-                                    {isPayForMe ? 'قبض' : 'دفع'}
-                                  </span>
-                                  <span className="text-gray-800 dark:text-gray-200">{fmt(pay.amount)} د.ع</span>
-                                </div>
-                                <span className="text-gray-400 text-[8px]">{new Date(pay.date).toLocaleDateString("ar-IQ")}</span>
-                              </div>
-                            );
-                          })}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Dual Settlement Buttons */}
+                <div>
+                  {isVirtualCake ? (
+                    !isPaid && (
+                      <button onClick={() => handlePayDebt(debt)}
+                        className="w-full bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-black py-2 rounded-xl active:scale-95 transition shadow-sm flex items-center justify-center gap-1">
+                        <Check className="w-3.5 h-3.5" /> تسديد دين الكيك
+                      </button>
+                    )
+                  ) : (
+                    <div className="grid grid-cols-2 gap-1.5 pt-1.5 border-t border-gray-100 dark:border-zinc-800">
+                      <button 
+                        type="button"
+                        onClick={() => handlePayDebt(debt, "دين علي")}
+                        className="w-full bg-rose-500 hover:bg-rose-600 active:scale-95 text-white text-[10px] font-black py-1.5 px-1 rounded-xl transition shadow-xs flex items-center justify-center gap-1"
+                        title="تسديد دين عليّ (دفع نقود من جيبي - يُسجل كمصروف)"
+                      >
+                        <span>دفع (عليّ)</span>
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={() => handlePayDebt(debt, "دين لي")}
+                        className="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-[10px] font-black py-1.5 px-1 rounded-xl transition shadow-xs flex items-center justify-center gap-1"
+                        title="تسديد دين لي (استلام نقود في جيبي - يُسجل كدخل)"
+                      >
+                        <span>قبض (لي)</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Bottom Actions Bar */}
+                  <div className="flex items-center justify-between pt-1.5 mt-1.5 border-t border-gray-100 dark:border-zinc-800 text-[9px]">
+                    <div className="flex items-center gap-1">
+                      {!isVirtualCake && (
+                        <>
+                          <button onClick={() => { setEditDebt(debt); setShowDebtModal(true); }} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition text-gray-500" title="تعديل">
+                            <Edit2 className="w-2.5 h-2.5" />
+                          </button>
+                          <button onClick={() => handleDeleteDebt(debt.id)} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition text-gray-500" title="حذف">
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </button>
+                        </>
+                      )}
+                      {debt.payments.length > 0 && (
+                        <button onClick={() => setShowDebtHistory(showDebtHistory === debt.id ? null : debt.id)} className="px-1.5 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition text-gray-600 dark:text-gray-300 font-bold text-[9px]">
+                          {showDebtHistory === debt.id ? "إخفاء" : `سجل (${debt.payments.length})`}
+                        </button>
+                      )}
+                    </div>
+
+                    {debt.payments.length > 0 && !isVirtualCake && (
+                      <button onClick={() => handleUndoDebtPayment(debt)}
+                        className="bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[9px] font-bold px-1.5 py-0.5 rounded-lg active:scale-95 transition"
+                        title="تراجع عن آخر دفعة">
+                        تراجع ↩️
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Payment History Expandable List */}
+                {showDebtHistory === debt.id && debt.payments.length > 0 && (
+                  <div className="mt-2 rounded-xl p-2 bg-gray-50 dark:bg-zinc-800/80 max-h-32 overflow-y-auto space-y-1 border border-gray-100 dark:border-zinc-800">
+                    <div className="text-[9px] font-bold text-gray-500 mb-0.5 px-0.5">سجل التسديدات ({debt.payments.length}):</div>
+                    {[...debt.payments].reverse().map((pay, pi) => {
+                      const isPayForMe = pay.type ? pay.type === "دين لي" : debt.type === "دين لي";
+                      return (
+                        <div key={pi} className="flex justify-between items-center text-[9px] bg-white dark:bg-zinc-900 rounded-lg px-2 py-1 border border-gray-100 dark:border-zinc-800 shadow-xs">
+                          <div className="flex items-center gap-1 font-bold">
+                            <span className={`px-1 py-0.2 rounded text-[7px] font-black ${isPayForMe ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400'}`}>
+                              {isPayForMe ? 'قبض' : 'دفع'}
+                            </span>
+                            <span className="text-gray-800 dark:text-gray-200">{fmt(pay.amount)} د.ع</span>
+                          </div>
+                          <span className="text-gray-400 text-[8px]">{new Date(pay.date).toLocaleDateString("ar-IQ")}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          };
+
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-black text-gray-800 dark:text-white flex items-center gap-2">
+                  <Banknote className="w-5 h-5 text-indigo-500" />
+                  الديون والفائض
+                </h2>
+                <button onClick={() => setShowDebtModal(true)}
+                  className="bg-indigo-500 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-lg shadow-indigo-500/25 active:scale-95 transition">
+                  <Plus className="w-3.5 h-3.5" /> إضافة
+                </button>
+              </div>
+
+              {/* Filter Tabs */}
+              {effectiveDebts.length > 0 && (
+                <div className="flex bg-gray-100 dark:bg-zinc-900 p-1 rounded-2xl gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setDebtFilter("active")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition ${
+                      debtFilter === "active"
+                        ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    الديون المستمرة ({activeDebts.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDebtFilter("completed")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition ${
+                      debtFilter === "completed"
+                        ? "bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    الخالصة والمسددة ({completedDebts.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDebtFilter("all")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition ${
+                      debtFilter === "all"
+                        ? "bg-white dark:bg-zinc-800 text-gray-800 dark:text-white shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    الكل ({effectiveDebts.length})
+                  </button>
+                </div>
+              )}
+
+              {effectiveDebts.length === 0 ? (
+                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
+                  <Banknote className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-400 font-bold text-sm">لا توجد ديون أو فائض مسجل</p>
+                </div>
+              ) : debtFilter === "completed" ? (
+                completedDebts.length === 0 ? (
+                  <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
+                    <p className="text-gray-400 font-bold text-sm">لا توجد ديون خالصة حتى الآن</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {completedDebts.map(debt => renderSingleDebt(debt, true))}
+                  </div>
+                )
+              ) : debtFilter === "all" ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {activeDebts.map(debt => renderSingleDebt(debt, false))}
+                  </div>
+                  {completedDebts.length > 0 && (
+                    <div className="pt-4 border-t border-gray-200 dark:border-zinc-800 space-y-3">
+                      <div className="text-xs font-black text-gray-400 flex items-center gap-1.5 px-1">
+                        <span>✅</span>
+                        <span>الديون الخالصة والمسددة بالكامل ({completedDebts.length}):</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {completedDebts.map(debt => renderSingleDebt(debt, true))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Default "active" view */
+                <div className="space-y-4">
+                  {activeDebts.length === 0 ? (
+                    <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-3xl p-8 text-center">
+                      <span className="text-4xl block mb-2">🎉</span>
+                      <h4 className="font-black text-emerald-800 dark:text-emerald-300 text-base">لا توجد أي ديون مستمرة!</h4>
+                      <p className="text-xs font-bold text-emerald-600/80 dark:text-emerald-400 mt-1">جميع الديون والفائض خالصة ومسددة بالكامل</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {activeDebts.map(debt => renderSingleDebt(debt, false))}
+                    </div>
+                  )}
+
+                  {/* Finished / Settled Debts Section at Bottom with faded look */}
+                  {completedDebts.length > 0 && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowCompletedDebts(prev => !prev)}
+                        className="w-full py-2.5 px-4 rounded-2xl bg-gray-100/80 dark:bg-zinc-900/80 hover:bg-gray-200/80 dark:hover:bg-zinc-800/80 text-xs font-black text-gray-500 dark:text-gray-400 flex items-center justify-between transition border border-gray-200/60 dark:border-zinc-800/60 active:scale-[0.99]"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span>✅</span>
+                          <span>الديون الخالصة والمسددة</span>
+                          <span className="text-[10px] bg-gray-200 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-bold">({completedDebts.length})</span>
+                        </span>
+                        <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                          {showCompletedDebts ? "إخفاء ▲" : "عرض بالأسفل (ظل خافت) ▼"}
+                        </span>
+                      </button>
+
+                      {showCompletedDebts && (
+                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
+                          {completedDebts.map(debt => renderSingleDebt(debt, true))}
                         </div>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ═══════════════ INVENTORY TABS ═══════════════ */}
         {["inventory", "car", "travel"].includes(activeTab) && (() => {
@@ -7402,6 +7822,24 @@ setEditTrip(null);
                         <span>🥗 ترتيب حسب الأولوية</span>
                       </button>
                     )}
+                    <button 
+                      type="button" 
+                      onClick={() => receiptCameraInputRef.current?.click()}
+                      className="text-xs flex items-center gap-1 text-purple-700 dark:text-purple-300 font-black bg-purple-50 dark:bg-purple-900/30 px-2.5 py-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/50 transition active:scale-95 border border-purple-200/60 dark:border-purple-800/40 cursor-pointer"
+                      title="مسح وصل إضافي بالكاميرا ودمجه تلقائياً مع القائمة الحالية دون إرفاق الصورة"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                      <span>+ وصل كاميرا 📸</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => receiptGalleryInputRef.current?.click()}
+                      className="text-xs flex items-center gap-1 text-pink-700 dark:text-pink-300 font-black bg-pink-50 dark:bg-pink-900/30 px-2.5 py-1.5 rounded-xl hover:bg-pink-100 dark:hover:bg-pink-900/50 transition active:scale-95 border border-pink-200/60 dark:border-pink-800/40 cursor-pointer"
+                      title="مسح وصل إضافي من الاستوديو ودمجه تلقائياً مع القائمة الحالية دون إرفاق الصورة"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" />
+                      <span>+ وصل استوديو 🖼️</span>
+                    </button>
                     <button 
                       type="button" 
                       onClick={() => {

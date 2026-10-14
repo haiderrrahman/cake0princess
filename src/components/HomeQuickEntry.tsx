@@ -287,16 +287,19 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
       setScanStatusText(files.length > 1 ? `جاري قراءة واستخراج البيانات من ${files.length} صور بالذكاء الاصطناعي 🧠...` : "جاري قراءة واستخراج بيانات الفاتورة بالذكاء الاصطناعي 🧠...");
 
       const dataUrls = await Promise.all(files.map(f => compressImageFast(f, 1200, 0.8)));
-      setAttachedReceiptImages(prev => [...prev, ...dataUrls]);
+      // Note: We DO NOT attach scanned images per user request:
+      // "والصورة مال فاتورة الي اضيفها ما اريد ترفقها يعني بس ياخذ بياناتها وميرفقها"
       const data = await scanReceiptWithGemini(dataUrls, (status) => setScanStatusText(status));
 
-      if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
-        setExpName(data.storeName);
-      } else if (!expName || expName === "غير محدد") {
-        setExpName("تعاون ماركت");
+      if (!expName.trim() || expName === "غير محدد") {
+        if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
+          setExpName(data.storeName);
+        } else {
+          setExpName("تعاون ماركت");
+        }
       }
 
-      if (data.category) {
+      if (data.category && (!expCategory || expCategory === "سوبر ماركت")) {
         setExpCategory(data.category);
       }
 
@@ -322,19 +325,28 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
 
       if (Array.isArray(data.items) && data.items.length > 0) {
         const formattedItems = data.items.map((it: any, idx: number) => ({
-          id: it.id || `item-${Date.now()}-${idx}`,
+          id: it.id || `item-${Date.now()}-${idx}-${Math.random().toString(36).substring(7)}`,
           name: it.name || "",
           quantity: Number(it.quantity) || 1,
           price: Number(it.price) || 0,
           category: it.category || detectProductCategory(it.name || ""),
           place: it.place || (data.storeName && data.storeName !== "غير محدد" ? data.storeName : "سوبر ماركت")
         }));
-        setExpenseItems(formattedItems);
-        const sum = formattedItems.reduce((acc, curr) => acc + (curr.price || 0), 0);
-        setExpAmount(sum.toString());
-      }
 
-      toast.success(`تم استخراج ${data.items?.length || 0} مادة وتعبئة بيانات الفاتورة بنجاح! ⚡✨`);
+        const existingValid = expenseItems.filter(it => (it.name || "").trim() !== "" || (Number(it.price) || 0) > 0);
+        if (existingValid.length > 0) {
+          const combined = [...existingValid, ...formattedItems];
+          setExpenseItems(combined);
+          const sum = combined.reduce((acc, curr) => acc + (curr.price || 0), 0);
+          setExpAmount(sum.toString());
+          toast.success(`تم دمج وإضافة ${formattedItems.length} مواد جديدة مع القائمة السابقة! ⚡✨`);
+        } else {
+          setExpenseItems(formattedItems);
+          const sum = formattedItems.reduce((acc, curr) => acc + (curr.price || 0), 0);
+          setExpAmount(sum.toString());
+          toast.success(`تم استخراج ${formattedItems.length} مادة وتعبئة بيانات الفاتورة بنجاح! ⚡✨`);
+        }
+      }
     } catch (err: any) {
       console.error("Receipt scan failed:", err);
       toast.error(err.message || "حدث خطأ أثناء مسح الفاتورة");
