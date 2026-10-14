@@ -823,3 +823,87 @@ export function getWarrantyStatus(expiryDateStr?: string): {
     badgeClass: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200"
   };
 }
+
+export interface ItemNatureClassification {
+  type: "discretionary" | "essential" | "neutral";
+  reason: string;
+  badge: string;
+  colorClass: string;
+  lightBg: string;
+}
+
+export function classifyItemNature(name: string, category?: string): ItemNatureClassification {
+  const n = (name || "").toLowerCase().trim();
+  const cat = (category || "").toLowerCase().trim();
+
+  // 1. Definite Discretionary / Snacks / Sweets / Fast Foods / Waste Leaks
+  const snackKeywords = [
+    "شيبس", "جبس", "ليز", "شيتوس", "دوريتوس", "برينجلز", "كرات الجبن", "فشار", "بفك",
+    "شوكولاته", "نوتيلا", "كت كات", "سنيكرز", "تويكس", "مارس", "كندر", "جالكسي", "مورو", "باونتي",
+    "بسكويت محشى", "ويفر", "كيك جاهز", "دونات", "كرواسون شوكولا", "حلاوة", "حلقوم", "مصاص", "علك", "سكاكر", "مارشميلو",
+    "بيبسي", "كوكاكولا", "سفن اب", "ميراندا", "فانتا", "ماونتن ديو", "ريد بول", "تايجر", "مشروب طاقة", "باور هورس",
+    "عصير مصنع", "عصير معلب", "ايس كريم", "موطه", "دوندورما", "سلاش", "مثلجات",
+    "اندومي", "نودلز",
+    "برغر", "بيتزا", "شاورما", "كنتاكي", "وجبة سريعة", "صاج", "فاهيتا", "سندويش جاهز", "فنكر", "بطاطس مقلية",
+    "كابتشينو جاهز", "لاتيه", "قهوة باردة", "ايس كوفي", "ميلك شيك", "كوكتيل", "مشروبات غازية",
+    "سكائر", "سجائر", "فيب", "معسل", "اركيلة", "سحبة", "تبغ",
+    "العاب", "لعبة", "سلايم", "بالونات", "اكسسوارات"
+  ];
+
+  if (
+    cat.includes("حلويات") ||
+    cat.includes("سناكات") ||
+    cat.includes("مطاعم") ||
+    cat.includes("سكائر") ||
+    snackKeywords.some(k => n.includes(k))
+  ) {
+    return {
+      type: "discretionary",
+      reason: "تسالي، حلويات أو جاهز (يمكن ترشيده)",
+      badge: "تبذير / كماليات 🍭",
+      colorClass: "text-rose-600 dark:text-rose-400",
+      lightBg: "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/40"
+    };
+  }
+
+  // 2. Definite Essentials / Cooking & Household Staples
+  const essentialKeywords = [
+    "طماطة", "طماطم", "خيار", "بصل", "بطاطا", "بتيتة", "خضار", "مخضر", "فاكهة", "فواكه",
+    "لحم", "دجاج", "سمك", "مفروم", "صدر دجاج", "كبة", "فيليه",
+    "حليب", "لبن", "جبن", "جبنة", "بيض", "زبادي", "قشطة", "زبدة",
+    "رز", "تمن", "زيت", "شكر", "سكر", "طحين", "معجون", "ملح", "عدس", "فاصوليا", "حمص",
+    "خبز", "صمون", "توست",
+    "دواء", "علاج", "بانادول", "فيتامين", "شاش", "قطن", "صيدلية", "مرهم", "قطرة",
+    "حفاضات", "بامبرز", "مناديل مبللة", "حليب اطفال",
+    "تايد", "زاهي", "صابون", "شامبو", "كلور", "معقم", "منظف", "اكياس زبالة", "ورق تواليت"
+  ];
+
+  if (
+    cat.includes("خضار") ||
+    cat.includes("لحوم") ||
+    cat.includes("ألبان") ||
+    cat.includes("مؤونة") ||
+    cat.includes("بقوليات") ||
+    cat.includes("مياه") ||
+    cat.includes("صيدلية") ||
+    cat.includes("طفل") ||
+    cat.includes("منظفات") ||
+    essentialKeywords.some(k => n.includes(k))
+  ) {
+    return {
+      type: "essential",
+      reason: "مؤونة أساسية وتغذية منزلية ضرورية",
+      badge: "أساسي وتموين 🥦",
+      colorClass: "text-emerald-600 dark:text-emerald-400",
+      lightBg: "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/40"
+    };
+  }
+
+  return {
+    type: "neutral",
+    reason: "مشتريات عامة أو مستلزمات متنوعة",
+    badge: "مشتريات عامة 🛒",
+    colorClass: "text-indigo-600 dark:text-indigo-400",
+    lightBg: "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800/40"
+  };
+}

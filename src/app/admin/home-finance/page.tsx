@@ -37,7 +37,9 @@ import {
   saveLearnedCategory,
   WARRANTY_PERIOD_PRESETS,
   calculateWarrantyExpiryDate,
-  getWarrantyStatus
+  getWarrantyStatus,
+  classifyItemNature,
+  ItemNatureClassification
 } from "./productCategories";
 
 // ══════════════════════════════════════════════
@@ -658,6 +660,17 @@ export default function HomeFinanceDashboard() {
   const [showCompletedInstallments, setShowCompletedInstallments] = useState(false);
   const [debtFilter, setDebtFilter] = useState<"active" | "all" | "completed">("active");
   const [showCompletedDebts, setShowCompletedDebts] = useState(false);
+
+  // Family and Waste Study States
+  const [showWasteStudyModal, setShowWasteStudyModal] = useState(false);
+  const [wastePeriodFilter, setWastePeriodFilter] = useState<"cycle" | "month" | "all">("cycle");
+  const [wasteSavingsRatio, setWasteSavingsRatio] = useState<number>(30);
+  const [wasteActiveTab, setWasteActiveTab] = useState<"overview" | "discretionary" | "essentials" | "receipts">("overview");
+  const [wasteSearchQuery, setWasteSearchQuery] = useState("");
+  const [familyFilter, setFamilyFilter] = useState<"all" | "needs" | "duties" | "completed">("all");
+  const [familySearch, setFamilySearch] = useState("");
+  const [showFamilyCompetition, setShowFamilyCompetition] = useState(false);
+  const [showCompletedFamilyItems, setShowCompletedFamilyItems] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -4176,7 +4189,15 @@ setEditTrip(null);
                 <TrendingDown className="w-5 h-5 text-rose-500" />
                 سجل المصاريف
               </h2>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button 
+                  onClick={() => setShowWasteStudyModal(true)}
+                  className="bg-gradient-to-r from-rose-500 via-amber-500 to-orange-500 text-white text-xs font-black px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-amber-500/20 hover:opacity-95 active:scale-95 transition"
+                  title="دراسة وتحليل التبذير والتسالي داخل القوائم ومحاكي التوفير"
+                >
+                  <BrainCircuit className="w-3.5 h-3.5 text-amber-200" />
+                  <span>دراسة التبذير والترشيد 🧠</span>
+                </button>
                 <button 
                   onClick={() => setShowLottoTrackerModal(true)}
                   className="bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white text-xs font-black px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-purple-500/20 hover:opacity-95 active:scale-95 transition"
@@ -4553,22 +4574,32 @@ setEditTrip(null);
                         </div>
 
                         {/* Items badge / view receipt button */}
-                        {((exp.items && exp.items.length > 0) || (exp.receiptImages && exp.receiptImages.length > 0) || exp.imageUrl) && (
-                          <button
-                            type="button"
-                            onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
-                            className="w-full mt-1.5 py-1 px-2.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-[10px] font-black flex items-center justify-between border border-indigo-100 dark:border-indigo-800/40 transition active:scale-[0.98]"
-                          >
-                            <span className="flex items-center gap-1.5 truncate">
-                              <Receipt className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                              <span className="truncate">
-                                {exp.items && exp.items.length > 0 ? `قائمة المواد (${exp.items.length})` : "عرض الفاتورة"}
-                                {((exp.receiptImages && exp.receiptImages.length > 0) || exp.imageUrl) ? " 📸" : ""}
+                        {((exp.items && exp.items.length > 0) || (exp.receiptImages && exp.receiptImages.length > 0) || exp.imageUrl) && (() => {
+                          const discCount = (exp.items || []).filter(it => classifyItemNature(it.name, it.category).type === "discretionary").length;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
+                              className="w-full mt-1.5 py-1 px-2.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-[10px] font-black flex items-center justify-between border border-indigo-100 dark:border-indigo-800/40 transition active:scale-[0.98]"
+                            >
+                              <span className="flex items-center gap-1.5 truncate">
+                                <Receipt className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                <span className="truncate">
+                                  {exp.items && exp.items.length > 0 ? `قائمة المواد (${exp.items.length})` : "عرض الفاتورة"}
+                                  {((exp.receiptImages && exp.receiptImages.length > 0) || exp.imageUrl) ? " 📸" : ""}
+                                </span>
                               </span>
-                            </span>
-                            <ChevronLeft className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                          </button>
-                        )}
+                              <div className="flex items-center gap-1 shrink-0">
+                                {discCount > 0 && (
+                                  <span className="text-[9px] bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded-full font-black border border-rose-200 dark:border-rose-800/50" title={`تحتوي ${discCount} مواد تسالي/كماليات`}>
+                                    🍭 {discCount}
+                                  </span>
+                                )}
+                                <ChevronLeft className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              </div>
+                            </button>
+                          );
+                        })()}
 
 
                       </div>
@@ -6463,328 +6494,418 @@ setEditTrip(null);
           );
         })()}
         {/* ═══════════════ FAMILY NEEDS TAB ═══════════════ */}
-        {activeTab === "familyNeeds" && (
-          <div className="space-y-6">
-            {/* Family Competition Feature */}
-            <div className="mb-8">
-              <FamilyCompetition />
-            </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-l from-indigo-900/40 via-purple-900/20 to-transparent p-5 rounded-3xl border border-indigo-500/20">
-              <div>
-                <h2 className="font-black text-gray-800 dark:text-white flex items-center gap-2 text-lg">
-                  <Users className="w-6 h-6 text-indigo-500" />
-                  إدارة طلبات وواجبات العائلة
-                </h2>
-                <p className="text-xs text-indigo-700/60 dark:text-indigo-300/80 font-bold mt-1">تصنيف شامل للمسؤوليات والاحتياجات لكل فرد من أفراد العائلة</p>
+        {activeTab === "familyNeeds" && (() => {
+          const FAMILY_MEMBERS_LIST = [
+            { name: "الكل", emoji: "👨‍👩‍👧‍👦", isAll: true },
+            { name: "حيدر", emoji: "👨🏻" },
+            { name: "إيمان", emoji: "👩🏻" },
+            { name: "رقية", emoji: "👧🏻" },
+            { name: "قنوت", emoji: "👧🏻" },
+            { name: "إيڤا", emoji: "👶🏻" },
+            { name: "العائلة", emoji: "🏠" },
+          ];
+
+          const isViewingAll = activeFamilyMember === "الكل";
+          const rawMemberItems = isViewingAll 
+            ? familyNeeds 
+            : familyNeeds.filter(n => n.member === activeFamilyMember);
+
+          const searchedItems = rawMemberItems.filter(item => {
+            if (!familySearch.trim()) return true;
+            const q = familySearch.toLowerCase();
+            return (item.title || "").toLowerCase().includes(q) ||
+                   (item.notes || "").toLowerCase().includes(q) ||
+                   (item.member || "").toLowerCase().includes(q) ||
+                   (item.category || "").toLowerCase().includes(q);
+          });
+
+          const pendingDuties = searchedItems.filter(n => n.type === "duty" && n.status === "pending");
+          const completedDuties = searchedItems.filter(n => n.type === "duty" && (n.status === "available" || n.status === "completed"));
+
+          const pendingNeeds = searchedItems.filter(n => n.type !== "duty" && n.status === "pending");
+          const completedNeeds = searchedItems.filter(n => n.type !== "duty" && (n.status === "available" || n.status === "completed"));
+
+          const activeItems = [...pendingNeeds, ...pendingDuties];
+          const completedItems = [...completedNeeds, ...completedDuties];
+
+          const totalPendingCost = pendingNeeds.reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
+
+          let displayItems: FamilyMemberNeed[] = [];
+          if (familyFilter === "all") {
+            displayItems = activeItems;
+          } else if (familyFilter === "needs") {
+            displayItems = pendingNeeds;
+          } else if (familyFilter === "duties") {
+            displayItems = pendingDuties;
+          } else if (familyFilter === "completed") {
+            displayItems = completedItems;
+          }
+
+          const renderItemRow = (need: FamilyMemberNeed, isCompleted: boolean) => {
+            const isDuty = need.type === "duty";
+            const priorityColors: Record<string, string> = {
+              "عاجل": "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border-rose-300/50",
+              "مهم": "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border-amber-300/50",
+              "متوسط": "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border-blue-300/50",
+              "عادي": "bg-gray-100 text-gray-700 dark:bg-zinc-800 dark:text-gray-300 border-gray-300/50"
+            };
+
+            return (
+              <div 
+                key={need.id}
+                className={`p-3 sm:p-3.5 rounded-2xl transition-all duration-200 border flex items-center justify-between gap-3 ${
+                  isCompleted 
+                    ? "bg-gray-50/70 dark:bg-zinc-900/40 border-gray-200/60 dark:border-zinc-800/60 opacity-60 hover:opacity-100" 
+                    : "bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-600/60 shadow-xs hover:shadow-sm"
+                }`}
+              >
+                {/* Right side: Checkbox + Title + Meta */}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  {/* Circular 1-tap Action Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleFamilyNeedStatus(need)}
+                    className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+                      isCompleted 
+                        ? "bg-emerald-500 text-white shadow-xs" 
+                        : isDuty 
+                          ? "border-2 border-violet-400 text-transparent hover:text-white hover:bg-violet-500 hover:border-violet-500" 
+                          : "border-2 border-pink-400 text-transparent hover:text-white hover:bg-pink-500 hover:border-pink-500"
+                    }`}
+                    title={isCompleted ? "إعادة فتح" : isDuty ? "إنجاز الواجب" : "توفير وشراء الطلب"}
+                  >
+                    <Check className={`w-4 h-4 ${isCompleted ? "stroke-[3]" : ""}`} />
+                  </button>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`font-black text-xs sm:text-sm text-gray-900 dark:text-white leading-tight ${isCompleted ? "line-through text-gray-400 dark:text-gray-500" : ""}`}>
+                        {need.title}
+                      </span>
+                      {need.quantity && need.quantity > 1 && (
+                        <span className="text-[10px] font-black bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded-md">
+                          ×{need.quantity}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Meta badges in a clean inline row */}
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                      {isViewingAll && need.member && (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50">
+                          {need.member}
+                        </span>
+                      )}
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
+                        isDuty 
+                          ? "bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200/50" 
+                          : "bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border border-pink-200/50"
+                      }`}>
+                        {isDuty ? "🎯 واجب" : "🛍️ احتياج"}
+                      </span>
+                      {need.priority && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${priorityColors[need.priority] || priorityColors["متوسط"]}`}>
+                          {need.priority}
+                        </span>
+                      )}
+                      {need.notes && (
+                        <span className="text-[10px] text-gray-400 truncate max-w-[200px]" title={need.notes}>
+                          📝 {need.notes}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Left side: Price & Action Buttons */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {need.estimatedPrice && Number(need.estimatedPrice) > 0 ? (
+                    <span className={`font-black text-xs px-2.5 py-1 rounded-xl flex items-baseline gap-1 ${
+                      isCompleted 
+                        ? "bg-gray-100 dark:bg-zinc-800 text-gray-400 line-through" 
+                        : "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/40"
+                    }`}>
+                      <span>{fmt(need.estimatedPrice)}</span>
+                      <span className="text-[9px] font-bold opacity-75">د.ع</span>
+                    </span>
+                  ) : null}
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditFamilyNeed(need);
+                        setFamilyNeedType(need.type || "need");
+                        setShowFamilyNeedModal(true);
+                      }}
+                      className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition cursor-pointer"
+                      title="تعديل"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFamilyNeed(need.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition cursor-pointer"
+                      title="حذف"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-            
+            );
+          };
 
-            {/* Member Tabs - Wrapped exactly like the user's mockup */}
-            <div className="flex flex-wrap justify-center pb-4 pt-2 gap-3 px-2">
-              {FAMILY_MEMBERS.map(member => {
-                const memberPendingDuties = familyNeeds.filter(n => n.member === member && n.type === "duty" && n.status === "pending").length;
-                const memberPendingNeeds = familyNeeds.filter(n => n.member === member && (!n.type || n.type === "need") && n.status === "pending").length;
-                const memberAvailableNeeds = familyNeeds.filter(n => n.member === member && (!n.type || n.type === "need") && n.status === "available").length;
+          return (
+            <div className="space-y-4">
+              {/* 1. Header & Competition Banner */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-orange-500/10 border border-amber-500/20 shadow-xs hover:border-amber-500/40 transition">
+                <div className="flex items-center justify-between p-3 sm:p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl shadow-xs">
+                      🏆
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base">منافسة العائلة الأسبوعية</h3>
+                        <span className="text-[10px] font-black bg-amber-500/20 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">
+                          نقاط وتحديات ⭐
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 font-bold">
+                        تحفيز المهام والمطالعة لرقية وقنوت وإيڤا
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setShowFamilyCompetition(prev => !prev)}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs transition shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>{showFamilyCompetition ? "إخفاء لوحة المنافسة ▲" : "عرض المنافسة والترتيب 🏆 ▼"}</span>
+                  </button>
+                </div>
 
-                return (
-                  <button 
-                    key={member}
-                    onClick={() => setActiveFamilyMember(member)}
-                    className={`flex-shrink-0 snap-center px-6 py-3 rounded-full font-black text-sm transition-all flex flex-col items-center gap-1.5 shadow-sm ${
-                      activeFamilyMember === member 
-                      ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/30 scale-105" 
-                      : "bg-white dark:bg-zinc-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-zinc-800 hover:border-indigo-400/50"
+                {showFamilyCompetition && (
+                  <div className="p-4 pt-0 border-t border-amber-500/15 animate-fadeIn">
+                    <FamilyCompetition />
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Family Members Ribbon */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 custom-scrollbar">
+                {FAMILY_MEMBERS_LIST.map(m => {
+                  const isSelected = activeFamilyMember === m.name;
+                  const memberDuties = familyNeeds.filter(n => (m.isAll || n.member === m.name) && n.type === "duty" && n.status === "pending").length;
+                  const memberNeedsCount = familyNeeds.filter(n => (m.isAll || n.member === m.name) && n.type !== "duty" && n.status === "pending").length;
+
+                  return (
+                    <button
+                      key={m.name}
+                      type="button"
+                      onClick={() => setActiveFamilyMember(m.name)}
+                      className={`flex-shrink-0 px-4 py-2 rounded-2xl font-black text-xs transition-all flex items-center gap-2 active:scale-95 cursor-pointer ${
+                        isSelected 
+                          ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/25 scale-[1.02]" 
+                          : "bg-white dark:bg-zinc-900 text-gray-700 dark:text-gray-300 border border-gray-200/80 dark:border-zinc-800 hover:border-indigo-300"
+                      }`}
+                    >
+                      <span className="text-base">{m.emoji}</span>
+                      <span>{m.name}</span>
+                      {(memberDuties > 0 || memberNeedsCount > 0) && (
+                        <div className="flex items-center gap-1">
+                          {memberNeedsCount > 0 && (
+                            <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300"}`}>
+                              {memberNeedsCount} 🛍️
+                            </span>
+                          )}
+                          {memberDuties > 0 && (
+                            <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"}`}>
+                              {memberDuties} 🎯
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 3. Action Buttons & Quick Metrics Ribbon */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFamilyNeedType("duty");
+                      setEditFamilyNeed(null);
+                      setShowFamilyNeedModal(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-95 text-white text-xs font-black shadow-sm active:scale-95 transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة واجب 🎯</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFamilyNeedType("need");
+                      setEditFamilyNeed(null);
+                      setShowFamilyNeedModal(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:opacity-95 text-white text-xs font-black shadow-sm active:scale-95 transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة احتياج 🛍️</span>
+                  </button>
+                </div>
+
+                {/* Metrics ribbon */}
+                <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 font-bold border border-pink-200/60 dark:border-pink-800/40">
+                    <span>🛍️ نواقص:</span>
+                    <span className="font-black">{pendingNeeds.length}</span>
+                    {totalPendingCost > 0 && (
+                      <span className="text-[10px] opacity-80">({fmt(totalPendingCost)} د.ع)</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-bold border border-violet-200/60 dark:border-violet-800/40">
+                    <span>🎯 واجبات:</span>
+                    <span className="font-black">{pendingDuties.length}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200/60 dark:border-emerald-800/40">
+                    <span>✅ منجز:</span>
+                    <span className="font-black">{completedItems.length}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Filters & Search */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
+                <div className="flex bg-gray-100 dark:bg-zinc-900 p-1 rounded-2xl gap-1 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setFamilyFilter("all")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer ${
+                      familyFilter === "all"
+                        ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      {member}
-                      <span className={`w-2 h-2 rounded-full ${activeFamilyMember === member ? "bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" : "bg-indigo-400"}`}></span>
-                    </div>
-                    {(memberPendingDuties > 0 || memberPendingNeeds > 0 || memberAvailableNeeds > 0) && (
-                      <div className="flex gap-1.5 text-[10px] mt-0.5">
-                        {memberPendingNeeds > 0 && <span className={`px-2 py-0.5 rounded-full ${activeFamilyMember === member ? "bg-white/20 text-white" : "bg-pink-100 dark:bg-pink-500/20 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-500/30"}`}>{memberPendingNeeds} 🛍️</span>}
-                        {memberPendingDuties > 0 && <span className={`px-2 py-0.5 rounded-full ${activeFamilyMember === member ? "bg-white/20 text-white" : "bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-500/30"}`}>{memberPendingDuties} 🎯</span>}
-                        {memberAvailableNeeds > 0 && <span className={`px-2 py-0.5 rounded-full ${activeFamilyMember === member ? "bg-white/20 text-white" : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30"}`}>{memberAvailableNeeds} ✅</span>}
-                      </div>
-                    )}
+                    النشطة ({activeItems.length})
                   </button>
-                );
-              })}
-            </div>
-
-            {/* Action Buttons for Active Member */}
-            <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={() => { setFamilyNeedType("duty"); setEditFamilyNeed(null); setShowFamilyNeedModal(true); }}
-                className="w-full aspect-square bg-gradient-to-br from-violet-600/10 to-indigo-600/10 hover:from-violet-600/20 hover:to-indigo-600/20 text-violet-600 dark:text-violet-300 rounded-3xl border border-violet-500/30 flex flex-col items-center justify-center gap-3 font-black active:scale-95 transition shadow-sm group p-2 text-center"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-violet-500/20 flex items-center justify-center group-hover:scale-110 transition shadow-inner">
-                  <span className="text-2xl">🎯</span>
+                  <button
+                    type="button"
+                    onClick={() => setFamilyFilter("needs")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer ${
+                      familyFilter === "needs"
+                        ? "bg-white dark:bg-zinc-800 text-pink-600 dark:text-pink-400 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    النواقص ({pendingNeeds.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFamilyFilter("duties")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer ${
+                      familyFilter === "duties"
+                        ? "bg-white dark:bg-zinc-800 text-violet-600 dark:text-violet-400 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    الواجبات ({pendingDuties.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFamilyFilter("completed")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer ${
+                      familyFilter === "completed"
+                        ? "bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    المنجز ({completedItems.length})
+                  </button>
                 </div>
-                <span className="text-xs sm:text-sm">إضافة واجب</span>
-              </button>
 
-              <button 
-                onClick={() => { setFamilyNeedType("need"); setEditFamilyNeed(null); setShowFamilyNeedModal(true); }}
-                className="w-full aspect-square bg-gradient-to-br from-pink-600/10 to-rose-600/10 hover:from-pink-600/20 hover:to-rose-600/20 text-pink-600 dark:text-pink-300 rounded-3xl border border-pink-500/30 flex flex-col items-center justify-center gap-3 font-black active:scale-95 transition shadow-sm group p-2 text-center"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-pink-500/20 flex items-center justify-center group-hover:scale-110 transition shadow-inner">
-                  <span className="text-2xl">🛍️</span>
+                {/* Instant Search */}
+                <div className="relative w-full sm:w-64">
+                  <input
+                    type="text"
+                    value={familySearch}
+                    onChange={e => setFamilySearch(e.target.value)}
+                    placeholder="ابحث في الطلبات والواجبات..."
+                    className="w-full bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl px-3.5 py-1.5 pr-8 text-xs font-bold text-gray-800 dark:text-white outline-none focus:border-indigo-400"
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+                  {familySearch && (
+                    <button
+                      type="button"
+                      onClick={() => setFamilySearch("")}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
-                <span className="text-xs sm:text-sm">إضافة احتياج</span>
-              </button>
-            </div>
+              </div>
 
-            {/* Injected Summary Cards for Active Member */}
-            <div className="mt-4 mb-2">
-              {(() => {
-                const memberAvailable = familyNeeds.filter(n => n.member === activeFamilyMember && n.status === "available");
-                const memberPending = familyNeeds.filter(n => n.member === activeFamilyMember && n.status === "pending");
-                const availVal = memberAvailable.reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
-                const shortVal = memberPending.reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
-
-                return (
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Card 1: المتوفر */}
-                    <div className="bg-gradient-to-br from-emerald-950/80 via-zinc-900 to-zinc-900 dark:from-emerald-950/50 dark:to-zinc-900/90 border border-emerald-500/30 rounded-3xl p-3 sm:p-4 text-white shadow-lg relative overflow-hidden flex flex-col justify-between">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1.5">
-                          <span>✨</span>
-                          <span>متوفر لـ ({activeFamilyMember})</span>
-                        </span>
-                        <div className="text-left">
-                          <span className="text-2xl font-black text-white">{memberAvailable.length}</span>
-                          <span className="text-[10px] text-gray-400 block font-bold">طلب متوفر</span>
-                        </div>
-                      </div>
-                      {availVal !== 0 ? (
-                        <div className="mt-3 pt-2 border-t border-emerald-500/10 flex justify-between items-baseline">
-                          <span className="text-[11px] font-bold text-gray-400">القيمة التقديرية:</span>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-lg font-black text-emerald-300">{fmt(availVal)}</span>
-                            <span className="text-[10px] text-emerald-400 font-bold">د.ع</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="mt-3 pt-2 border-t border-emerald-500/10 flex justify-between items-baseline">
-                          <span className="text-[11px] font-bold text-gray-500">الحالة:</span>
-                          <span className="text-xs font-bold text-emerald-400">محدث أولاً بأول</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Card 2: النواقص */}
-                    <div className="bg-gradient-to-br from-red-950/80 via-zinc-900 to-zinc-900 dark:from-red-950/50 dark:to-zinc-900/90 border border-red-500/30 rounded-3xl p-3 sm:p-4 text-white shadow-lg relative overflow-hidden flex flex-col justify-between">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="text-xs font-black text-red-400 bg-red-500/10 dark:bg-red-500/20 px-3 py-1 rounded-full border border-red-500/30 flex items-center gap-1.5">
-                          <span>🛍️</span>
-                          <span>نواقص لـ ({activeFamilyMember})</span>
-                        </span>
-                        <div className="text-left">
-                          <span className="text-2xl font-black text-white">{memberPending.length}</span>
-                          <span className="text-[10px] text-gray-400 block font-bold">طلب معلق</span>
-                        </div>
-                      </div>
-                      {shortVal !== 0 ? (
-                        <div className="mt-3 pt-2 border-t border-red-500/10 flex justify-between items-baseline">
-                          <span className="text-[11px] font-bold text-gray-400">التكلفة التقديرية:</span>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-lg font-black text-red-300">{fmt(shortVal)}</span>
-                            <span className="text-[10px] text-red-400 font-bold">د.ع</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="mt-3 pt-2 border-t border-red-500/10 flex justify-between items-baseline">
-                          <span className="text-[11px] font-bold text-gray-500">الحالة:</span>
-                          <span className="text-[10px] font-bold text-emerald-400">لا توجد نواقص معلقة 🎉</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Lists in 2 Columns */}
-            {(() => {
-              const memberNeeds = familyNeeds.filter(n => n.member === activeFamilyMember);
-              const duties = memberNeeds.filter(n => n.type === "duty");
-              const requests = memberNeeds.filter(n => n.type !== "duty");
-              
-              const pendingDuties = duties.filter(n => n.status === "pending");
-              const completedDuties = duties.filter(n => n.status === "available" || n.status === "completed");
-
-              const pendingRequests = requests.filter(n => n.status === "pending");
-              const availableRequests = requests.filter(n => n.status === "available" || n.status === "completed");
-
-              return (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  
-                  {/* 🎯 العمود الأول: الواجبات والمهام */}
-                  <div className="bg-gradient-to-b from-violet-50/50 to-white dark:from-violet-950/20 dark:to-zinc-900 rounded-[32px] p-5 border-2 border-violet-500/20 shadow-xl shadow-violet-500/5 space-y-5">
-                    <div className="flex items-center justify-between border-b border-violet-500/10 pb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🎯</span>
-                        <div>
-                          <h3 className="font-black text-gray-900 dark:text-white text-base">واجبات ومسؤوليات {activeFamilyMember}</h3>
-                          <p className="text-[11px] text-violet-600 dark:text-violet-400 font-bold">مهام منزلية ومسؤوليات مطلوبة</p>
-                        </div>
-                      </div>
-                      <span className="bg-violet-500/10 text-violet-600 dark:text-violet-300 font-black text-xs px-3 py-1 rounded-full border border-violet-500/20">
-                        {pendingDuties.length} معلق
-                      </span>
-                    </div>
-
-                    {/* قائمة المهام المعلقة */}
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 text-violet-500" /> المهام المطلوب إنجازها ({pendingDuties.length})
-                      </h4>
-                      {pendingDuties.length === 0 ? (
-                        <p className="text-center py-6 text-xs text-gray-400 font-bold bg-white/50 dark:bg-zinc-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-zinc-800">لا توجد واجبات معلقة على {activeFamilyMember} حالياً 👏</p>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-2">
-                          {pendingDuties.map(need => (
-                            <div key={need.id} className="bg-white dark:bg-zinc-800/90 rounded-2xl p-3 shadow-sm border border-violet-500/20 hover:border-violet-500/40 transition flex flex-col gap-2 relative overflow-hidden">
-                              <div className="absolute top-0 right-0 left-0 h-0.5 bg-gradient-to-r from-violet-500 to-indigo-500 rounded-t-2xl" />
-                              <div className="flex items-start justify-between">
-                                <span className="bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-bold text-[9px] px-1.5 py-0.5 rounded-lg">{need.priority || "متوسط"}</span>
-                                <div className="flex gap-0.5">
-                                  <button onClick={() => { setEditFamilyNeed(need); setFamilyNeedType("duty"); setShowFamilyNeedModal(true); }} className="p-1 text-gray-400 hover:text-blue-500 transition rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20">
-                                    <Edit2 className="w-3 h-3" />
-                                  </button>
-                                  <button onClick={() => handleDeleteFamilyNeed(need.id)} className="p-1 text-gray-400 hover:text-red-500 transition rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
-                              <p className="font-black text-xs text-gray-800 dark:text-white line-clamp-2">{need.title}</p>
-                              {need.notes && <p className="text-[9px] text-gray-500 line-clamp-2">{need.notes}</p>}
-                              <button onClick={() => handleToggleFamilyNeedStatus(need)} className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[9px] font-black py-1.5 rounded-xl active:scale-95 transition flex items-center justify-center gap-0.5 mt-auto">
-                                <Check className="w-2.5 h-2.5" /> إنجاز
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* قائمة المهام المنجزة */}
-                    {completedDuties.length > 0 && (
-                      <div className="space-y-2 pt-3 border-t border-violet-500/10">
-                        <h4 className="text-xs font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" /> مهام تم إنجازها سابقاً ({completedDuties.length})
-                        </h4>
-                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                          {completedDuties.map(need => (
-                            <div key={need.id} className="flex flex-col items-center justify-center text-center bg-white/60 dark:bg-zinc-800/50 rounded-2xl p-3 shadow-sm border border-emerald-500/20 opacity-75 hover:opacity-100 transition aspect-square gap-1 relative">
-                              <div className="flex-1 flex flex-col justify-center items-center">
-                                <CheckCircle className="w-5 h-5 text-emerald-500 mb-1" />
-                                <p className="font-bold text-[11px] text-gray-700 dark:text-gray-300 line-through decoration-emerald-500 leading-tight line-clamp-2">{need.title}</p>
-                                {need.notes && <p className="text-[9px] text-gray-400 mt-1 line-clamp-2">{need.notes}</p>}
-                              </div>
-                              <div className="flex items-center gap-1 mt-auto pt-1 w-full border-t border-emerald-500/10">
-                                <button onClick={() => handleDeleteFamilyNeed(need.id)} className="p-1 text-gray-400 hover:text-red-500 transition">
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                                <button onClick={() => handleToggleFamilyNeedStatus(need)} className="flex-1 bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[9px] font-black px-1.5 py-1 rounded-lg active:scale-95 transition">
-                                  إعادة 🔄
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 🛍️ العمود الثاني: الطلبات والاحتياجات */}
-                  <div className="bg-gradient-to-b from-pink-50/50 to-white dark:from-pink-950/20 dark:to-zinc-900 rounded-[32px] p-5 border-2 border-pink-500/20 shadow-xl shadow-pink-500/5 space-y-5">
-                    <div className="flex items-center justify-between border-b border-pink-500/10 pb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🛍️</span>
-                        <div>
-                          <h3 className="font-black text-gray-900 dark:text-white text-base">طلبات واحتياجات {activeFamilyMember}</h3>
-                          <p className="text-[11px] text-pink-600 dark:text-pink-400 font-bold">أغراض ومستلزمات شخصية مطلوبة</p>
-                        </div>
-                      </div>
-                      <span className="bg-pink-500/10 text-pink-600 dark:text-pink-300 font-black text-xs px-3 py-1 rounded-full border border-pink-500/20">
-                        {pendingRequests.length} مطلوب
-                      </span>
-                    </div>
-
-                    {/* قائمة الطلبات المعلقة (نواقص) */}
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 text-orange-500" /> نواقص مطلوب توفيرها ({pendingRequests.length})
-                      </h4>
-                      {pendingRequests.length === 0 ? (
-                        <p className="text-center py-6 text-xs text-gray-400 font-bold bg-white/50 dark:bg-zinc-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-zinc-800">لا توجد طلبات نواقص لـ {activeFamilyMember} حالياً 🎉</p>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-2">
-                          {pendingRequests.map(need => (
-                            <div key={need.id} className="bg-white dark:bg-zinc-800/90 rounded-2xl p-3 shadow-sm border border-orange-500/20 hover:border-orange-500/40 transition flex flex-col gap-2 relative overflow-hidden">
-                              <div className="absolute top-0 right-0 left-0 h-0.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded-t-2xl" />
-                              <div className="flex items-start justify-end gap-0.5">
-                                <button onClick={() => { setEditFamilyNeed(need); setFamilyNeedType("need"); setShowFamilyNeedModal(true); }} className="p-1 text-gray-400 hover:text-blue-500 transition rounded-lg">
-                                  <Edit2 className="w-3 h-3" />
-                                </button>
-                                <button onClick={() => handleDeleteFamilyNeed(need.id)} className="p-1 text-gray-400 hover:text-red-500 transition rounded-lg">
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <p className="font-black text-xs text-gray-800 dark:text-white line-clamp-2">{need.title}</p>
-                              {need.estimatedPrice && Number(need.estimatedPrice) > 0 ? (
-                                <div className="font-black text-emerald-600 dark:text-emerald-400 text-xs">{fmt(need.estimatedPrice)} <span className="text-[9px] font-bold opacity-70">د.ع</span></div>
-                              ) : null}
-                              {need.notes && <p className="text-[9px] text-gray-500 line-clamp-1">{need.notes}</p>}
-                              <button onClick={() => handleToggleFamilyNeedStatus(need)} className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[9px] font-black py-1.5 rounded-xl active:scale-95 transition flex items-center justify-center gap-0.5 mt-auto">
-                                <Check className="w-2.5 h-2.5" /> توفير
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* قائمة الطلبات المتوفرة */}
-                    {availableRequests.length > 0 && (
-                      <div className="space-y-2 pt-3 border-t border-pink-500/10">
-                        <h4 className="text-xs font-black text-teal-600 dark:text-teal-400 flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" /> طلبات تم توفيرها ({availableRequests.length})
-                        </h4>
-                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                          {availableRequests.map(need => (
-                            <div key={need.id} className="flex flex-col items-center justify-center text-center bg-white/60 dark:bg-zinc-800/50 rounded-2xl p-3 shadow-sm border border-teal-500/20 opacity-75 hover:opacity-100 transition aspect-square gap-1 relative">
-                              <div className="flex-1 flex flex-col justify-center items-center">
-                                <PackageCheck className="w-5 h-5 text-teal-500 mb-1" />
-                                <p className="font-bold text-[11px] text-gray-700 dark:text-gray-300 line-through decoration-teal-400 leading-tight line-clamp-2">{need.title}</p>
-                                {need.estimatedPrice && Number(need.estimatedPrice) > 0 ? (
-                                  <span className="text-[9px] font-bold text-teal-600 line-through mt-0.5">{fmt(need.estimatedPrice)} د.ع</span>
-                                ) : null}
-                                {need.notes && <p className="text-[9px] text-gray-400 mt-1 line-clamp-1">{need.notes}</p>}
-                              </div>
-                              <div className="flex items-center gap-1 mt-auto pt-1 w-full border-t border-teal-500/10">
-                                <button onClick={() => handleDeleteFamilyNeed(need.id)} className="p-1 text-gray-400 hover:text-red-500 transition">
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                                <button onClick={() => handleToggleFamilyNeedStatus(need)} className="flex-1 bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[9px] font-black px-1.5 py-1 rounded-lg active:scale-95 transition">
-                                  نواقص 🔄
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
+              {/* 5. Items List */}
+              {displayItems.length === 0 ? (
+                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800/80">
+                  <span className="text-3xl block mb-2">🎉</span>
+                  <p className="text-gray-500 dark:text-gray-400 font-bold text-sm">
+                    {familyFilter === "completed" 
+                      ? "لا توجد عناصر منجزة حالياً"
+                      : familyFilter === "needs"
+                        ? `لا توجد نواقص معلقة لـ ${activeFamilyMember}`
+                        : familyFilter === "duties"
+                          ? `لا توجد واجبات معلقة على ${activeFamilyMember}`
+                          : `جميع الطلبات والواجبات لـ ${activeFamilyMember} مكتملة!`}
+                  </p>
                 </div>
-              );
-            })()}
-          </div>
-        )}
+              ) : (
+                <div className="space-y-2">
+                  {displayItems.map(item => renderItemRow(item, false))}
+                </div>
+              )}
+
+              {/* 6. Completed Items Toggle at Bottom (When in "all" or "needs"/"duties") */}
+              {familyFilter !== "completed" && completedItems.length > 0 && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCompletedFamilyItems(prev => !prev)}
+                    className="w-full py-2.5 px-4 rounded-2xl bg-gray-100/70 dark:bg-zinc-900/70 hover:bg-gray-200/80 dark:hover:bg-zinc-800/80 text-xs font-black text-gray-500 dark:text-gray-400 flex items-center justify-between transition border border-gray-200/60 dark:border-zinc-800/60 active:scale-[0.99] cursor-pointer"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span>✅</span>
+                      <span>الطلبات والواجبات المنجزة سابقاً</span>
+                      <span className="text-[10px] bg-gray-200 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-bold">({completedItems.length})</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                      {showCompletedFamilyItems ? "إخفاء ▲" : "عرض بالأسفل (ظل خافت) ▼"}
+                    </span>
+                  </button>
+
+                  {showCompletedFamilyItems && (
+                    <div className="space-y-2 mt-2.5">
+                      {completedItems.map(item => renderItemRow(item, true))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ═══════════════ FUTURE PLANS TAB ═══════════════ */}
         {activeTab === "futurePlans" && (
@@ -8818,21 +8939,25 @@ setEditTrip(null);
                   return itemsToRender.map((item, idx) => {
                     const resolvedCat = item.category || detectProductCategory(item.name);
                     const catDef = resolvedCat ? PRODUCT_CATEGORY_MAP[resolvedCat] : null;
+                    const nature = classifyItemNature(item.name, resolvedCat);
 
                     return (
-                      <div key={item.id || idx} className="grid grid-cols-12 gap-2 px-3 py-2.5 text-xs items-center hover:bg-white dark:hover:bg-zinc-800/50 transition">
+                      <div key={item.id || idx} className={`grid grid-cols-12 gap-2 px-3 py-2.5 text-xs items-center transition ${nature.type === "discretionary" ? "hover:bg-rose-50/50 dark:hover:bg-rose-950/20" : "hover:bg-white dark:hover:bg-zinc-800/50"}`}>
                         <div className="col-span-1 text-center font-bold text-gray-400 text-[11px]">{idx + 1}</div>
                         
                         <div className="col-span-4 min-w-0 font-bold text-gray-800 dark:text-gray-200">
                           <div className="truncate font-black">{item.name}</div>
-                          {resolvedCat && (
-                            <div className="mt-0.5">
-                              <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-bold border ${catDef ? `${catDef.bgLight} ${catDef.bgDark} ${catDef.color}` : 'bg-gray-100 text-gray-600'}`}>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                            {resolvedCat && (
+                              <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-bold border ${catDef ? `${catDef.bgLight} ${catDef.bgDark} ${catDef.color}` : 'bg-gray-100 text-gray-600'}`}>
                                 <span>{catDef?.icon || "🏷️"}</span>
                                 <span>{resolvedCat}</span>
                               </span>
-                            </div>
-                          )}
+                            )}
+                            <span className={`inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-md font-bold border ${nature.lightBg} ${nature.colorClass}`}>
+                              {nature.badge}
+                            </span>
+                          </div>
                         </div>
 
                         <div className="col-span-3 min-w-0 overflow-hidden text-gray-600 dark:text-gray-300">
@@ -10452,6 +10577,860 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
           </div>
         </div>
       )}
+
+      {/* ═══════════════ SMART WASTE & SAVINGS STUDY MODAL ═══════════════ */}
+      {showWasteStudyModal && (() => {
+        const now = new Date();
+        const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+        const periodExpenses = expenses.filter(exp => {
+          if (!exp.date) return false;
+          if (wastePeriodFilter === "cycle") return isInCycle(exp.date);
+          if (wastePeriodFilter === "month") return exp.date.startsWith(currentMonthPrefix);
+          return true;
+        });
+
+        interface FlatItem {
+          id: string;
+          name: string;
+          price: number;
+          quantity: number;
+          category: string;
+          place: string;
+          date: string;
+          receiptId: string;
+          receiptName: string;
+          nature: ItemNatureClassification;
+        }
+
+        const flatItems: FlatItem[] = [];
+        const receiptsWithDisc: { exp: Expense; discTotal: number; discItemsCount: number; discItemNames: string[] }[] = [];
+
+        let totalSpend = 0;
+        let discSpend = 0;
+        let essSpend = 0;
+        let neutralSpend = 0;
+
+        periodExpenses.forEach(exp => {
+          let expDiscTotal = 0;
+          let expDiscCount = 0;
+          const expDiscNames: string[] = [];
+
+          if (exp.items && exp.items.length > 0) {
+            exp.items.forEach((it, idx) => {
+              const resCat = it.category || detectProductCategory(it.name) || exp.category || "عام";
+              const nature = classifyItemNature(it.name, resCat);
+              const p = Math.max(0, it.price || 0);
+              const q = Math.max(1, it.quantity || 1);
+
+              totalSpend += p;
+              if (nature.type === "discretionary") {
+                discSpend += p;
+                expDiscTotal += p;
+                expDiscCount += 1;
+                expDiscNames.push(it.name);
+              } else if (nature.type === "essential") {
+                essSpend += p;
+              } else {
+                neutralSpend += p;
+              }
+
+              flatItems.push({
+                id: `${exp.id}-${idx}`,
+                name: it.name,
+                price: p,
+                quantity: q,
+                category: resCat,
+                place: it.place || exp.name,
+                date: exp.date,
+                receiptId: exp.id,
+                receiptName: exp.name,
+                nature
+              });
+            });
+          } else {
+            const nature = classifyItemNature(exp.name, exp.category);
+            const p = Math.max(0, exp.amount || 0);
+
+            totalSpend += p;
+            if (nature.type === "discretionary") {
+              discSpend += p;
+              expDiscTotal += p;
+              expDiscCount += 1;
+              expDiscNames.push(exp.name);
+            } else if (nature.type === "essential") {
+              essSpend += p;
+            } else {
+              neutralSpend += p;
+            }
+
+            flatItems.push({
+              id: exp.id,
+              name: exp.name,
+              price: p,
+              quantity: 1,
+              category: exp.category,
+              place: exp.name,
+              date: exp.date,
+              receiptId: exp.id,
+              receiptName: exp.name,
+              nature
+            });
+          }
+
+          if (expDiscCount > 0) {
+            receiptsWithDisc.push({
+              exp,
+              discTotal: expDiscTotal,
+              discItemsCount: expDiscCount,
+              discItemNames: expDiscNames
+            });
+          }
+        });
+
+        receiptsWithDisc.sort((a, b) => b.discTotal - a.discTotal);
+
+        // Grouping
+        const discMap: { [name: string]: { name: string; totalAmount: number; count: number; totalQty: number; category: string; places: string[]; dates: string[] } } = {};
+        const essMap: { [name: string]: { name: string; totalAmount: number; count: number; totalQty: number; category: string; places: string[] } } = {};
+        const placeMap: { [place: string]: { place: string; totalAmount: number; itemsCount: number; topItems: string[] } } = {};
+
+        flatItems.forEach(it => {
+          const clean = it.name.trim();
+          if (it.nature.type === "discretionary") {
+            if (!discMap[clean]) {
+              discMap[clean] = { name: clean, totalAmount: 0, count: 0, totalQty: 0, category: it.category, places: [], dates: [] };
+            }
+            discMap[clean].totalAmount += it.price;
+            discMap[clean].count += 1;
+            discMap[clean].totalQty += it.quantity;
+            if (it.place && !discMap[clean].places.includes(it.place)) discMap[clean].places.push(it.place);
+            discMap[clean].dates.push(it.date);
+
+            const p = it.place || "غير محدد";
+            if (!placeMap[p]) placeMap[p] = { place: p, totalAmount: 0, itemsCount: 0, topItems: [] };
+            placeMap[p].totalAmount += it.price;
+            placeMap[p].itemsCount += 1;
+            if (!placeMap[p].topItems.includes(clean) && placeMap[p].topItems.length < 3) {
+              placeMap[p].topItems.push(clean);
+            }
+          } else if (it.nature.type === "essential") {
+            if (!essMap[clean]) {
+              essMap[clean] = { name: clean, totalAmount: 0, count: 0, totalQty: 0, category: it.category, places: [] };
+            }
+            essMap[clean].totalAmount += it.price;
+            essMap[clean].count += 1;
+            essMap[clean].totalQty += it.quantity;
+            if (it.place && !essMap[clean].places.includes(it.place)) essMap[clean].places.push(it.place);
+          }
+        });
+
+        const topDiscretionary = Object.values(discMap).sort((a, b) => b.totalAmount - a.totalAmount);
+        const topEssentials = Object.values(essMap).sort((a, b) => b.totalAmount - a.totalAmount);
+        const topPlaces = Object.values(placeMap).sort((a, b) => b.totalAmount - a.totalAmount);
+
+        const discPercent = totalSpend > 0 ? Math.round((discSpend / totalSpend) * 100) : 0;
+        const essPercent = totalSpend > 0 ? Math.round((essSpend / totalSpend) * 100) : 0;
+        const neutralPercent = Math.max(0, 100 - discPercent - essPercent);
+
+        const healthScore = Math.max(10, Math.min(100, Math.round(100 - (discPercent * 1.5))));
+        let healthLevel: { label: string; color: string; badge: string; icon: string; advice: string };
+
+        if (discPercent <= 15) {
+          healthLevel = {
+            label: "انضباط مالي استثنائي",
+            color: "text-emerald-500",
+            badge: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40",
+            icon: "🌟",
+            advice: "مصاريفك منضبطة جداً وتذهب للمتطلبات الأساسية للمنزل. نسبة التسالي والجاهز ضئيلة وصحية."
+          };
+        } else if (discPercent <= 28) {
+          healthLevel = {
+            label: "توازن مالي جيد",
+            color: "text-blue-500",
+            badge: "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 border-blue-200 dark:border-blue-800/40",
+            icon: "⚖️",
+            advice: "صرفك على التسالي والكماليات في الحدود الطبيعية للترفيه المنزلي، مع فرصة لتوفير إضافي عند الحاجة."
+          };
+        } else if (discPercent <= 45) {
+          healthLevel = {
+            label: "تنبيه: تسريب مالي ملحوظ",
+            color: "text-amber-500",
+            badge: "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-300 border-amber-200 dark:border-amber-800/40",
+            icon: "⚠️",
+            advice: "ما يقارب ثلث الميزانية يذهب للتسالي والوجبات السريعة. تقنينها قليلاً سيوفر مبالغ مجزية شهرياً."
+          };
+        } else {
+          healthLevel = {
+            label: "إنذار: تبذير مرتفع",
+            color: "text-rose-500",
+            badge: "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 border-rose-200 dark:border-rose-800/40",
+            icon: "🚨",
+            advice: "أكثر من نصف المصاريف يذهب للكماليات والتسالي والجاهز. يمكن إعادة توجيه هذه المبالغ لسداد الديون أو الادخار."
+          };
+        }
+
+        const monthlySavings = Math.round(discSpend * (wasteSavingsRatio / 100));
+        const yearlySavings = monthlySavings * 12;
+
+        const handleCopyReport = () => {
+          const report = `🧠 *تقرير دراسة المصروفات والترشيد الذكي* 📊\n` +
+            `📅 الفترة: ${wastePeriodFilter === "cycle" ? "الدورة المالية الحالية" : wastePeriodFilter === "month" ? "الشهر الحالي" : "كافة السجلات"}\n` +
+            `💰 إجمالي الصرف: ${fmt(totalSpend)} د.ع\n` +
+            `🥦 الأساسيات والتموين: ${fmt(essSpend)} د.ع (${essPercent}%)\n` +
+            `🍭 الكماليات والتسالي والجاهز: ${fmt(discSpend)} د.ع (${discPercent}%)\n` +
+            `🛒 مشتريات عامة: ${fmt(neutralSpend)} د.ع (${neutralPercent}%)\n` +
+            `🌟 مؤشر الانضباط المالي: ${healthScore}/100 (${healthLevel.label})\n\n` +
+            `💡 *خطة الترشيد (عند تخفيض الكماليات ${wasteSavingsRatio}%):*\n` +
+            `💵 التوفير الشهري المتوقع: ${fmt(monthlySavings)} د.ع\n` +
+            `💎 التوفير السنوي المتوقع: ${fmt(yearlySavings)} د.ع\n\n` +
+            `🚨 *أبرز مصاريف التبذير والتسالي:*\n` +
+            topDiscretionary.slice(0, 5).map((it, idx) => `${idx + 1}. ${it.name} - ${fmt(it.totalAmount)} د.ع (تكررت ${it.count} مرات)`).join("\n");
+
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(report);
+            toast.success("تم نسخ تقرير دراسة التبذير والترشيد بنجاح 📋");
+          }
+        };
+
+        const filteredTopDisc = topDiscretionary.filter(it => 
+          !wasteSearchQuery || it.name.toLowerCase().includes(wasteSearchQuery.toLowerCase())
+        );
+        const filteredTopEss = topEssentials.filter(it =>
+          !wasteSearchQuery || it.name.toLowerCase().includes(wasteSearchQuery.toLowerCase())
+        );
+        const filteredReceipts = receiptsWithDisc.filter(r =>
+          !wasteSearchQuery || r.exp.name.toLowerCase().includes(wasteSearchQuery.toLowerCase()) || r.discItemNames.some(n => n.toLowerCase().includes(wasteSearchQuery.toLowerCase()))
+        );
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200">
+            <div className="relative w-full max-w-4xl bg-white/95 dark:bg-zinc-900/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-gray-100 dark:border-zinc-800 my-auto overflow-hidden flex flex-col max-h-[92vh]">
+              
+              {/* Header */}
+              <div className="relative p-5 pb-4 border-b border-gray-100 dark:border-zinc-800 bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-indigo-500/10">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-rose-500 via-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/25 shrink-0">
+                      <BrainCircuit className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
+                        دراسة المصروفات ورصد التبذير الذكي
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-rose-500 text-white shadow-sm">
+                          ذكي 🧠
+                        </span>
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        تحليل تفصيلي لمشتريات القوائم وفرز المواد الأساسية عن التسالي والكماليات لكشف التسريبات المالية
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setShowWasteStudyModal(false)}
+                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-500 dark:text-gray-400 flex items-center justify-center transition active:scale-95 shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Period Selector Pills */}
+                <div className="flex items-center gap-2 mt-4 overflow-x-auto pb-1 scrollbar-none">
+                  <span className="text-[11px] font-bold text-gray-400 shrink-0">النطاق الزمني:</span>
+                  <button
+                    onClick={() => setWastePeriodFilter("cycle")}
+                    className={`text-xs font-black px-3 py-1.5 rounded-xl transition shrink-0 ${
+                      wastePeriodFilter === "cycle"
+                        ? "bg-purple-600 text-white shadow-md shadow-purple-500/20"
+                        : "bg-white/80 dark:bg-zinc-800/80 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    الدورة المالية الحالية 🔄
+                  </button>
+                  <button
+                    onClick={() => setWastePeriodFilter("month")}
+                    className={`text-xs font-black px-3 py-1.5 rounded-xl transition shrink-0 ${
+                      wastePeriodFilter === "month"
+                        ? "bg-purple-600 text-white shadow-md shadow-purple-500/20"
+                        : "bg-white/80 dark:bg-zinc-800/80 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    الشهر الحالي 📅
+                  </button>
+                  <button
+                    onClick={() => setWastePeriodFilter("all")}
+                    className={`text-xs font-black px-3 py-1.5 rounded-xl transition shrink-0 ${
+                      wastePeriodFilter === "all"
+                        ? "bg-purple-600 text-white shadow-md shadow-purple-500/20"
+                        : "bg-white/80 dark:bg-zinc-800/80 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    كافة السجلات 🌐
+                  </button>
+                </div>
+              </div>
+
+              {/* Navigation Tabs Ribbon */}
+              <div className="px-5 pt-3 pb-2 border-b border-gray-100 dark:border-zinc-800/80 flex items-center gap-1.5 overflow-x-auto scrollbar-none bg-gray-50/50 dark:bg-zinc-900/50">
+                <button
+                  onClick={() => setWasteActiveTab("overview")}
+                  className={`text-xs font-black px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shrink-0 ${
+                    wasteActiveTab === "overview"
+                      ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span>نظرة عامة والترشيد 📊</span>
+                </button>
+
+                <button
+                  onClick={() => setWasteActiveTab("discretionary")}
+                  className={`text-xs font-black px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shrink-0 ${
+                    wasteActiveTab === "discretionary"
+                      ? "bg-rose-500 text-white shadow-md shadow-rose-500/25"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                  }`}
+                >
+                  <span>كشف التسالي والتبذير 🍭</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-bold">
+                    {topDiscretionary.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setWasteActiveTab("essentials")}
+                  className={`text-xs font-black px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shrink-0 ${
+                    wasteActiveTab === "essentials"
+                      ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/25"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                  }`}
+                >
+                  <span>المؤونة والأساسيات 🥦</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-bold">
+                    {topEssentials.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setWasteActiveTab("receipts")}
+                  className={`text-xs font-black px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shrink-0 ${
+                    wasteActiveTab === "receipts"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+                  }`}
+                >
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>القوائم المتضمنة للتبذير</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-bold">
+                    {receiptsWithDisc.length}
+                  </span>
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+                {/* ═══ TAB 1: OVERVIEW ═══ */}
+                {wasteActiveTab === "overview" && (
+                  <div className="space-y-4">
+                    
+                    {/* Health Assessment Glass Card */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-zinc-800/80 dark:via-zinc-900/60 dark:to-zinc-800/80 border border-gray-100 dark:border-zinc-800 shadow-sm">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                            {healthLevel.icon}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-gray-400">تقييم النمط الاستهلاكي:</span>
+                              <span className={`text-xs font-black px-2.5 py-0.5 rounded-full border ${healthLevel.badge}`}>
+                                {healthLevel.label}
+                              </span>
+                            </div>
+                            <h4 className="text-sm sm:text-base font-black text-gray-800 dark:text-white mt-0.5">
+                              {healthLevel.advice}
+                            </h4>
+                          </div>
+                        </div>
+
+                        <div className="text-left bg-white dark:bg-zinc-800 px-3 py-1.5 rounded-xl border border-gray-100 dark:border-zinc-700 shrink-0">
+                          <span className="text-[10px] text-gray-400 font-bold block">مؤشر الانضباط</span>
+                          <span className="text-base font-black text-purple-600 dark:text-purple-400">
+                            {healthScore} <span className="text-[10px] text-gray-400">/ 100</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Visual Ratio Split Bar */}
+                      <div>
+                        <div className="flex items-center justify-between text-xs font-bold mb-1.5">
+                          <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <span>🥦 الأساسيات:</span>
+                            <span className="font-black">{essPercent}%</span>
+                            <span className="text-[10px] text-gray-400">({fmt(essSpend)} د.ع)</span>
+                          </span>
+                          <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                            <span>🍭 التبذير والتسالي:</span>
+                            <span className="font-black">{discPercent}%</span>
+                            <span className="text-[10px] text-gray-400">({fmt(discSpend)} د.ع)</span>
+                          </span>
+                        </div>
+
+                        <div className="w-full h-3.5 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden flex p-0.5 shadow-inner">
+                          <div
+                            style={{ width: `${essPercent}%` }}
+                            className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-l-full transition-all duration-500"
+                            title={`الأساسيات: ${essPercent}%`}
+                          />
+                          <div
+                            style={{ width: `${neutralPercent}%` }}
+                            className="h-full bg-indigo-300 dark:bg-indigo-600 transition-all duration-500"
+                            title={`مشتريات عامة: ${neutralPercent}%`}
+                          />
+                          <div
+                            style={{ width: `${discPercent}%` }}
+                            className="h-full bg-gradient-to-r from-amber-400 to-rose-500 rounded-r-full transition-all duration-500"
+                            title={`التبذير والكماليات: ${discPercent}%`}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-[10px] font-bold text-gray-400 mt-1">
+                          <span>إجمالي الصرف المحلل: <strong className="text-gray-700 dark:text-gray-200">{fmt(totalSpend)} د.ع</strong></span>
+                          <span>مفحوص في <strong className="text-gray-700 dark:text-gray-200">{periodExpenses.length}</strong> فاتورة تضم <strong className="text-gray-700 dark:text-gray-200">{flatItems.length}</strong> مادة</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Interactive Savings Simulator */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-rose-500/10 to-orange-500/10 border border-amber-200/50 dark:border-amber-900/40">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                            💡
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-black text-gray-900 dark:text-white">
+                              محاكي التوفير والترشيد الذكي
+                            </h4>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                              حدد نسبة تخفيض مصاريف التسالي والكماليات لتكتشف المبالغ التي ستنقذها شهرياً وسنوياً
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Quick Presets */}
+                        <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                          {[15, 25, 35, 50].map(ratio => (
+                            <button
+                              key={ratio}
+                              onClick={() => setWasteSavingsRatio(ratio)}
+                              className={`text-xs font-black px-2.5 py-1 rounded-lg transition ${
+                                wasteSavingsRatio === ratio
+                                  ? "bg-amber-500 text-white shadow-sm"
+                                  : "bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-zinc-700"
+                              }`}
+                            >
+                              %{ratio}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Slider */}
+                      <div className="space-y-1 mb-4">
+                        <div className="flex items-center justify-between text-xs font-bold text-gray-600 dark:text-gray-300">
+                          <span>نسبة الترشيد المستهدفة:</span>
+                          <span className="font-black text-amber-600 dark:text-amber-400 text-sm">%{wasteSavingsRatio}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="5"
+                          max="75"
+                          step="5"
+                          value={wasteSavingsRatio}
+                          onChange={(e) => setWasteSavingsRatio(Number(e.target.value))}
+                          className="w-full accent-amber-500 h-2 bg-gray-200 dark:bg-zinc-700 rounded-lg cursor-pointer"
+                        />
+                      </div>
+
+                      {/* Savings Result Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="bg-white/90 dark:bg-zinc-800/90 rounded-xl p-3.5 border border-amber-100 dark:border-zinc-700 shadow-sm flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] font-bold text-gray-400 block">توفير شهري مباشر</span>
+                            <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400">
+                              +{fmt(monthlySavings)} <span className="text-xs">د.ع</span>
+                            </span>
+                          </div>
+                          <div className="w-9 h-9 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-300 flex items-center justify-center font-bold text-base">
+                            💵
+                          </div>
+                        </div>
+
+                        <div className="bg-white/90 dark:bg-zinc-800/90 rounded-xl p-3.5 border border-amber-100 dark:border-zinc-700 shadow-sm flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] font-bold text-gray-400 block">توفير سنوي تراكمي</span>
+                            <span className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400">
+                              +{fmt(yearlySavings)} <span className="text-xs">د.ع</span>
+                            </span>
+                          </div>
+                          <div className="w-9 h-9 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-300 flex items-center justify-center font-bold text-base">
+                            💰
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 text-center sm:text-right">
+                        <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/60 px-3 py-1 rounded-full inline-block">
+                          🎯 هذا التوفير كافي لتغطية سلفة شهرية كاملة أو شراء مؤونة غذائية منزلية لأشهر إضافية!
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Top 4 Waste Leaks Quick View */}
+                    <div className="p-4 rounded-2xl bg-gray-50/80 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-800">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Flame className="w-4 h-4 text-rose-500" />
+                          <h4 className="text-xs font-black text-gray-800 dark:text-white">
+                            أعلى مواد استنزافاً بين التسالي والكماليات
+                          </h4>
+                        </div>
+                        <button
+                          onClick={() => setWasteActiveTab("discretionary")}
+                          className="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-0.5"
+                        >
+                          <span>عرض الكل ({topDiscretionary.length})</span>
+                          <ChevronLeft className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {topDiscretionary.length === 0 ? (
+                        <div className="text-center py-6 text-xs font-bold text-gray-400">
+                          رائع! لم يتم رصد أي مشتريات تسالي أو كماليات في هذا النطاق الزمني 🌟
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {topDiscretionary.slice(0, 4).map((item, idx) => (
+                            <div
+                              key={item.name}
+                              className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 shadow-sm flex items-center justify-between"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="w-6 h-6 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-600 font-black text-xs flex items-center justify-center shrink-0">
+                                  #{idx + 1}
+                                </span>
+                                <div className="min-w-0">
+                                  <div className="font-black text-xs text-gray-800 dark:text-gray-100 truncate">
+                                    {item.name}
+                                  </div>
+                                  <div className="text-[10px] text-gray-400 font-bold truncate">
+                                    تكررت {item.count} مرات {item.places.length > 0 ? `• ${item.places[0]}` : ''}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-left shrink-0 font-black text-xs text-rose-600 dark:text-rose-400">
+                                {fmt(item.totalAmount)} <span className="text-[9px] text-gray-400">د.ع</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Top Places of Discretionary Spend */}
+                    {topPlaces.length > 0 && (
+                      <div className="p-4 rounded-2xl bg-gray-50/80 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-800">
+                        <div className="flex items-center gap-2 mb-3">
+                          <MapPin className="w-4 h-4 text-purple-500" />
+                          <h4 className="text-xs font-black text-gray-800 dark:text-white">
+                            أكثر الأماكن والمتاجر التي صُرف فيها على الكماليات
+                          </h4>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {topPlaces.slice(0, 5).map(place => (
+                            <div
+                              key={place.place}
+                              className="px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 shadow-sm text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2"
+                            >
+                              <span>📍 {place.place}</span>
+                              <span className="text-rose-600 dark:text-rose-400 font-black">
+                                {fmt(place.totalAmount)} د.ع
+                              </span>
+                              <span className="text-[9px] text-gray-400 font-normal">
+                                ({place.itemsCount} مواد)
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                )}
+
+                {/* ═══ TAB 2: DISCRETIONARY LEAKS ═══ */}
+                {wasteActiveTab === "discretionary" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-gray-800 dark:text-white">
+                          قائمة مواد التسالي والكماليات المرصودة ({filteredTopDisc.length})
+                        </span>
+                        <span className="text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-200">
+                          إجمالي: {fmt(discSpend)} د.ع
+                        </span>
+                      </div>
+
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={wasteSearchQuery}
+                          onChange={(e) => setWasteSearchQuery(e.target.value)}
+                          placeholder="بحث في مواد التسالي..."
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl pr-8 pl-3 py-1.5 text-xs text-gray-800 dark:text-white outline-none focus:border-rose-500"
+                        />
+                      </div>
+                    </div>
+
+                    {filteredTopDisc.length === 0 ? (
+                      <div className="text-center py-12 text-xs font-bold text-gray-400">
+                        {wasteSearchQuery ? "لا توجد مواد مطابقة للبحث" : "لا توجد مواد تسالي أو كماليات مسجلة في هذه الفترة"}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredTopDisc.map((item, idx) => (
+                          <div
+                            key={item.name}
+                            className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 hover:border-rose-200 dark:hover:border-rose-900/50 shadow-sm transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="w-7 h-7 rounded-full bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 font-black text-xs flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-black text-sm text-gray-900 dark:text-white">
+                                    {item.name}
+                                  </span>
+                                  <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40">
+                                    تسالي / جاهز 🍭
+                                  </span>
+                                  {item.category && (
+                                    <span className="text-[10px] text-gray-400 bg-gray-100 dark:bg-zinc-800 px-1.5 py-0.2 rounded-md">
+                                      {item.category}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-gray-400 font-bold mt-0.5 flex items-center gap-2 flex-wrap">
+                                  <span>تكررت الشراء: <strong className="text-gray-600 dark:text-gray-300">{item.count} مرات</strong></span>
+                                  <span>الكمية الإجمالية: <strong className="text-gray-600 dark:text-gray-300">{item.totalQty}</strong></span>
+                                  {item.places.length > 0 && (
+                                    <span>المتاجر: <strong className="text-gray-600 dark:text-gray-300">{item.places.join("، ")}</strong></span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="self-end sm:self-auto text-left shrink-0">
+                              <div className="font-black text-sm sm:text-base text-rose-600 dark:text-rose-400">
+                                {fmt(item.totalAmount)} <span className="text-[10px] text-gray-400 font-bold">د.ع</span>
+                              </div>
+                              <span className="text-[10px] text-gray-400 block">
+                                بمعدل {fmt(Math.round(item.totalAmount / (item.count || 1)))} د.ع للمرة
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ═══ TAB 3: ESSENTIALS ═══ */}
+                {wasteActiveTab === "essentials" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-gray-800 dark:text-white">
+                          قائمة المؤونة والمصاريف الأساسية ({filteredTopEss.length})
+                        </span>
+                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200">
+                          إجمالي: {fmt(essSpend)} د.ع
+                        </span>
+                      </div>
+
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={wasteSearchQuery}
+                          onChange={(e) => setWasteSearchQuery(e.target.value)}
+                          placeholder="بحث في المواد الأساسية..."
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl pr-8 pl-3 py-1.5 text-xs text-gray-800 dark:text-white outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {filteredTopEss.length === 0 ? (
+                      <div className="text-center py-12 text-xs font-bold text-gray-400">
+                        {wasteSearchQuery ? "لا توجد مواد مطابقة للبحث" : "لا توجد مواد أساسية مسجلة في هذه الفترة"}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredTopEss.map((item, idx) => (
+                          <div
+                            key={item.name}
+                            className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 hover:border-emerald-200 dark:hover:border-emerald-900/50 shadow-sm transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 font-black text-xs flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-black text-sm text-gray-900 dark:text-white">
+                                    {item.name}
+                                  </span>
+                                  <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40">
+                                    أساسي وتموين 🥦
+                                  </span>
+                                  {item.category && (
+                                    <span className="text-[10px] text-gray-400 bg-gray-100 dark:bg-zinc-800 px-1.5 py-0.2 rounded-md">
+                                      {item.category}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-gray-400 font-bold mt-0.5 flex items-center gap-2 flex-wrap">
+                                  <span>تكررت الشراء: <strong className="text-gray-600 dark:text-gray-300">{item.count} مرات</strong></span>
+                                  <span>الكمية: <strong className="text-gray-600 dark:text-gray-300">{item.totalQty}</strong></span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="self-end sm:self-auto text-left shrink-0 font-black text-sm sm:text-base text-emerald-600 dark:text-emerald-400">
+                              {fmt(item.totalAmount)} <span className="text-[10px] text-gray-400 font-bold">د.ع</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ═══ TAB 4: RECEIPTS WITH DISCRETIONARY ═══ */}
+                {wasteActiveTab === "receipts" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-gray-800 dark:text-white">
+                          القوائم والفواتير التي تضم مواد تسالي وكماليات ({filteredReceipts.length})
+                        </span>
+                      </div>
+
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={wasteSearchQuery}
+                          onChange={(e) => setWasteSearchQuery(e.target.value)}
+                          placeholder="بحث باسم القائمة أو المادة..."
+                          className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl pr-8 pl-3 py-1.5 text-xs text-gray-800 dark:text-white outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    {filteredReceipts.length === 0 ? (
+                      <div className="text-center py-12 text-xs font-bold text-gray-400">
+                        {wasteSearchQuery ? "لا توجد قوائم مطابقة للبحث" : "لا توجد قوائم متضمنة لمواد تسالي في هذه الفترة"}
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {filteredReceipts.map(({ exp, discTotal, discItemsCount, discItemNames }) => (
+                          <div
+                            key={exp.id}
+                            className="p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 hover:border-indigo-200 dark:hover:border-indigo-900/50 shadow-sm transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-black text-sm text-gray-900 dark:text-white">
+                                  {exp.name}
+                                </span>
+                                <span className="text-[10px] text-gray-400 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md font-bold">
+                                  {new Date(exp.date).toLocaleDateString("ar-IQ")}
+                                </span>
+                                <span className="text-[10px] font-black text-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/40 px-2 py-0.5 rounded-full">
+                                  🍭 {discItemsCount} مواد تسالي ({fmt(discTotal)} د.ع)
+                                </span>
+                              </div>
+
+                              <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[11px] font-bold text-gray-400">المواد المرصودة:</span>
+                                {discItemNames.map((n, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border border-gray-200/60 dark:border-zinc-700/60"
+                                  >
+                                    {n}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
+                              <div className="text-left">
+                                <span className="text-[10px] font-bold text-gray-400 block">إجمالي الفاتورة</span>
+                                <span className="font-black text-sm text-gray-800 dark:text-white">
+                                  {fmt(exp.amount)} د.ع
+                                </span>
+                              </div>
+
+                              <button
+                                onClick={() => {
+                                  setViewingReceiptExpense(exp);
+                                  setReceiptItemFilter("");
+                                }}
+                                className="px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-black flex items-center gap-1 border border-indigo-200/50 transition active:scale-95"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>معاينة المواد 🔍</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900/50 flex flex-wrap items-center justify-between gap-3">
+                <button
+                  onClick={handleCopyReport}
+                  className="px-4 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-xs font-black flex items-center gap-1.5 border border-purple-200/60 dark:border-purple-800/40 transition active:scale-95"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>نسخ ملخص الترشيد لمشاركته مع العائلة 📋</span>
+                </button>
+
+                <button
+                  onClick={() => setShowWasteStudyModal(false)}
+                  className="px-5 py-2 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-xs font-black hover:opacity-90 transition active:scale-95 shadow-sm"
+                >
+                  تم والإغلاق
+                </button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
       {showLottoTrackerModal && (
         <LottoTracker
