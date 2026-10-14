@@ -3919,30 +3919,6 @@ setEditTrip(null);
         {activeTab === "overview" && (
           <div className="flex flex-col gap-5 animate-in fade-in duration-300">
 
-            {/* Quick Actions Grid */}
-            <div className="order-3 grid grid-cols-3 gap-3">
-              {[
-                { label: "مصروف", icon: TrendingDown, color: "from-rose-500 to-pink-500", action: () => setShowExpenseModal(true) },
-                { label: "واجبات عائلة", icon: Users, color: "from-purple-500 to-indigo-500", action: () => setShowFamilyNeedModal(true) },
-                { label: "احتياج ونواقص", icon: ShoppingCart, color: "from-orange-500 to-amber-500", action: () => setShowNeedModal(true) },
-                { label: "قسط / سلفة", icon: CreditCard, color: "from-indigo-500 to-violet-500", action: () => setShowInstallmentModal(true) },
-                { label: "فاتورة", icon: Receipt, color: "from-amber-500 to-yellow-500", action: () => setShowBillModal(true) },
-                { label: "إضافة دخل", icon: TrendingUp, color: "from-emerald-500 to-teal-500", action: () => setShowIncomeModal(true) },
-                { label: "دين", icon: Banknote, color: "from-cyan-500 to-blue-500", action: () => setShowDebtModal(true) },
-                { label: "خطة مستقبلية", icon: Target, color: "from-fuchsia-500 to-pink-500", action: () => setShowFuturePlanModal(true) },
-                { label: "رحلة ومصاريف", icon: Plane, color: "from-sky-500 to-blue-500", action: () => setShowTravelShortcutModal(true) },
-              ].map(q => {
-                const Icon = q.icon;
-                return (
-                  <button key={q.label} onClick={q.action}
-                    className={`bg-gradient-to-br ${q.color} rounded-2xl px-2 py-3.5 text-white shadow-md active:scale-95 transition flex flex-col items-center justify-center gap-2 min-h-[76px]`}>
-                    <Icon className="w-5 h-5" />
-                    <span className="text-[11px] font-black text-center leading-tight">{q.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
             {/* Financial Cycle & Health Hero Section */}
             <div className="order-1 relative bg-gradient-to-br from-white via-indigo-50/40 to-purple-50/50 dark:from-[#120324] dark:via-[#240b4a] dark:to-[#0a2540] rounded-[2.2rem] p-5 sm:p-6 shadow-xl dark:shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden">
               <div className="absolute top-0 right-0 w-80 h-80 bg-purple-500/10 dark:bg-purple-500/15 rounded-full blur-[100px] pointer-events-none" />
