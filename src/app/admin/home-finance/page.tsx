@@ -11,7 +11,7 @@ import {
   Camera, Upload, ScanLine, FileText, ListPlus, Copy, Search, RefreshCw, Loader2,
   Pill, Image as ImageIcon, Eye,
   Flame, Lightbulb, ShieldAlert, ShieldCheck, Compass, Info,
-  Shield, ZoomIn, Download
+  Shield, ZoomIn, Download, Flower2
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import { db, storage } from "@/lib/firebase";
 import FamilyCompetition from "./FamilyCompetition";
 import FamilyCompetitionOverview from "./FamilyCompetitionOverview";
 import LottoTracker from "./LottoTracker";
+import WomenCycleCare from "./WomenCycleCare";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
@@ -424,6 +425,7 @@ export default function HomeFinanceDashboard() {
   const [futurePlanSteps, setFuturePlanSteps] = useState<{id: string; text: string; isCompleted: boolean; date?: string}[]>([]);
   
   const [activeFamilyMember, setActiveFamilyMember] = useState("إيمان");
+  const [showWomenHealthSection, setShowWomenHealthSection] = useState(false);
   const [newFamilyNeedTitle, setNewFamilyNeedTitle] = useState("");
   const [newFamilyNeedCategory, setNewFamilyNeedCategory] = useState("عائلة");
   
@@ -3676,57 +3678,88 @@ setEditTrip(null);
         </div>
       )}
 
-      {/* ═══════════════ HEADER ═══════════════ */}
-      <div className="relative bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 dark:from-[#1a0533] dark:via-[#2d1060] dark:to-[#0f3460] pt-14 pb-6 px-5 overflow-hidden shadow-lg transition-colors">
-        {/* Blobs */}
-        <div className="absolute top-0 right-0 w-72 h-72 bg-purple-600/20 blur-[100px] rounded-full -translate-y-1/2 translate-x-1/4 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/15 blur-[80px] rounded-full translate-y-1/2 -translate-x-1/4 pointer-events-none" />
+      {/* ═══════════════ MODERN LUXURY HEADER ═══════════════ */}
+      <div className="relative bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 dark:from-black dark:via-[#130726] dark:to-[#080d1e] pt-14 pb-6 px-4 sm:px-6 overflow-hidden shadow-xl border-b border-white/10 transition-colors">
+        {/* Glow Blobs */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-purple-500/20 blur-[110px] rounded-full -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-pink-500/15 blur-[90px] rounded-full translate-y-1/2 -translate-x-1/4 pointer-events-none" />
 
-        {/* Back + Title */}
-        <div className="relative z-10 flex items-center gap-3 mb-5">
-          <Link 
-            href="/admin" 
-            prefetch={true}
-            onClick={(e) => {
-              if (typeof window !== 'undefined' && window.history.length > 1) {
-                e.preventDefault();
-                window.history.back();
-              }
-            }}
-            className="w-10 h-10 bg-white/15 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 hover:bg-white/25 transition shrink-0 active:scale-95"
-          >
-            <ArrowRight className="w-5 h-5 text-white" />
-          </Link>
-          <div className="w-11 h-11 rounded-2xl overflow-hidden shadow-lg border-2 border-white/90 shrink-0 bg-white p-1 flex items-center justify-center">
-            <img src="/cp-logo.png" alt="كيك الأميرة" className="w-full h-full object-contain" />
-          </div>
-          <div className="flex-1">
-            <div className="flex flex-col gap-1.5">
-              <span className="bg-white/20 text-white border border-white/30 px-3 py-1 rounded-full text-[11px] font-bold shadow-sm flex items-center justify-center gap-1.5 backdrop-blur-md w-max">
-                <Home className="w-3.5 h-3.5" /> منزل حيدر وإيمان
-              </span>
-              <h1 className="text-2xl font-black text-white">إدارة ميزانية ومصاريف المنزل</h1>
+        {/* Back + Brand Header */}
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+          <div className="flex items-center gap-3.5">
+            <Link 
+              href="/admin" 
+              prefetch={true}
+              onClick={(e) => {
+                if (typeof window !== 'undefined' && window.history.length > 1) {
+                  e.preventDefault();
+                  window.history.back();
+                }
+              }}
+              className="w-10 h-10 bg-white/10 dark:bg-white/5 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20 hover:bg-white/20 transition shrink-0 active:scale-95 text-white shadow-sm"
+              title="رجوع للوحة التحكم"
+            >
+              <ArrowRight className="w-5 h-5 text-white" />
+            </Link>
+            
+            <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-lg border-2 border-white/80 shrink-0 bg-white/95 p-1 flex items-center justify-center ring-4 ring-white/10">
+              <img src="/cp-logo.png" alt="كيك الأميرة" className="w-full h-full object-contain" />
             </div>
-            <p className="text-purple-300 text-xs mt-0.5">
-              {new Date().toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-            </p>
+
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="bg-gradient-to-r from-pink-500/25 to-purple-500/25 text-pink-200 border border-pink-400/30 px-3 py-0.5 rounded-full text-[11px] font-black shadow-xs flex items-center gap-1.5 backdrop-blur-md">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>🏡 منزل حيدر وإيمان</span>
+                </span>
+                <span className="text-purple-300/80 text-[11px] font-bold">
+                  {new Date().toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                </span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                إدارة ميزانية ومصاريف المنزل
+              </h1>
+            </div>
+          </div>
+
+          {/* Quick Header Navigation Badges */}
+          <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("familyNeeds");
+                setActiveFamilyMember("إيمان");
+                setShowWomenHealthSection(true);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-pink-500/30 to-rose-500/30 border border-pink-400/40 hover:border-pink-300 text-pink-200 text-xs font-black backdrop-blur-md transition active:scale-95 flex items-center gap-1.5 shadow-sm cursor-pointer hover:bg-pink-500/40"
+            >
+              <Flower2 className="w-3.5 h-3.5 text-pink-400 animate-spin-slow" />
+              <span>صحة العائلة 🌸</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowExpenseModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white text-xs font-black shadow-md shadow-rose-500/30 active:scale-95 transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>تسجيل مصروف 💸</span>
+            </button>
           </div>
         </div>
 
         {/* Reminder Banner for 11th & 21st */}
         {(new Date().getDate() === 11 || new Date().getDate() === 21) && (
-          <div className="relative z-10 bg-red-600/90 backdrop-blur-md border border-red-400 rounded-2xl p-4 text-center mb-5 shadow-lg shadow-red-500/20">
+          <div className="relative z-10 bg-rose-600/90 backdrop-blur-md border border-rose-400/80 rounded-2xl p-3.5 text-center mt-3 shadow-lg shadow-rose-500/20 animate-pulse">
             <div className="flex justify-center items-center gap-2 mb-1">
-              <AlertCircle className="w-6 h-6 text-white animate-pulse" />
-              <span className="text-white font-black text-lg">تذكير هام!</span>
+              <AlertCircle className="w-5 h-5 text-white" />
+              <span className="text-white font-black text-sm">تذكير تسديد الالتزامات 🗓️</span>
             </div>
-            <p className="text-red-100 font-bold text-sm">
+            <p className="text-rose-100 font-bold text-xs">
               اليوم هو {new Date().getDate()} في الشهر. يرجى التأكد من تسديد الديون والأقساط المطلوبة لهذا الشهر.
             </p>
           </div>
         )}
-
-        {/* Cycle Selector & Report Button */}
       </div>
 
       {/* ═══════════════ TOP MAIN BALANCE & HEALTH SECTION (ABOVE OVERVIEW TABS) ═══════════════ */}
@@ -3800,41 +3833,51 @@ setEditTrip(null);
             
             const getTabColors = (key: string) => {
               switch(key) {
-                case "overview":      return { grad: "from-blue-500 to-indigo-600",   shadow: "shadow-blue-500/40",   ring: "ring-blue-500",   bg: "bg-blue-500/10 dark:bg-blue-500/20",   text: "text-blue-600 dark:text-blue-400" };
-                case "income":        return { grad: "from-emerald-400 to-green-600", shadow: "shadow-emerald-500/40",ring: "ring-emerald-500",bg: "bg-emerald-500/10 dark:bg-emerald-500/20",text: "text-emerald-600 dark:text-emerald-400" };
-                case "expenses":      return { grad: "from-rose-500 to-red-600",       shadow: "shadow-rose-500/40",   ring: "ring-rose-500",   bg: "bg-rose-500/10 dark:bg-rose-500/20",   text: "text-rose-600 dark:text-rose-400" };
-                case "needs":         return { grad: "from-orange-500 to-amber-600",   shadow: "shadow-orange-500/40", ring: "ring-orange-500", bg: "bg-orange-500/10 dark:bg-orange-500/20", text: "text-orange-600 dark:text-orange-400" };
-                case "inventory":     return { grad: "from-teal-500 to-emerald-600",   shadow: "shadow-teal-500/40",   ring: "ring-teal-500",   bg: "bg-teal-500/10 dark:bg-teal-500/20",   text: "text-teal-600 dark:text-teal-400" };
-                case "bills":         return { grad: "from-amber-500 to-yellow-600",   shadow: "shadow-amber-500/40",  ring: "ring-amber-500",  bg: "bg-amber-500/10 dark:bg-amber-500/20",  text: "text-amber-600 dark:text-amber-400" };
-                case "installments":  return { grad: "from-indigo-500 to-violet-600",  shadow: "shadow-indigo-500/40", ring: "ring-indigo-500", bg: "bg-indigo-500/10 dark:bg-indigo-500/20", text: "text-indigo-600 dark:text-indigo-400" };
-                case "debts":         return { grad: "from-purple-500 to-fuchsia-600", shadow: "shadow-purple-500/40", ring: "ring-purple-500", bg: "bg-purple-500/10 dark:bg-purple-500/20", text: "text-purple-600 dark:text-purple-400" };
-                case "familyNeeds":   return { grad: "from-pink-500 to-rose-500",      shadow: "shadow-pink-500/40",   ring: "ring-pink-500",   bg: "bg-pink-500/10 dark:bg-pink-500/20",   text: "text-pink-600 dark:text-pink-400" };
-                case "car":           return { grad: "from-slate-600 to-gray-700",      shadow: "shadow-slate-500/40",  ring: "ring-slate-500",  bg: "bg-slate-500/10 dark:bg-slate-500/20",  text: "text-slate-600 dark:text-slate-400" };
-                case "travel":        return { grad: "from-sky-500 to-blue-600",        shadow: "shadow-sky-500/40",    ring: "ring-sky-500",    bg: "bg-sky-500/10 dark:bg-sky-500/20",    text: "text-sky-600 dark:text-sky-400" };
-                case "futurePlans":   return { grad: "from-violet-500 to-purple-700",   shadow: "shadow-violet-500/40", ring: "ring-violet-500", bg: "bg-violet-500/10 dark:bg-violet-500/20", text: "text-violet-600 dark:text-violet-400" };
-                default:             return { grad: "from-gray-500 to-gray-600",       shadow: "shadow-gray-500/40",   ring: "ring-gray-500",   bg: "bg-gray-500/10",                        text: "text-gray-600" };
+                case "overview":      return { grad: "from-blue-600 via-indigo-600 to-violet-700",   shadow: "shadow-indigo-500/35",   ring: "ring-indigo-400",   bg: "bg-indigo-500/10 dark:bg-indigo-500/20",   text: "text-indigo-600 dark:text-indigo-400" };
+                case "income":        return { grad: "from-emerald-500 via-green-500 to-teal-600", shadow: "shadow-emerald-500/35",ring: "ring-emerald-400",bg: "bg-emerald-500/10 dark:bg-emerald-500/20",text: "text-emerald-600 dark:text-emerald-400" };
+                case "expenses":      return { grad: "from-rose-500 via-pink-600 to-red-600",       shadow: "shadow-rose-500/35",   ring: "ring-rose-400",   bg: "bg-rose-500/10 dark:bg-rose-500/20",   text: "text-rose-600 dark:text-rose-400" };
+                case "needs":         return { grad: "from-amber-500 via-orange-500 to-rose-600",   shadow: "shadow-amber-500/35", ring: "ring-amber-400", bg: "bg-amber-500/10 dark:bg-amber-500/20", text: "text-amber-600 dark:text-amber-400" };
+                case "inventory":     return { grad: "from-teal-500 via-cyan-600 to-blue-600",   shadow: "shadow-teal-500/35",   ring: "ring-teal-400",   bg: "bg-teal-500/10 dark:bg-teal-500/20",   text: "text-teal-600 dark:text-teal-400" };
+                case "bills":         return { grad: "from-amber-400 via-yellow-500 to-orange-500",  shadow: "shadow-yellow-500/35",  ring: "ring-yellow-400",  bg: "bg-amber-500/10 dark:bg-amber-500/20",  text: "text-amber-600 dark:text-amber-400" };
+                case "installments":  return { grad: "from-purple-600 via-indigo-600 to-violet-700",  shadow: "shadow-purple-500/35", ring: "ring-purple-400", bg: "bg-purple-500/10 dark:bg-purple-500/20", text: "text-purple-600 dark:text-purple-400" };
+                case "debts":         return { grad: "from-fuchsia-600 via-purple-600 to-pink-600", shadow: "shadow-fuchsia-500/35", ring: "ring-fuchsia-400", bg: "bg-fuchsia-500/10 dark:bg-fuchsia-500/20", text: "text-fuchsia-600 dark:text-fuchsia-400" };
+                case "familyNeeds":   return { grad: "from-pink-500 via-rose-500 to-purple-600",      shadow: "shadow-pink-500/35",   ring: "ring-pink-400",   bg: "bg-pink-500/10 dark:bg-pink-500/20",   text: "text-pink-600 dark:text-pink-400" };
+                case "car":           return { grad: "from-slate-700 via-gray-800 to-zinc-950",      shadow: "shadow-slate-500/35",  ring: "ring-slate-400",  bg: "bg-slate-500/10 dark:bg-slate-500/20",  text: "text-slate-600 dark:text-slate-400" };
+                case "travel":        return { grad: "from-sky-500 via-blue-500 to-indigo-600",        shadow: "shadow-sky-500/35",    ring: "ring-sky-400",    bg: "bg-sky-500/10 dark:bg-sky-500/20",    text: "text-sky-600 dark:text-sky-400" };
+                case "futurePlans":   return { grad: "from-violet-600 via-purple-700 to-indigo-800",   shadow: "shadow-violet-500/35", ring: "ring-violet-400", bg: "bg-violet-500/10 dark:bg-violet-500/20", text: "text-violet-600 dark:text-violet-400" };
+                default:             return { grad: "from-gray-500 to-gray-600",       shadow: "shadow-gray-500/35",   ring: "ring-gray-400",   bg: "bg-gray-500/10",                        text: "text-gray-600" };
               }
             };
 
             const colors = getTabColors(t.key);
+            const TabIcon = t.icon;
 
             return (
               <button
                 key={t.key}
                 onClick={() => setActiveTab(t.key)}
-                className="relative flex flex-col items-center gap-1.5 group outline-none w-full max-w-[80px]"
+                className="relative flex flex-col items-center gap-1.5 group outline-none w-full max-w-[82px] cursor-pointer"
               >
                 {/* Icon Box */}
                 <div className={`relative flex items-center justify-center w-[58px] h-[58px] sm:w-[64px] sm:h-[64px] rounded-[1.3rem] sm:rounded-[1.4rem] transition-all duration-300 ${
                   isActive 
                     ? `bg-gradient-to-br ${colors.grad} text-white scale-110 z-10 shadow-lg ${colors.shadow} ring-2 ring-offset-2 ring-offset-[#f3f4f6] dark:ring-offset-[#09090b] ${colors.ring}` 
-                    : `${colors.bg} border border-white/30 dark:border-zinc-800/60 ${colors.text} shadow-sm group-hover:scale-105 group-hover:shadow-md`
+                    : `${colors.bg} border border-white/40 dark:border-zinc-800/80 ${colors.text} shadow-xs group-hover:scale-105 group-hover:shadow-md`
                 }`}>
-                  {/* Emoji Icon */}
-                  <span className={`text-[22px] sm:text-[26px] transition-all duration-300 select-none ${
-                    isActive ? 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.3)] scale-110' : ''
-                  }`} style={{ lineHeight: 1 }}>
-                    {'emoji' in t ? (t as any).emoji : '📊'}
+                  {/* Hero Lucide Icon or Emoji */}
+                  {TabIcon ? (
+                    <TabIcon className={`w-6 h-6 sm:w-6.5 sm:h-6.5 transition-all duration-300 ${
+                      isActive ? 'stroke-[2.4] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)] scale-105' : 'stroke-[2.1]'
+                    }`} />
+                  ) : (
+                    <span className="text-2xl select-none">{t.emoji}</span>
+                  )}
+
+                  {/* Micro Emoji Badge */}
+                  <span className={`absolute -bottom-1 -left-1 text-[11px] select-none filter transition-transform duration-300 ${
+                    isActive ? 'scale-110' : 'opacity-85'
+                  }`}>
+                    {t.emoji}
                   </span>
                   
                   {/* Badge */}
@@ -3843,8 +3886,8 @@ setEditTrip(null);
                       isActive 
                         ? "bg-white text-gray-900 border-transparent dark:bg-zinc-900 dark:text-white dark:border-zinc-700" 
                         : t.isBalance
-                          ? (t.amount >= 0 ? "bg-blue-600 text-white border-white dark:border-zinc-900" : "bg-black text-white border-white dark:border-zinc-900")
-                          : "bg-red-500 text-white border-white dark:border-zinc-900"
+                          ? (t.amount >= 0 ? "bg-emerald-600 text-white border-white dark:border-zinc-900" : "bg-black text-white border-white dark:border-zinc-900")
+                          : "bg-rose-500 text-white border-white dark:border-zinc-900"
                     }`}>
                       {t.amount !== undefined 
                         ? (Math.abs(t.amount) >= 1000000 ? (t.amount / 1000000).toFixed(1) + 'M' : Math.abs(t.amount) >= 1000 ? (t.amount / 1000).toFixed(0) + 'K' : t.amount)
@@ -3854,10 +3897,10 @@ setEditTrip(null);
                 </div>
 
                 {/* Text Label */}
-                <span className={`text-[10px] sm:text-[11px] transition-all duration-300 max-w-[68px] text-center leading-tight flex flex-col items-center gap-0.5 ${
+                <span className={`text-[10px] sm:text-[11px] transition-all duration-300 max-w-[70px] text-center leading-tight flex flex-col items-center gap-0.5 ${
                   isActive 
                     ? `font-black ${colors.text} translate-y-0.5` 
-                    : "font-bold text-gray-500 dark:text-gray-400"
+                    : "font-bold text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200"
                 }`}>
                   <span>{t.label}</span>
                 </span>
@@ -6767,6 +6810,7 @@ setEditTrip(null);
                   const isSelected = activeFamilyMember === m.name;
                   const memberDuties = familyNeeds.filter(n => (m.isAll || n.member === m.name) && n.type === "duty" && n.status === "pending").length;
                   const memberNeedsCount = familyNeeds.filter(n => (m.isAll || n.member === m.name) && n.type !== "duty" && n.status === "pending").length;
+                  const isCycleMember = m.name === "إيمان" || m.name === "رقية";
 
                   return (
                     <button
@@ -6781,6 +6825,9 @@ setEditTrip(null);
                     >
                       <span className="text-base">{m.emoji}</span>
                       <span>{m.name}</span>
+                      {isCycleMember && (
+                        <span className="text-[10px]" title="مفعل لها ركن متابعة الدورة الشهرية">🌸</span>
+                      )}
                       {(memberDuties > 0 || memberNeedsCount > 0) && (
                         <div className="flex items-center gap-1">
                           {memberNeedsCount > 0 && (
@@ -6800,10 +6847,23 @@ setEditTrip(null);
                 })}
               </div>
 
+              {/* 2.5 Women Cycle Care Section for Iman & Ruqaya */}
+              {(activeFamilyMember === "إيمان" || activeFamilyMember === "رقية" || showWomenHealthSection) && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                  <WomenCycleCare
+                    currentMember={activeFamilyMember === "رقية" ? "رقية" : "إيمان"}
+                    onMemberChange={(member) => {
+                      setActiveFamilyMember(member);
+                      setShowWomenHealthSection(true);
+                    }}
+                  />
+                </div>
+              )}
+
               {/* 3. Action Buttons & Quick Metrics Ribbon */}
               <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
                 {/* Action Buttons */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
@@ -6828,6 +6888,24 @@ setEditTrip(null);
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>إضافة احتياج 🛍️</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowWomenHealthSection(prev => !prev);
+                      if (!["إيمان", "رقية"].includes(activeFamilyMember)) {
+                        setActiveFamilyMember("إيمان");
+                      }
+                    }}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-black shadow-xs active:scale-95 transition flex items-center gap-1.5 cursor-pointer ${
+                      showWomenHealthSection || ["إيمان", "رقية"].includes(activeFamilyMember)
+                        ? "bg-pink-100 dark:bg-pink-950/70 text-pink-700 dark:text-pink-300 border border-pink-300 dark:border-pink-800"
+                        : "bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 text-gray-700 dark:text-gray-300 hover:text-pink-600"
+                    }`}
+                  >
+                    <Flower2 className="w-3.5 h-3.5 text-pink-500" />
+                    <span>دورة إيمان ورقية 🌸</span>
                   </button>
                 </div>
 
