@@ -51,10 +51,16 @@ export default function GlobalActions() {
     });
     if (newUnread.length > 0) {
       newUnread.forEach(n => {
+        const isSocialOrder = n.type === "order" || n.link?.includes("external") || n.link?.includes("hub");
         toast.custom((t) => (
           <div
             data-custom-notification="true"
-            className="animate-in slide-in-from-top-4 max-w-sm w-full bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl pointer-events-auto flex items-center justify-between ring-1 ring-black/10 dark:ring-white/10 overflow-hidden cursor-pointer border border-gray-100 dark:border-zinc-800 transition hover:shadow-3xl"
+            style={{ width: "min(92vw, 400px)", minWidth: "300px", maxWidth: "420px" }}
+            className={`animate-in slide-in-from-top-4 w-full bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl pointer-events-auto flex items-stretch justify-between ring-1 ring-black/10 dark:ring-white/10 overflow-hidden cursor-pointer border transition hover:shadow-3xl ${
+              isSocialOrder 
+                ? "border-emerald-500/50 dark:border-emerald-500/40 bg-gradient-to-r from-emerald-500/5 via-transparent to-pink-500/5" 
+                : "border-gray-200 dark:border-zinc-800"
+            }`}
             onClick={() => { 
               toast.dismiss(t as string | number); 
               if (n.link) {
@@ -64,45 +70,64 @@ export default function GlobalActions() {
               }
             }}
           >
-            <div className="flex-1 w-0 p-3">
+            {/* Accent Side Strip */}
+            <div className={`w-1.5 shrink-0 ${isSocialOrder ? "bg-gradient-to-b from-emerald-500 to-pink-500" : "bg-[#e8456b]"}`} />
+
+            <div className="flex-1 min-w-0 p-3 sm:p-3.5">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-[#e8456b]/10 text-[#e8456b]">
-                  {n.imageUrl ? <img src={n.imageUrl} alt="" className="w-full h-full object-cover rounded-full" /> : <Bell className="w-5 h-5" />}
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+                  isSocialOrder 
+                    ? "bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30" 
+                    : "bg-[#e8456b]/10 text-[#e8456b]"
+                }`}>
+                  {n.imageUrl ? (
+                    <img src={n.imageUrl} alt="" className="w-full h-full object-cover rounded-xl" />
+                  ) : isSocialOrder ? (
+                    <span className="text-xl">🎂</span>
+                  ) : (
+                    <Bell className="w-5 h-5" />
+                  )}
                 </div>
-                <div className="flex-1 text-right min-w-0">
-                  <p className="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1.5 justify-end">
-                    <span>إشعار جديد</span>
-                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+
+                <div className="flex-1 min-w-0 text-right">
+                  <div className="flex items-center gap-1.5 justify-start flex-wrap">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shrink-0" />
+                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-full whitespace-nowrap ${
+                      isSocialOrder
+                        ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                        : "bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400"
+                    }`}>
+                      {isSocialOrder ? "إشعار طلبات السوشيال 📱" : "إشعار جديد 🔔"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-900 dark:text-white font-black line-clamp-1 leading-snug">
+                    {n.title}
                   </p>
-                  <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-300 font-bold truncate">{n.title}</p>
+                  {n.message && (
+                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400 font-medium line-clamp-1">
+                      {n.message}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
-            <div className="flex border-r border-gray-100 dark:border-zinc-800 self-stretch">
+
+            <div className="flex border-r border-gray-100 dark:border-zinc-800 self-stretch shrink-0">
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); toast.dismiss(t as string | number); }}
-                className="w-11 h-full flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
+                className="w-10 h-full flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
+                aria-label="إغلاق الإشعار"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
         ), {
-          duration: 4000,
+          duration: 5000,
           position: 'top-center',
           unstyled: true,
-          className: '!bg-transparent !p-0 !border-0 !shadow-none !ring-0 !w-full !max-w-sm flex justify-center mx-auto',
-          style: {
-            background: 'transparent',
-            backgroundColor: 'transparent',
-            padding: 0,
-            border: 'none',
-            boxShadow: 'none',
-            outline: 'none',
-            width: '100%',
-            maxWidth: '24rem',
-          }
+          className: '!bg-transparent !p-0 !border-0 !shadow-none !ring-0 flex justify-center mx-auto'
         });
       });
       setNotifiedIds(prev => [...prev, ...newUnread.map(n => n.id)]);

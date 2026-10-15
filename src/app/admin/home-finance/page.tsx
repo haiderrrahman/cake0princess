@@ -270,6 +270,8 @@ const EXPENSE_CATEGORIES = [
   { label: "ألعاب ويانصيب", icon: "🎲", color: "from-indigo-500 to-purple-500" },
   { label: "أقساط وسلف", icon: "💳", color: "from-indigo-600 to-blue-700" },
   { label: "سفر ورحلات", icon: "✈️", color: "from-sky-500 to-blue-600" },
+  { label: "ديون الكيك", icon: "🎂", color: "from-pink-500 to-rose-600" },
+  { label: "ديون", icon: "🎂", color: "from-pink-500 to-rose-600" },
   { label: "أخرى ومتفرقات", icon: "📦", color: "from-gray-500 to-slate-600" },
   // Backward compatibility aliases for existing data in database:
   { label: "سيارة", icon: "🚗", color: "from-blue-500 to-cyan-500" },
@@ -618,17 +620,53 @@ export default function HomeFinanceDashboard() {
   const [isAdvancedDebt, setIsAdvancedDebt] = useState(false);
   const [showDebtHistory, setShowDebtHistory] = useState<string | null>(null);
 
+  // Auto-suggested shops and markets derived dynamically from previous expenses & items (sorted by usage frequency)
+  const uniqueSuggestedPlaces = useMemo(() => {
+    if (!mounted) return OUTING_PLACES_SUGGESTIONS;
+    const counts = new Map<string, number>();
+
+    const STORE_KEYWORDS = ["سوق", "ماركت", "هايبر", "محل", "مول", "دكان", "صيدلية", "مخضر", "قصاب", "كافيه", "مطعم", "معرض", "تجهيزات", "بقالة", "محطة", "سنتر", "شوب"];
+
+    expenses.forEach(exp => {
+      const s = (exp as any).storeName?.trim();
+      if (s) counts.set(s, (counts.get(s) || 0) + 4);
+
+      const p = (exp as any).place?.trim();
+      if (p) counts.set(p, (counts.get(p) || 0) + 4);
+
+      const name = (exp.name || "").trim();
+      if (name && (exp.category === "سوبر ماركت" || STORE_KEYWORDS.some(k => name.includes(k)))) {
+        counts.set(name, (counts.get(name) || 0) + 3);
+      }
+
+      (exp.items || []).forEach(it => {
+        const ip = it.place?.trim();
+        if (ip) counts.set(ip, (counts.get(ip) || 0) + 2);
+      });
+    });
+
+    OUTING_PLACES_SUGGESTIONS.forEach(p => {
+      if (!counts.has(p)) counts.set(p, 0);
+    });
+
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([place]) => place)
+      .filter(Boolean);
+  }, [expenses, mounted]);
+
   // Auto-suggest states
   const uniqueNames = useMemo(() => {
     if (!mounted) return [];
     return Array.from(new Set([
       ...inventory.map(i => i.name),
       ...expenses.map(e => e.name),
+      ...uniqueSuggestedPlaces,
       ...debts.map(d => d.person),
       ...installments.map(i => i.name),
       ...bills.map(b => b.name)
     ])).filter(Boolean);
-  }, [inventory, expenses, debts, installments, bills, mounted]);
+  }, [inventory, expenses, uniqueSuggestedPlaces, debts, installments, bills, mounted]);
 
   const uniqueProductNames = useMemo(() => {
     if (!mounted) return [];
@@ -811,8 +849,9 @@ export default function HomeFinanceDashboard() {
       
       const convertedCakeExps: Expense[] = exps.filter(e => e.isDebt && Number(e.amount) > 0).map(e => ({
         id: e._id || Date.now().toString(),
-        name: e.description || "دين اموال الكيك",
-        category: "ديون",
+        name: e.description ? `مواد كيك: ${e.description}` : "دين مواد كيك من الراتب",
+        rawCakeDescription: e.description || "",
+        category: "ديون الكيك",
         amount: Number(e.amount) || 0,
         date: e.date || (e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : new Date().toISOString()),
         createdAt: e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : (e.date || new Date().toISOString()),
@@ -822,7 +861,7 @@ export default function HomeFinanceDashboard() {
         itemCount: e.itemCount || (e.items ? e.items.length : 0),
         invoiceId: e.invoiceId || "",
         invoiceNumber: e.invoiceNumber || "",
-        storeName: e.storeName || "",
+        storeName: e.storeName || "مشتريات الكيك (دين من الراتب)",
         receiptImages: e.receiptImages || (e.imageUrl ? [e.imageUrl] : []),
         imageUrl: e.imageUrl || ""
       } as any));
@@ -2028,11 +2067,10 @@ setEditFuturePlan(null);
   };
 
   const handleDeleteExpense = async (id: string, originDocId?: string) => {
-    if (!(await customConfirm("هل أنت متأكد من الحذف؟"))) return;
-    
     // Check if this expense is from cake material debt
     const isCakeDebt = originDocId || cakeDebtExpenses.some(c => c.id === id);
     if (isCakeDebt) {
+      if (!(await customConfirm("هذا القيد مسجل في قسم الكيك كدين مستحق تم دفعه من راتبك الشخصي. هل أنت متأكد من حذفه نهائياً؟"))) return;
       const docId = originDocId || id;
       try {
         await deleteDoc(doc(db, "expenses", docId));
@@ -4527,17 +4565,24 @@ setEditTrip(null);
                   ) : (
                 <div className="grid grid-cols-2 gap-3">
                   {filtered.map(exp => {
-                    const cat = EXPENSE_CATEGORIES.find(c => c.label === exp.category);
+                    const isCakeDebt = Boolean((exp as any).isFromCake);
+                    const cat = isCakeDebt
+                      ? { label: "ديون الكيك", icon: "🎂", color: "from-pink-500 to-rose-600" }
+                      : (EXPENSE_CATEGORIES.find(c => c.label === exp.category) || { label: exp.category, icon: "📦", color: "from-gray-400 to-gray-500" });
                     return (
-                      <div key={exp.id} className="bg-white dark:bg-zinc-900 rounded-2xl p-3 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col gap-2 relative overflow-hidden">
-                        <div className={`absolute top-0 right-0 left-0 h-1 bg-gradient-to-r ${cat?.color || 'from-gray-400 to-gray-500'} opacity-70 rounded-t-2xl`} />
+                      <div key={exp.id} className={`bg-white dark:bg-zinc-900 rounded-2xl p-3 border shadow-sm flex flex-col gap-2 relative overflow-hidden transition ${
+                        isCakeDebt 
+                          ? "border-pink-200 dark:border-pink-900/40 bg-gradient-to-b from-pink-50/30 to-white dark:from-pink-950/10 dark:to-zinc-900" 
+                          : "border-gray-100 dark:border-zinc-800"
+                      }`}>
+                        <div className={`absolute top-0 right-0 left-0 h-1 bg-gradient-to-r ${cat?.color || 'from-gray-400 to-gray-500'} opacity-80 rounded-t-2xl`} />
                         {/* Top Row: icon + actions */}
                         <div className="flex items-start justify-between mt-0.5">
-                          <div className={`w-10 h-10 bg-gradient-to-br ${cat?.color || 'from-gray-400 to-gray-500'} rounded-xl flex items-center justify-center text-lg flex-shrink-0 shadow-sm`}>
+                          <div className={`w-10 h-10 bg-gradient-to-br ${cat?.color || 'from-gray-400 to-gray-500'} rounded-xl flex items-center justify-center text-lg flex-shrink-0 shadow-sm text-white`}>
                             {cat?.icon || '📦'}
                           </div>
                           <div className="flex gap-1">
-                            {!(exp as any).isFromCake ? (
+                            {!isCakeDebt ? (
                               <>
                                 <button onClick={() => { setEditExpense(exp); setShowExpenseModal(true); }} className="p-1 bg-gray-100 dark:bg-zinc-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition">
                                   <Edit2 className="w-3 h-3 text-gray-500 dark:text-gray-400" />
@@ -4549,21 +4594,42 @@ setEditTrip(null);
                             ) : (
                               <button
                                 onClick={() => handleDeleteExpense(exp.id, (exp as any).originDocId || exp.id)}
-                                className="p-1 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/60 transition"
-                                title="حذف دين فاتورة الكيك"
+                                className="p-1.5 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/60 transition"
+                                title="حذف دين فاتورة الكيك المستحق"
                               >
-                                <Trash2 className="w-3 h-3" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
                         </div>
+
+                        {/* Cake debt origin badge */}
+                        {isCakeDebt && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] bg-pink-100 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 font-black px-2 py-0.5 rounded-full border border-pink-200 dark:border-pink-800/40 flex items-center gap-1">
+                              <span>🎂 دين على الكيك (من الراتب)</span>
+                            </span>
+                          </div>
+                        )}
+
                         {/* Name */}
                         <div className="font-black text-gray-800 dark:text-gray-100 text-xs leading-tight line-clamp-2">{exp.name}</div>
+
+                        {isCakeDebt && (
+                          <p className="text-[10px] text-pink-600/90 dark:text-pink-400/90 font-bold leading-tight">
+                            مواد كيك تم دفعها من راتبك ومستحقة الاسترداد
+                          </p>
+                        )}
+
                         {/* Amount */}
                         <div className="font-black text-rose-600 dark:text-rose-400 text-sm">-{fmt(exp.amount)} <span className="text-[10px] font-bold text-rose-400/70">د.ع</span></div>
                         {/* Footer */}
                         <div className="flex items-center gap-1 flex-wrap mt-auto">
-                          <span className="text-[9px] bg-gray-100 dark:bg-zinc-800 text-gray-500 px-1.5 py-0.5 rounded-full font-bold truncate max-w-[80px]">{exp.category}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold truncate max-w-[90px] ${
+                            isCakeDebt
+                              ? "bg-pink-100 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800/40"
+                              : "bg-gray-100 dark:bg-zinc-800 text-gray-500"
+                          }`}>{isCakeDebt ? "ديون الكيك" : exp.category}</span>
                           <span className="text-[9px] text-gray-400">{exp.createdAt ? new Date(exp.createdAt).toLocaleDateString("ar-IQ") : new Date(exp.date).toLocaleDateString("ar-IQ")}</span>
                           {(exp.hasWarranty || (exp.warrantiesCount && exp.warrantiesCount > 0) || (exp.items && exp.items.some(it => it.hasWarranty))) && (
                             <span className="text-[9px] bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 px-1.5 py-0.5 rounded-full font-black flex items-center gap-0.5">
@@ -7567,33 +7633,78 @@ setEditTrip(null);
                   onChange={e => {
                     const val = e.target.value;
                     setExpNameInput(val);
-                    setShowExpSuggestions(val.length >= 1);
+                    setShowExpSuggestions(true);
                     const pred = detectProductCategory(val);
                     if (pred) {
                       setExpCategoryInput(pred);
                     }
                   }}
-                  onFocus={() => setShowExpSuggestions(expNameInput.length >= 1)}
+                  onFocus={() => setShowExpSuggestions(true)}
                   onBlur={() => setTimeout(() => setShowExpSuggestions(false), 200)}
                   className="input-field" 
                   placeholder="مثال: هايبرماركت البركات، بنزين السيارة، صيانة..." 
                 />
                 
                 {showExpSuggestions && (
-                  <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl max-h-40 overflow-y-auto">
-                    {uniqueNames.filter(n => n.includes(expNameInput)).map((suggestedName, idx) => (
-                      <div 
-                        key={idx} 
-                        onClick={() => { 
-                          setExpNameInput(suggestedName); 
-                          setShowExpSuggestions(false); 
-                          const pred = detectProductCategory(suggestedName);
-                          if (pred) setExpCategoryInput(pred);
-                        }} 
-                        className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-sm font-bold text-gray-800 dark:text-gray-200"
-                      >
-                        {suggestedName}
+                  <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                    {expNameInput.trim().length === 0 ? (
+                      <div>
+                        <div className="px-3 py-1.5 text-[10px] font-black text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-700/60 flex items-center justify-between">
+                          <span>🏪 المحلات والأسواق الأكثر تكراراً:</span>
+                          <span className="text-[9px]">اضغط للاختيار السريع</span>
+                        </div>
+                        {uniqueSuggestedPlaces.slice(0, 8).map((suggestedStore, idx) => (
+                          <div 
+                            key={idx} 
+                            onClick={() => { 
+                              setExpNameInput(suggestedStore); 
+                              setShowExpSuggestions(false); 
+                              const pred = detectProductCategory(suggestedStore);
+                              if (pred) setExpCategoryInput(pred);
+                            }} 
+                            className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center justify-between"
+                          >
+                            <span>🛒 {suggestedStore}</span>
+                            <span className="text-[10px] text-gray-400">محل مسجل مسبقاً</span>
+                          </div>
+                        ))}
                       </div>
+                    ) : (
+                      uniqueNames.filter(n => n.toLowerCase().includes(expNameInput.toLowerCase())).map((suggestedName, idx) => (
+                        <div 
+                          key={idx} 
+                          onClick={() => { 
+                            setExpNameInput(suggestedName); 
+                            setShowExpSuggestions(false); 
+                            const pred = detectProductCategory(suggestedName);
+                            if (pred) setExpCategoryInput(pred);
+                          }} 
+                          className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200"
+                        >
+                          {suggestedName}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* Quick Store Chips when input is empty */}
+                {!expNameInput && uniqueSuggestedPlaces.length > 0 && (
+                  <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] custom-scrollbar">
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 shrink-0">محلات سابقة:</span>
+                    {uniqueSuggestedPlaces.slice(0, 8).map((pl, pIdx) => (
+                      <button
+                        key={pIdx}
+                        type="button"
+                        onClick={() => {
+                          setExpNameInput(pl);
+                          const pred = detectProductCategory(pl);
+                          if (pred) setExpCategoryInput(pred);
+                        }}
+                        className="px-2 py-0.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 border border-gray-200/80 dark:border-zinc-700/60 transition shrink-0 active:scale-95 text-[10px]"
+                      >
+                        🏪 {pl}
+                      </button>
                     ))}
                   </div>
                 )}
@@ -7741,8 +7852,8 @@ setEditTrip(null);
                             );
                           })}
 
-                          {/* Quick Place Presets */}
-                          {["هايبر ماركت", "سوق الخضار", "سوق اللحوم", "تجهيزات منزلية", "مطعم وكافيه", "صيدلية", "أجهزة كهربائية"].map(preset => {
+                          {/* Quick Place Presets (Dynamic from previously added shops/markets) */}
+                          {uniqueSuggestedPlaces.slice(0, 14).map(preset => {
                             if (visitedPlaces.includes(preset)) return null;
                             return (
                               <button
@@ -7755,7 +7866,7 @@ setEditTrip(null);
                                     name: "",
                                     quantity: 1,
                                     price: 0,
-                                    category: preset === "سوق الخضار" ? "الفواكه والخضار" : preset === "تجهيزات منزلية" ? "اللوازم المنزلية" : preset === "سوق اللحوم" ? "لحوم ودواجن" : "سوبر ماركت",
+                                    category: detectProductCategory(preset) || (preset.includes("خضار") ? "الفواكه والخضار" : preset.includes("لحوم") ? "لحوم ودواجن وأسماك" : preset.includes("صيدلية") ? "صيدلية وعلاج" : preset.includes("مطعم") ? "مطاعم وكافيهات" : "سوبر ماركت"),
                                     place: preset
                                   }]);
                                 }}
@@ -7771,6 +7882,7 @@ setEditTrip(null);
                             <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 border border-teal-300 rounded-xl px-1.5 py-0.5">
                               <input
                                 type="text"
+                                list="outing-new-place-datalist"
                                 placeholder="اسم المكان / المحل..."
                                 value={newPlaceInput}
                                 onChange={e => setNewPlaceInput(e.target.value)}
@@ -7794,6 +7906,11 @@ setEditTrip(null);
                                 className="w-28 text-[11px] font-bold outline-none bg-transparent"
                                 autoFocus
                               />
+                              <datalist id="outing-new-place-datalist">
+                                {uniqueSuggestedPlaces.map((pl, plIdx) => (
+                                  <option key={plIdx} value={pl} />
+                                ))}
+                              </datalist>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -8101,7 +8218,7 @@ setEditTrip(null);
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
                             />
                             <datalist id={`places-list-${idx}`}>
-                              {OUTING_PLACES_SUGGESTIONS.map((p, pIdx) => (
+                              {uniqueSuggestedPlaces.map((p, pIdx) => (
                                 <option key={pIdx} value={p} />
                               ))}
                             </datalist>
