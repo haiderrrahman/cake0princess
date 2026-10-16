@@ -799,6 +799,36 @@ export default function HomeFinanceDashboard() {
     return Array.from(pool).filter(Boolean);
   }, [expenses, inventory, carInventory, needs, mounted]);
 
+  // Pre-normalized caches for instant mobile auto-complete (0 regex per keystroke)
+  const normalizedUniqueNames = useMemo(() => {
+    return uniqueNames.map(name => ({
+      raw: name,
+      norm: normalizeArabicText(name),
+      pred: detectProductCategory(name)
+    }));
+  }, [uniqueNames]);
+
+  const normalizedUniquePlaces = useMemo(() => {
+    return uniqueSuggestedPlaces.map(place => ({
+      raw: place,
+      norm: normalizeArabicText(place),
+      pred: detectProductCategory(place)
+    }));
+  }, [uniqueSuggestedPlaces]);
+
+  const normalizedProductPool = useMemo(() => {
+    return uniqueProductNames.map(name => {
+      const pred = detectProductCategory(name);
+      const nature = classifyItemNature(name, pred);
+      return {
+        raw: name,
+        norm: normalizeArabicText(name),
+        pred,
+        nature
+      };
+    });
+  }, [uniqueProductNames]);
+
   const [needNameInput, setNeedNameInput] = useState("");
   const [showNeedSuggestions, setShowNeedSuggestions] = useState(false);
   
@@ -1242,6 +1272,127 @@ export default function HomeFinanceDashboard() {
       return (CATEGORY_PRIORITY_INDEX_MAP[a.name] ?? 999) - (CATEGORY_PRIORITY_INDEX_MAP[b.name] ?? 999);
     });
   }, [categorySpendingMap]);
+
+  // Fast Car Expenses Cache
+  const carExpenses = useMemo(() => {
+    return expenses.filter(e => e.isCar || isCarExpenseMatch(e.name, e.category, e.items));
+  }, [expenses]);
+
+  // Fast Memoized Insights Bar (0 recalculations during modal typing)
+  const smartFinancialInsights = useMemo(() => {
+    const cycleExps = allExpenses.filter(e => isInCycle(e.date));
+    const cycleSpendTotal = cycleExps.reduce((s, e) => s + e.amount, 0);
+
+    let cycleDiscSpend = 0;
+    cycleExps.forEach(exp => {
+      if (exp.items && exp.items.length > 0) {
+        exp.items.forEach(it => {
+          const nat = classifyItemNature(it.name, it.category || exp.category);
+          if (nat.type === "discretionary") cycleDiscSpend += (it.price || 0);
+        });
+      } else {
+        const nat = classifyItemNature(exp.name, exp.category);
+        if (nat.type === "discretionary") cycleDiscSpend += (exp.amount || 0);
+      }
+    });
+
+    const discRatio = cycleSpendTotal > 0 ? Math.round((cycleDiscSpend / cycleSpendTotal) * 100) : 0;
+
+    const catTotals: Record<string, number> = {};
+    cycleExps.forEach(e => {
+      const c = e.category || "عام";
+      catTotals[c] = (catTotals[c] || 0) + e.amount;
+    });
+    const topCatEntry = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
+    const topCatName = topCatEntry ? topCatEntry[0] : "لا يوجد";
+    const topCatTotal = topCatEntry ? topCatEntry[1] : 0;
+    const topCatIcon = EXPENSE_CATEGORIES.find(c => c.label === topCatName)?.icon || "📦";
+
+    const cycleDays = Math.max(1, new Date().getDate());
+    const dailyAvg = Math.round(cycleSpendTotal / cycleDays);
+
+    return {
+      cycleSpendTotal,
+      dailyAvg,
+      topCatName,
+      topCatTotal,
+      topCatIcon,
+      cycleDiscSpend,
+      discRatio
+    };
+  }, [allExpenses, selectedCycleId]);
+
+  // Fast Memoized Category Filters & Totals (replaces 60,000 regex checks per render)
+  const availableExpenseCategories = useMemo(() => {
+    const expsInDateRange = allExpenses.filter(e => isExpenseInDateRange(e.date));
+    return EXPENSE_CATEGORIES.map(cat => ({
+      ...cat,
+      catTotal: expsInDateRange.reduce((sum, exp) => {
+        if (exp.items && exp.items.length > 0) {
+          const itTotal = exp.items
+            .filter(it => (it.category || detectProductCategory(it.name)) === cat.label)
+            .reduce((s, it) => s + (it.price || 0), 0);
+          if (itTotal > 0) return sum + itTotal;
+          if (exp.category === cat.label && !exp.items.some(it => it.category)) {
+            return sum + exp.amount;
+          }
+          return sum;
+        }
+        return exp.category === cat.label ? sum + exp.amount : sum;
+      }, 0)
+    })).filter(cat => cat.catTotal > 0 || expenseCategoryFilter === cat.label)
+    .sort((a, b) => b.catTotal - a.catTotal);
+  }, [allExpenses, showAllDates, expenseStartDate, expenseEndDate, selectedCycleId, expenseCategoryFilter]);
+
+  // Fast Memoized Expenses List
+  const filteredExpenses = useMemo(() => {
+    const query = expenseSearch.trim();
+    const normQuery = normalizeArabicText(query);
+
+    return allExpenses.filter(exp => {
+      const isDateValid = (expenseStartDate || expenseEndDate)
+        ? isExpenseInDateRange(exp.date)
+        : (showAllDates || query.length > 0 ? true : isInCycle(exp.date));
+
+      if (!isDateValid) return false;
+
+      if (expenseCategoryFilter) {
+        const matchesMain = exp.category === expenseCategoryFilter;
+        const matchesItems = exp.items && exp.items.some(it => (it.category || detectProductCategory(it.name)) === expenseCategoryFilter);
+        if (!matchesMain && !matchesItems) return false;
+      }
+
+      if (onlyWarrantyFilter) {
+        const hasW = exp.hasWarranty || (exp.warrantiesCount && exp.warrantiesCount > 0) || (exp.items && exp.items.some(it => it.hasWarranty));
+        if (!hasW) return false;
+      }
+
+      if (!query) return true;
+
+      if (normalizeArabicText(exp.name).includes(normQuery)) return true;
+      if (normalizeArabicText(exp.category).includes(normQuery)) return true;
+      if (exp.amount.toString().includes(query)) return true;
+      if (exp.items && exp.items.some(item => normalizeArabicText(item.name).includes(normQuery))) {
+        return true;
+      }
+
+      return false;
+    }).sort((a, b) => b.date.localeCompare(a.date));
+  }, [allExpenses, expenseSearch, expenseStartDate, expenseEndDate, showAllDates, selectedCycleId, expenseCategoryFilter, onlyWarrantyFilter]);
+
+  const [displayedExpenseCount, setDisplayedExpenseCount] = useState(30);
+
+  useEffect(() => {
+    setDisplayedExpenseCount(30);
+  }, [expenseCategoryFilter, expenseSearch, expenseStartDate, expenseEndDate, showAllDates]);
+
+  const displayedExpenses = useMemo(() => {
+    return filteredExpenses.slice(0, displayedExpenseCount);
+  }, [filteredExpenses, displayedExpenseCount]);
+
+  const filteredExpensesTotal = useMemo(() => {
+    return filteredExpenses.reduce((s, e) => s + e.amount, 0);
+  }, [filteredExpenses]);
 
   const totalBillsAmt = bills.reduce((s, b) => s + b.amount, 0);
 
@@ -4637,80 +4788,42 @@ setEditTrip(null);
               </div>
             </div>
 
-            {/* Smart Financial Insights Bar */}
-            {(() => {
-              const cycleExps = allExpenses.filter(e => isInCycle(e.date));
-              const cycleSpendTotal = cycleExps.reduce((s, e) => s + e.amount, 0);
-              
-              // Discretionary spend
-              let cycleDiscSpend = 0;
-              cycleExps.forEach(exp => {
-                if (exp.items && exp.items.length > 0) {
-                  exp.items.forEach(it => {
-                    const nat = classifyItemNature(it.name, it.category || exp.category);
-                    if (nat.type === "discretionary") cycleDiscSpend += (it.price || 0);
-                  });
-                } else {
-                  const nat = classifyItemNature(exp.name, exp.category);
-                  if (nat.type === "discretionary") cycleDiscSpend += (exp.amount || 0);
-                }
-              });
+            {/* Smart Financial Insights Bar (Pre-calculated in useMemo for 60FPS mobile speed) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-gradient-to-r from-rose-500/5 via-amber-500/5 to-indigo-500/5 border border-rose-100 dark:border-zinc-800">
+              <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-2xs">
+                <span className="text-[10px] font-bold text-gray-400 block">إجمالي صرف الدورة</span>
+                <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
+                  {fmt(smartFinancialInsights.cycleSpendTotal)} <span className="text-[9px] text-gray-400">د.ع</span>
+                </span>
+              </div>
 
-              const discRatio = cycleSpendTotal > 0 ? Math.round((cycleDiscSpend / cycleSpendTotal) * 100) : 0;
-              
-              // Top category
-              const catTotals: Record<string, number> = {};
-              cycleExps.forEach(e => {
-                const c = e.category || "عام";
-                catTotals[c] = (catTotals[c] || 0) + e.amount;
-              });
-              const topCatEntry = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
-              const topCatName = topCatEntry ? topCatEntry[0] : "لا يوجد";
-              const topCatTotal = topCatEntry ? topCatEntry[1] : 0;
-              const topCatIcon = EXPENSE_CATEGORIES.find(c => c.label === topCatName)?.icon || "📦";
+              <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-2xs">
+                <span className="text-[10px] font-bold text-gray-400 block">معدل الصرف اليومي</span>
+                <span className="text-sm sm:text-base font-black text-rose-600 dark:text-rose-400">
+                  {fmt(smartFinancialInsights.dailyAvg)} <span className="text-[9px] text-gray-400">د.ع / يوم</span>
+                </span>
+              </div>
 
-              // Approximate days into cycle
-              const cycleDays = Math.max(1, new Date().getDate());
-              const dailyAvg = Math.round(cycleSpendTotal / cycleDays);
+              <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-2xs">
+                <span className="text-[10px] font-bold text-gray-400 block">أعلى قسم صرفاً</span>
+                <span className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400 truncate block">
+                  {smartFinancialInsights.topCatIcon} {smartFinancialInsights.topCatName} ({fmt(smartFinancialInsights.topCatTotal)} د.ع)
+                </span>
+              </div>
 
-              return (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-gradient-to-r from-rose-500/5 via-amber-500/5 to-indigo-500/5 border border-rose-100 dark:border-zinc-800">
-                  <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-2xs">
-                    <span className="text-[10px] font-bold text-gray-400 block">إجمالي صرف الدورة</span>
-                    <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
-                      {fmt(cycleSpendTotal)} <span className="text-[9px] text-gray-400">د.ع</span>
-                    </span>
-                  </div>
-
-                  <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-2xs">
-                    <span className="text-[10px] font-bold text-gray-400 block">معدل الصرف اليومي</span>
-                    <span className="text-sm sm:text-base font-black text-rose-600 dark:text-rose-400">
-                      {fmt(dailyAvg)} <span className="text-[9px] text-gray-400">د.ع / يوم</span>
-                    </span>
-                  </div>
-
-                  <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-2xs">
-                    <span className="text-[10px] font-bold text-gray-400 block">أعلى قسم صرفاً</span>
-                    <span className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400 truncate block">
-                      {topCatIcon} {topCatName} ({fmt(topCatTotal)} د.ع)
-                    </span>
-                  </div>
-
-                  <div 
-                    onClick={() => setShowWasteStudyModal(true)}
-                    className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-amber-200/70 dark:border-amber-900/40 shadow-2xs cursor-pointer hover:border-amber-400 transition"
-                  >
-                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center justify-between">
-                      <span>تسالي وتبذير 🍭</span>
-                      <span className="text-[9px] font-black underline">تفاصيل ↗</span>
-                    </span>
-                    <span className="text-sm sm:text-base font-black text-amber-600 dark:text-amber-400">
-                      {fmt(cycleDiscSpend)} <span className="text-[9px] text-gray-400">د.ع ({discRatio}%)</span>
-                    </span>
-                  </div>
-                </div>
-              );
-            })()}
+              <div 
+                onClick={() => setShowWasteStudyModal(true)}
+                className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-amber-200/70 dark:border-amber-900/40 shadow-2xs cursor-pointer hover:border-amber-400 transition"
+              >
+                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center justify-between">
+                  <span>تسالي وتبذير 🍭</span>
+                  <span className="text-[9px] font-black underline">تفاصيل ↗</span>
+                </span>
+                <span className="text-sm sm:text-base font-black text-amber-600 dark:text-amber-400">
+                  {fmt(smartFinancialInsights.cycleDiscSpend)} <span className="text-[9px] text-gray-400">د.ع ({smartFinancialInsights.discRatio}%)</span>
+                </span>
+              </div>
+            </div>
 
             {/* Budget Limits Progress Cards */}
             {settings.budgetLimits && Object.entries(settings.budgetLimits).length > 0 && (
@@ -4873,25 +4986,7 @@ setEditTrip(null);
                 الكل
               </button>
               {(() => {
-                const availableCats = EXPENSE_CATEGORIES.map(cat => ({
-                  ...cat,
-                  catTotal: allExpenses.filter(e => isExpenseInDateRange(e.date)).reduce((sum, exp) => {
-                    if (exp.items && exp.items.length > 0) {
-                      const itTotal = exp.items
-                        .filter(it => (it.category || detectProductCategory(it.name)) === cat.label)
-                        .reduce((s, it) => s + (it.price || 0), 0);
-                      if (itTotal > 0) return sum + itTotal;
-                      if (exp.category === cat.label && !exp.items.some(it => it.category)) {
-                        return sum + exp.amount;
-                      }
-                      return sum;
-                    }
-                    return exp.category === cat.label ? sum + exp.amount : sum;
-                  }, 0)
-                })).filter(cat => cat.catTotal > 0 || expenseCategoryFilter === cat.label)
-                .sort((a, b) => b.catTotal - a.catTotal);
-
-                const catsToRender = showAllCategories ? availableCats : availableCats.slice(0, 4);
+                const catsToRender = showAllCategories ? availableExpenseCategories : availableExpenseCategories.slice(0, 4);
 
                 return (
                   <>
@@ -4915,7 +5010,7 @@ setEditTrip(null);
                         </button>
                       );
                     })}
-                    {!showAllCategories && availableCats.length > 4 && (
+                    {!showAllCategories && availableExpenseCategories.length > 4 && (
                       <button
                         onClick={() => setShowAllCategories(true)}
                         className="flex items-center gap-1 px-3.5 py-2 border rounded-full text-[11px] font-bold transition bg-gray-50 dark:bg-zinc-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800"
@@ -4923,7 +5018,7 @@ setEditTrip(null);
                         المزيد...
                       </button>
                     )}
-                    {showAllCategories && availableCats.length > 4 && (
+                    {showAllCategories && availableExpenseCategories.length > 4 && (
                       <button
                         onClick={() => { setShowAllCategories(false); setExpenseCategoryFilter(null); }}
                         className="flex items-center gap-1 px-3.5 py-2 border rounded-full text-[11px] font-bold transition bg-gray-50 dark:bg-zinc-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800"
@@ -4937,53 +5032,6 @@ setEditTrip(null);
             </div>
 
             {(() => {
-              const query = expenseSearch.trim();
-              const norm = (s: string) => (s || "")
-                .replace(/[أإآ]/g, "ا")
-                .replace(/ة/g, "ه")
-                .replace(/ى/g, "ي")
-                .toLowerCase()
-                .trim();
-              const normQuery = norm(query);
-
-              const filtered = allExpenses.filter(exp => {
-                // If user typed a search term, search across ALL time unless an explicit date range was picked
-                const isDateValid = (expenseStartDate || expenseEndDate)
-                  ? isExpenseInDateRange(exp.date)
-                  : (showAllDates || query.length > 0 ? true : isInCycle(exp.date));
-
-                if (!isDateValid) return false;
-
-                if (expenseCategoryFilter) {
-                  const matchesMain = exp.category === expenseCategoryFilter;
-                  const matchesItems = exp.items && exp.items.some(it => (it.category || detectProductCategory(it.name)) === expenseCategoryFilter);
-                  if (!matchesMain && !matchesItems) return false;
-                }
-
-                if (onlyWarrantyFilter) {
-                  const hasW = exp.hasWarranty || (exp.warrantiesCount && exp.warrantiesCount > 0) || (exp.items && exp.items.some(it => it.hasWarranty));
-                  if (!hasW) return false;
-                }
-
-                if (!query) return true;
-
-                // Match name
-                if (norm(exp.name).includes(normQuery)) return true;
-
-                // Match category
-                if (norm(exp.category).includes(normQuery)) return true;
-
-                // Match amount
-                if (exp.amount.toString().includes(query)) return true;
-
-                // Match any item inside receipt
-                if (exp.items && exp.items.some(item => norm(item.name).includes(normQuery))) {
-                  return true;
-                }
-
-                return false;
-              }).sort((a, b) => b.date.localeCompare(a.date));
-
               const isAnyFilterActive = expenseCategoryFilter || expenseSearch || expenseStartDate || expenseEndDate || showAllDates;
 
               return (
@@ -4996,13 +5044,13 @@ setEditTrip(null);
                           إجمالي {expenseCategoryFilter ? expenseCategoryFilter : expenseSearch ? `البحث: ${expenseSearch}` : showAllDates ? 'كل الفترات' : 'الفترة المحددة'}:
                         </span>
                         <span className="text-rose-600 dark:text-rose-400 font-black">
-                          {fmt(filtered.reduce((s,e)=>s+e.amount,0))} د.ع
+                          {fmt(filteredExpensesTotal)} د.ع
                         </span>
                       </div>
                       <button 
                         onClick={() => {
-                          const lines = filtered.map((e, i) => `${i+1}. ${e.name} | ${e.category} | ${fmt(e.amount)} د.ع | ${new Date(e.date).toLocaleDateString("ar-IQ")}`);
-                          const text = `📊 تقرير المصاريف المفلترة\nإجمالي: ${fmt(filtered.reduce((s,e)=>s+e.amount,0))} د.ع\nالعدد: ${filtered.length} مصروف\n\n${lines.join('\n')}`;
+                          const lines = filteredExpenses.map((e, i) => `${i+1}. ${e.name} | ${e.category} | ${fmt(e.amount)} د.ع | ${new Date(e.date).toLocaleDateString("ar-IQ")}`);
+                          const text = `📊 تقرير المصاريف المفلترة\nإجمالي: ${fmt(filteredExpensesTotal)} د.ع\nالعدد: ${filteredExpenses.length} مصروف\n\n${lines.join('\n')}`;
                           navigator.clipboard.writeText(text);
                           toast.success("تم نسخ البيانات للذكاء الاصطناعي 🤖");
                         }}
@@ -5014,7 +5062,7 @@ setEditTrip(null);
                     </div>
                   )}
 
-                  {filtered.length === 0 ? (
+                  {filteredExpenses.length === 0 ? (
                     <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
                       <span className="text-5xl block mb-3">💸</span>
                       <p className="text-gray-400 font-bold text-sm mb-3">
@@ -5037,8 +5085,9 @@ setEditTrip(null);
                       )}
                     </div>
                   ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {filtered.map(exp => {
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                  {displayedExpenses.map(exp => {
                     const isCakeDebt = Boolean((exp as any).isFromCake);
                     const cat = isCakeDebt
                       ? { label: "ديون الكيك", icon: "🎂", color: "from-pink-500 to-rose-600" }
@@ -5160,10 +5209,36 @@ setEditTrip(null);
                     );
                   })}
                 </div>
+
+                {/* Progressive load more for ultra-fast mobile rendering */}
+                {filteredExpenses.length > displayedExpenseCount && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 p-3.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 text-center shadow-xs">
+                    <span className="text-xs font-bold text-gray-500">
+                      يتم عرض <strong className="text-gray-900 dark:text-white font-black">{displayedExpenseCount}</strong> من أصل <strong className="text-purple-600 dark:text-purple-400 font-black">{filteredExpenses.length}</strong> مصروف
+                    </span>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => setDisplayedExpenseCount(prev => prev + 30)}
+                        className="flex-1 sm:flex-none px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition active:scale-95 shadow-sm"
+                      >
+                        عرض المزيد (+30) ⬇️
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDisplayedExpenseCount(filteredExpenses.length)}
+                        className="px-3.5 py-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95"
+                      >
+                        عرض الكل
+                      </button>
+                    </div>
+                  </div>
                 )}
-                </>
-              );
-            })()}
+              </>
+            )}
+          </>
+        );
+      })()}
           </div>
         )}
 
@@ -6572,8 +6647,7 @@ setEditTrip(null);
 
         {/* ═══════════════ CAR MANAGEMENT & EXPENSES TAB ═══════════════ */}
         {activeTab === "car" && (() => {
-          // 1. Car Expenses
-          const carExpenses = expenses.filter(e => e.isCar || isCarExpenseMatch(e.name, e.category, e.items));
+          // 1. Car Expenses (uses pre-memoized carExpenses)
           const searchedExpenses = carExpenses.filter(e => {
             if (!carSearch.trim()) return true;
             const q = normalizeArabicText(carSearch);
@@ -8561,7 +8635,15 @@ setEditTrip(null);
 
       {/* ─── Expense Modal (Modernized & Super Fast) ─── */}
       {(showExpenseModal || !!editExpense) && (
-        <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowExpenseModal(false);
+              setEditExpense(null);
+            }
+          }}
+          className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+        >
           <div className="bg-white dark:bg-zinc-950 w-full sm:max-w-2xl rounded-t-[32px] sm:rounded-[32px] px-5 sm:px-7 pt-5 pb-8 shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 border border-gray-100 dark:border-zinc-800 max-h-[92svh] overflow-y-auto mb-[75px] sm:mb-0 relative custom-scrollbar">
             
             {/* AI Scanning Overlay */}
@@ -8727,9 +8809,12 @@ setEditTrip(null);
                 
                 {showExpSuggestions && expNameInput.trim().length >= 1 && (() => {
                   const normQ = normalizeArabicText(expNameInput.trim());
-                  const matchedNames = uniqueNames.filter(n => normalizeArabicText(n).includes(normQ));
-                  const matchedPlaces = uniqueSuggestedPlaces.filter(p => normalizeArabicText(p).includes(normQ) && !matchedNames.includes(p));
-                  const combined = [...matchedNames, ...matchedPlaces].slice(0, 10);
+                  const matchedNames = normalizedUniqueNames.filter(n => n.norm.includes(normQ));
+                  const matchedPlaces = normalizedUniquePlaces.filter(p => p.norm.includes(normQ) && !matchedNames.some(m => m.raw === p.raw));
+                  const combined = [
+                    ...matchedNames.map(m => ({ suggestedName: m.raw, pred: m.pred })),
+                    ...matchedPlaces.map(p => ({ suggestedName: p.raw, pred: p.pred }))
+                  ].slice(0, 10);
 
                   if (combined.length === 0) {
                     return (
@@ -8741,8 +8826,7 @@ setEditTrip(null);
 
                   return (
                     <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl max-h-52 overflow-y-auto">
-                      {combined.map((suggestedName, idx) => {
-                        const pred = detectProductCategory(suggestedName);
+                      {combined.map(({ suggestedName, pred }, idx) => {
                         const isCar = suggestedName.includes("كراج") || suggestedName.includes("فيتر") || suggestedName.includes("بنزين") || suggestedName.includes("سيارة");
                         const isFood = suggestedName.includes("مطعم") || suggestedName.includes("كافيه") || suggestedName.includes("كباب");
                         const isOuting = suggestedName.includes("جولة") || suggestedName.includes("طلعة") || suggestedName.includes("زوراء");
@@ -9287,13 +9371,14 @@ setEditTrip(null);
                             />
                             {focusedProductIdx === idx && (item.name || "").length >= 1 && (() => {
                               const pQuery = normalizeArabicText(item.name || "");
-                              const matched = uniqueProductNames.filter(n => normalizeArabicText(n).includes(pQuery)).slice(0, 6);
+                              const matched = normalizedProductPool.filter(n => n.norm.includes(pQuery)).slice(0, 6);
                               if (matched.length === 0) return null;
                               return (
                                 <div className="absolute z-30 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-44 overflow-y-auto">
-                                  {matched.map((suggestedName, sIdx) => {
-                                    const pred = detectProductCategory(suggestedName);
-                                    const nature = classifyItemNature(suggestedName, pred);
+                                  {matched.map((prod, sIdx) => {
+                                    const suggestedName = prod.raw;
+                                    const pred = prod.pred;
+                                    const nature = prod.nature;
                                     return (
                                       <div 
                                         key={sIdx} 
@@ -9400,14 +9485,15 @@ setEditTrip(null);
                             {focusedPlaceIdx === idx && (() => {
                               const pQuery = normalizeArabicText(item.place || "").trim();
                               if (pQuery.length === 0) return null;
-                              const matching = uniqueSuggestedPlaces.filter(p => normalizeArabicText(p).includes(pQuery)).slice(0, 8);
+                              const matching = normalizedUniquePlaces.filter(p => p.norm.includes(pQuery)).slice(0, 8);
                               if (matching.length === 0) return null;
                               return (
                                 <div className="absolute z-30 w-full min-w-[170px] mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-44 overflow-y-auto">
                                   <div className="px-2 py-1 text-[9px] font-black text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-700/60">
                                     🔍 نتائج المحلات والكراجات:
                                   </div>
-                                  {matching.map((pName, sIdx) => {
+                                  {matching.map((pObj, sIdx) => {
+                                    const pName = pObj.raw;
                                     const isCar = pName.includes("كراج") || pName.includes("فيتر") || pName.includes("بنزين");
                                     const isFood = pName.includes("مطعم") || pName.includes("كافيه") || pName.includes("مشويات");
                                     const isMarket = pName.includes("ماركت") || pName.includes("سوق");
@@ -9419,7 +9505,7 @@ setEditTrip(null);
                                           e.preventDefault();
                                           const newItems = [...expenseItems];
                                           newItems[idx].place = pName;
-                                          const pred = detectProductCategory(pName);
+                                          const pred = pObj.pred || detectProductCategory(pName);
                                           if (pred && !newItems[idx].category) {
                                             newItems[idx].category = pred;
                                           }
