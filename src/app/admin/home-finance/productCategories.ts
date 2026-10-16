@@ -668,6 +668,82 @@ export function isCarExpenseMatch(name?: string, category?: string, items?: { na
 }
 
 /**
+ * كشف هل المادة المحددة داخل الفاتورة خاصة بالسيارة حصراً
+ */
+export function isCarItem(
+  it: { name?: string; category?: string; price?: number },
+  parentExpense?: { name?: string; category?: string; isCar?: boolean }
+): boolean {
+  if (!it) return false;
+  const itCat = normalizeArabicText(it.category || "");
+  const itName = normalizeArabicText(it.name || "");
+
+  // استبعاد قاطع للملابس، الأحذية، الألعاب، المستلزمات الشخصية والمطبخ
+  const EXPLICIT_NON_CAR = [
+    "فستان", "ثوب", "دشداشة", "دشداشه", "بنطلون", "قميص", "بلوز", "تنورة", "تنوره",
+    "سليبر", "شحاطة", "شحاطه", "حذاء", "جواريب", "جوارب", "كيلوت", "ملابس", "لانجري",
+    "حجاب", "شال", "مكياج", "حمرة", "عطر نسائي", "ليفة", "ليفه", "شامبو اطفال",
+    "لعبة", "العاب", "بفك", "شيبس", "نستلة", "شوكولاته", "كيك", "معكرونة", "اندومي"
+  ];
+  if (EXPLICIT_NON_CAR.some(w => itName.includes(w))) {
+    return false;
+  }
+
+  // 1. فئات السيارة المباشرة للمادة
+  if (
+    itCat.includes("السياره") ||
+    itCat.includes("سياره") ||
+    itCat.includes("صيانه ووقود") ||
+    itCat.includes("بنزين") ||
+    itCat.includes("وقود")
+  ) {
+    return true;
+  }
+
+  // 2. كلمات مفتاحية دقيقة لمستلزمات وقطع غيار وخدمات السيارة
+  const CAR_ITEM_KEYWORDS = [
+    "سيار", "بنزين", "بانزين", "وقود", "دهن محرك", "تبديل دهن", "تبديل زيت", "غسيل سيار",
+    "فيتر", "بنشر", "بنجر", "تاير", "اطارات", "إطارات", "سفايف", "بريك",
+    "فلتر هواء", "فلتر دهن", "كهربائي سيار", "سنوية", "سنويه", "فحص دوري", "قطع غيار",
+    "ميكانيك", "تبريد سيار", "غاز تبريد", "محطة وقود", "محطه وقود", "كراج",
+    "مثبت موبايل سيارة", "مثبت موبايل سياره", "حامل موبايل سيارة", "حامل سيارة", "شاحن سيارة", "شاحن سياره",
+    "معطر سيارة", "معطر سياره", "مظلة سيارة", "مظله سياره", "تظليل", "ماء مقطر", "مرآة زاوية", "مراه زاويه",
+    "فيوزات", "بلكات", "شمعات احتراق", "بلاكات", "حزام امان", "حزام أمان", "مفتاح عجل", "جيك سيارة",
+    "رافعة سيارة", "مضخة هواء", "منفاخ تاير", "دوشك سيارة", "فرشات سيارة", "تلبيس كشنات",
+    "ارضيات سيارة", "مساحات سيارة", "مساحات زجاج", "ماسحات", "مرايا سيارة", "داش كام", "كاميرا سيارة",
+    "حساسات سيارة", "انارة سيارة", "زنون", "ليد سيارة", "لمبات سيارة", "بطارية سيار", "بطاريه سيار"
+  ];
+
+  if (CAR_ITEM_KEYWORDS.some(kw => itName.includes(normalizeArabicText(kw)))) {
+    return true;
+  }
+
+  // 3. إذا كانت الفاتورة الأم مخصصة بالكامل للسيارة (مثل فيتر، محطة وقود، محل قطع غيار)
+  if (parentExpense) {
+    const pCat = normalizeArabicText(parentExpense.category || "");
+    const pName = normalizeArabicText(parentExpense.name || "");
+    const isDedicatedCarShop =
+      parentExpense.isCar ||
+      pCat === "السياره والنقل" ||
+      pCat === "السياره" ||
+      pCat === "سياره" ||
+      pCat === "صيانه ووقود" ||
+      pCat === "بنزين ووقود" ||
+      pName.includes("فيتر") ||
+      pName.includes("بنشر") ||
+      pName.includes("كهربائي سيار") ||
+      pName.includes("محطة وقود") ||
+      pName.includes("غسيل سيار");
+
+    if (isDedicatedCarShop) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * كشف فرد العائلة المستفيد من النص (رقية، قنوت، إيمان، إيڤا، حيدر)
  */
 export function detectFamilyMemberMatch(text?: string): "رقية" | "قنوت" | "إيمان" | "إيڤا" | "حيدر" | null {

@@ -51,7 +51,8 @@ import {
   isCarExpenseMatch,
   detectFamilyMemberMatch,
   isCarFuelExpense,
-  isCarMaintenanceExpense
+  isCarMaintenanceExpense,
+  isCarItem
 } from "./productCategories";
 
 // ══════════════════════════════════════════════
@@ -1283,9 +1284,11 @@ export default function HomeFinanceDashboard() {
     });
   }, [categorySpendingMap]);
 
-  // Fast Car Expenses Cache: Strictly excludes outings, trips, and installments
+  // Fast Car Expenses Cache: Strictly excludes outings, trips, and non-car items from mixed receipts
   const carExpenses = useMemo(() => {
-    return expenses.filter(e => {
+    const list: (Expense & { isPartialCarReceipt?: boolean; originalTotalAmount?: number; originalItemCount?: number })[] = [];
+
+    expenses.forEach(e => {
       const normCat = normalizeArabicText(e.category || "");
       const normN = normalizeArabicText(e.name || "");
       if (
@@ -1304,10 +1307,48 @@ export default function HomeFinanceDashboard() {
         normN.includes("مطعم") ||
         normN.includes("كافيه")
       ) {
-        return false;
+        return;
       }
-      return e.isCar || isCarExpenseMatch(e.name, e.category, e.items);
+
+      // 1. If expense has itemized rows, filter to ONLY car-specific items
+      if (e.items && e.items.length > 0) {
+        const carOnlyItems = e.items.filter(it => isCarItem(it, e));
+
+        if (carOnlyItems.length > 0) {
+          const isPartial = carOnlyItems.length < e.items.length || (
+            normCat !== "السياره والنقل" &&
+            normCat !== "السياره" &&
+            normCat !== "سياره" &&
+            normCat !== "صيانه ووقود" &&
+            normCat !== "بنزين ووقود" &&
+            !e.isCar
+          );
+          const carAmount = carOnlyItems.reduce((sum, it) => sum + (Number(it.price) || 0), 0);
+
+          list.push({
+            ...e,
+            items: carOnlyItems,
+            amount: (isPartial && carAmount > 0) ? carAmount : e.amount,
+            isPartialCarReceipt: isPartial,
+            originalTotalAmount: e.amount,
+            originalItemCount: e.items.length,
+          });
+          return;
+        }
+
+        // If it had items but NONE were for the car, and it's not explicitly a car expense, skip it
+        if (!e.isCar && normCat !== "السياره والنقل" && normCat !== "السياره" && normCat !== "سياره") {
+          return;
+        }
+      }
+
+      // 2. Direct car expense (fuel, mechanic, or single car item without itemized array)
+      if (e.isCar || isCarExpenseMatch(e.name, e.category, e.items)) {
+        list.push(e);
+      }
     });
+
+    return list;
   }, [expenses]);
 
   // Fast Memoized Insights Bar (0 recalculations during modal typing)
@@ -6999,13 +7040,18 @@ setEditTrip(null);
                                     <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200/50">
                                       {isFuel ? "وقود وبنزين" : isMaint ? "صيانة وتصليح" : exp.category}
                                     </span>
+                                    {(exp as any).isPartialCarReceipt && (
+                                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/50" title={`إجمالي الفاتورة الكاملة: ${fmt((exp as any).originalTotalAmount || 0)} د.ع`}>
+                                        مستلزمات سيارة فقط
+                                      </span>
+                                    )}
                                   </div>
 
                                   <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-400 font-bold flex-wrap">
                                     <span>📅 {exp.date}</span>
                                     {exp.items && exp.items.length > 0 && (
-                                      <span className="text-gray-500">
-                                        📦 {exp.items.length} مواد
+                                      <span className="text-gray-500 font-bold">
+                                        📦 {exp.items.length} {(exp as any).isPartialCarReceipt ? `مواد خاصة بالسيارة (من أصل ${(exp as any).originalItemCount})` : "مواد"}
                                       </span>
                                     )}
                                   </div>
@@ -7018,14 +7064,15 @@ setEditTrip(null);
                                         return (
                                           <div
                                             key={idx}
-                                            className="text-[11px] font-bold bg-gray-50 dark:bg-zinc-800 px-2 py-1 rounded-lg border border-gray-200/60 dark:border-zinc-700/60 flex items-center gap-1.5"
+                                            className="text-[11px] font-bold bg-blue-50/60 dark:bg-blue-950/30 px-2.5 py-1 rounded-lg border border-blue-200/60 dark:border-blue-800/40 flex items-center gap-1.5 text-blue-900 dark:text-blue-200 shadow-2xs"
                                           >
-                                            <span className="text-gray-800 dark:text-gray-200">{it.name}</span>
+                                            <span>🚗</span>
+                                            <span>{it.name}</span>
                                             {it.quantity && it.quantity > 1 && (
-                                              <span className="text-gray-400 text-[10px]">×{it.quantity}</span>
+                                              <span className="text-blue-500 dark:text-blue-400 text-[10px]">×{it.quantity}</span>
                                             )}
                                             {it.price > 0 && (
-                                              <span className="text-rose-600 dark:text-rose-400 font-black">{fmt(it.price)} د.ع</span>
+                                              <span className="text-rose-600 dark:text-rose-400 font-black mr-1">{fmt(it.price)} د.ع</span>
                                             )}
                                             {pInfo && (
                                               <span className={`text-[9px] px-1 py-0.2 rounded ${pInfo.bgClass} ${pInfo.colorClass}`}>
@@ -7050,7 +7097,11 @@ setEditTrip(null);
                                   {(exp.imageUrl || (exp.receiptImages && exp.receiptImages.length > 0)) && (
                                     <button
                                       type="button"
-                                      onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
+                                      onClick={() => {
+                                        const orig = expenses.find(x => x.id === exp.id) || exp;
+                                        setViewingReceiptExpense(orig);
+                                        setReceiptItemFilter("");
+                                      }}
                                       className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition"
                                       title="عرض الوصل والصور"
                                     >
@@ -7059,7 +7110,11 @@ setEditTrip(null);
                                   )}
                                   <button
                                     type="button"
-                                    onClick={() => { setEditExpense(exp); setShowExpenseModal(true); }}
+                                    onClick={() => {
+                                      const orig = expenses.find(x => x.id === exp.id) || exp;
+                                      setEditExpense(orig);
+                                      setShowExpenseModal(true);
+                                    }}
                                     className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition"
                                     title="تعديل"
                                   >
