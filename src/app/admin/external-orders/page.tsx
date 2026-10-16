@@ -104,11 +104,10 @@ export default function ExternalOrdersAdmin() {
       setOrders(fetchedOrders);
       setLoading(false);
       try {
-        const cleanExt = fetchedOrders.slice(0, 100).map(o => {
-          const clean = { ...o };
-          delete clean.tempImageUrl;
-          return clean;
-        });
+        const cleanExt = fetchedOrders.slice(0, 50).map(o => ({
+          ...o,
+          imageUrl: o.imageUrl || o.tempImageUrl || "",
+        }));
         setFreshCache("cache_external_orders_v2", cleanExt);
       } catch {}
       toast.success("تم تحديث الطلبات بنجاح 🔄");
@@ -146,11 +145,10 @@ export default function ExternalOrdersAdmin() {
       setOrders(fetchedOrders);
       setLoading(false);
       try {
-        const cleanExt = fetchedOrders.slice(0, 100).map(o => {
-          const clean = { ...o };
-          delete clean.tempImageUrl;
-          return clean;
-        });
+        const cleanExt = fetchedOrders.slice(0, 50).map(o => ({
+          ...o,
+          imageUrl: o.imageUrl || o.tempImageUrl || "",
+        }));
         setFreshCache("cache_external_orders_v2", cleanExt);
       } catch (e) {
         console.error("Cache error:", e);
@@ -319,7 +317,22 @@ export default function ExternalOrdersAdmin() {
       };
 
       // Preserve existing image on edit when no new file chosen
-      if (isEditMode && !imageFile && existingImageUrl) {
+      // Process image directly for instant display
+      if (imageFile) {
+        try {
+          const compressed = await compressImage(imageFile);
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(compressed);
+          });
+          orderData.imageUrl = dataUrl;
+          orderData.tempImageUrl = dataUrl;
+        } catch (e) {
+          console.error("Image processing error:", e);
+        }
+      } else if (isEditMode && existingImageUrl) {
         orderData.imageUrl = existingImageUrl;
       }
 
@@ -331,35 +344,13 @@ export default function ExternalOrdersAdmin() {
       } else {
         const newDocRef = await addDoc(collection(db, "external_orders"), orderData);
         savedDocId = newDocRef.id;
-        if (!navigator.onLine) {
-          toast.success("تم الحفظ محلياً (قيد المزامنة)");
-        } else {
-          toast.success("تم إضافة الطلب بنجاح ✔");
-        }
+        toast.success("تم إضافة الطلب بنجاح ✔");
       }
 
-      // ── Upload image in the background (non-blocking) ──────────────────────
-      // The order is already saved. Now upload the image separately so the
-      // user never waits for the upload before seeing the order.
-      if (imageFile && savedDocId && navigator.onLine) {
-        const docId = savedDocId; // capture for async closure
-        const fileToUpload = imageFile;
-        toast.info("📸 يتم رفع الصورة في الخلفية...", { duration: 2000 });
-        (async () => {
-          try {
-            const compressedFile = await compressImage(fileToUpload);
-            const fileRef = ref(storage, `external_orders/${Date.now()}_${compressedFile.name}`);
-            await uploadBytes(fileRef, compressedFile);
-            const uploadedUrl = await getDownloadURL(fileRef);
-            await updateDoc(doc(db, "external_orders", docId), { imageUrl: uploadedUrl, tempImageUrl: null });
-            // onSnapshot will pick up the change automatically – no manual state update needed
-          } catch (err) {
-            console.error("Background image upload failed:", err);
-            toast.error("تعذّر رفع الصورة، يمكنك تعديل الطلب لاحقاً لإعادة المحاولة.");
-          }
-        })();
-      } else if (imageFile && !navigator.onLine) {
-        toast.warning("لا يوجد اتصال – ستُرفع الصورة تلقائياً عند عودة الإنترنت.");
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("cache_external_orders_v2");
+        } catch {}
       }
 
       // Reset form
@@ -741,8 +732,16 @@ export default function ExternalOrdersAdmin() {
                       return (
                         <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
                           <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
-                            {(order.imageUrl || order.tempImageUrl) ? (
-                              <img fetchPriority="high" loading="eager" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
+                            {(order.imageUrl || order.tempImageUrl || order.image) ? (
+                              <img 
+                                fetchPriority="high" 
+                                loading="eager" 
+                                decoding="async"
+                                src={order.imageUrl || order.tempImageUrl || order.image} 
+                                alt={order.cakeName} 
+                                onClick={() => window.open(order.imageUrl || order.tempImageUrl || order.image, '_blank')} 
+                                className="w-full h-full object-cover cursor-pointer" 
+                              />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-gray-300">
                                 <Smartphone className="w-8 h-8" />
@@ -814,8 +813,16 @@ export default function ExternalOrdersAdmin() {
 
               {/* Image / Icon */}
               <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
-                {(order.imageUrl || order.tempImageUrl) ? (
-                  <img fetchPriority="high" loading="eager" src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover cursor-pointer" />
+                {(order.imageUrl || order.tempImageUrl || order.image) ? (
+                  <img 
+                    fetchPriority="high" 
+                    loading="eager" 
+                    decoding="async"
+                    src={order.imageUrl || order.tempImageUrl || order.image} 
+                    alt={order.cakeName} 
+                    onClick={() => window.open(order.imageUrl || order.tempImageUrl || order.image, '_blank')} 
+                    className="w-full h-full object-cover cursor-pointer" 
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-300">
                     <Smartphone className="w-8 h-8" />

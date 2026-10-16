@@ -560,7 +560,7 @@ export default function HomeFinanceDashboard() {
 
 
   const [mounted, setMounted] = useState(false);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
 
   // Smart Modals
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -724,7 +724,7 @@ export default function HomeFinanceDashboard() {
 
   // Auto-suggested shops and markets derived dynamically from previous expenses & items (sorted by usage frequency)
   const uniqueSuggestedPlaces = useMemo(() => {
-    if (!mounted) return OUTING_PLACES_SUGGESTIONS;
+    if (!mounted || !showExpenseModal) return OUTING_PLACES_SUGGESTIONS;
     const counts = new Map<string, number>();
 
     const STORE_KEYWORDS = [
@@ -765,11 +765,13 @@ export default function HomeFinanceDashboard() {
       .sort((a, b) => b[1] - a[1])
       .map(([place]) => place)
       .filter(Boolean);
-  }, [expenses, mounted]);
+  }, [expenses, mounted, showExpenseModal]);
 
-  // Auto-suggest states
+  // Auto-suggest states - only computed when a modal is active (saves thousands of regex/loops on mount)
+  const isAnyEntryModalOpen = showExpenseModal || showNeedModal || showInventoryModal || showDebtModal || showProductSearchModal;
+
   const uniqueNames = useMemo(() => {
-    if (!mounted) return [];
+    if (!mounted || !isAnyEntryModalOpen) return [];
     return Array.from(new Set([
       ...inventory.map(i => i.name),
       ...carInventory.map(c => c.name),
@@ -781,10 +783,10 @@ export default function HomeFinanceDashboard() {
       ...needs.map(n => n.name),
       "طلعات وجولات", "جولة بغداد", "المتنبي والرشيد", "كورنيش وجادرية", "بنزين سيارة", "صيانة سيارة", "كراج تصليح", "مسواك خضار", "مطعم كباب"
     ])).filter(Boolean);
-  }, [inventory, carInventory, expenses, uniqueSuggestedPlaces, debts, installments, bills, needs, mounted]);
+  }, [inventory, carInventory, expenses, uniqueSuggestedPlaces, debts, installments, bills, needs, mounted, isAnyEntryModalOpen]);
 
   const uniqueProductNames = useMemo(() => {
-    if (!mounted) return [];
+    if (!mounted || (!showExpenseModal && !showProductSearchModal && focusedProductIdx === null)) return [];
     const pool = new Set<string>();
     expenses.forEach(e => {
       (e.items || []).forEach(i => { if (i.name) pool.add(i.name.trim()); });
@@ -797,10 +799,11 @@ export default function HomeFinanceDashboard() {
       cat.keywords.forEach(kw => { if (kw && kw.length >= 2) pool.add(kw.trim()); });
     });
     return Array.from(pool).filter(Boolean);
-  }, [expenses, inventory, carInventory, needs, mounted]);
+  }, [expenses, inventory, carInventory, needs, mounted, showExpenseModal, showProductSearchModal, focusedProductIdx]);
 
   // Pre-normalized caches for instant mobile auto-complete (0 regex per keystroke)
   const normalizedUniqueNames = useMemo(() => {
+    if (!uniqueNames.length) return [];
     return uniqueNames.map(name => ({
       raw: name,
       norm: normalizeArabicText(name),
@@ -809,14 +812,16 @@ export default function HomeFinanceDashboard() {
   }, [uniqueNames]);
 
   const normalizedUniquePlaces = useMemo(() => {
+    if (!showExpenseModal) return [];
     return uniqueSuggestedPlaces.map(place => ({
       raw: place,
       norm: normalizeArabicText(place),
       pred: detectProductCategory(place)
     }));
-  }, [uniqueSuggestedPlaces]);
+  }, [uniqueSuggestedPlaces, showExpenseModal]);
 
   const normalizedProductPool = useMemo(() => {
+    if (!uniqueProductNames.length) return [];
     return uniqueProductNames.map(name => {
       const pred = detectProductCategory(name);
       const nature = classifyItemNature(name, pred);

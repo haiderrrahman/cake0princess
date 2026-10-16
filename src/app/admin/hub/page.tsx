@@ -158,11 +158,10 @@ function AdminHubContent() {
       setExternalOrders(allExt);
       setExtOrdersLoaded(true);
       try {
-        const cleanExt = allExt.slice(0, 100).map(o => {
-          const clean = { ...o };
-          delete clean.tempImageUrl;
-          return clean;
-        });
+        const cleanExt = allExt.slice(0, 50).map(o => ({
+          ...o,
+          imageUrl: o.imageUrl || o.tempImageUrl || "",
+        }));
         setFreshCache("cache_external_orders_v2", cleanExt);
       } catch {}
       toast.success("تم تحديث طلبات السوشيال بنجاح 🔄");
@@ -278,11 +277,10 @@ function AdminHubContent() {
       const cleanOrders = orders.slice(0, 50).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
       setFreshCache("cache_orders_v2", cleanOrders);
       
-      const cleanExt = externalOrders.slice(0, 100).map(o => {
-        const clean = { ...o };
-        delete clean.tempImageUrl;
-        return clean;
-      });
+      const cleanExt = externalOrders.slice(0, 50).map(o => ({
+        ...o,
+        imageUrl: o.imageUrl || o.tempImageUrl || "",
+      }));
       setFreshCache("cache_external_orders_v2", cleanExt);
       
       const cleanSales = storeSales.slice(0, 50);
@@ -295,8 +293,8 @@ function AdminHubContent() {
   const fetchAll = useCallback(async () => {
     try {
       const [customSnap, coursesSnap] = await Promise.all([
-        getDocs(query(collection(db, "custom_orders"), orderBy("createdAt", "desc"), limit(100))),
-        getDocs(collection(db, "courses"))
+        getDocs(query(collection(db, "custom_orders"), orderBy("createdAt", "desc"), limit(50))),
+        getDocs(query(collection(db, "courses"), limit(50)))
       ]);
       setCustomOrders(customSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setCourses(coursesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -315,8 +313,8 @@ function AdminHubContent() {
     };
     window.addEventListener('backgroundUploadSuccess', handleBackgroundUpload);
     
-    // Real-time listener for expenses
-    const expQuery = query(collection(db, "expenses"), orderBy("createdAt", "desc"));
+    // Real-time listener for recent expenses (speed limit 100)
+    const expQuery = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(100));
     const unsubExpenses = onSnapshot(expQuery, (snap) => {
       const exps = snap.docs.map(d => d.data()) as any[];
       const totalExpenses = exps.reduce((s, e) => s + Number(e.amount || 0), 0);
@@ -346,33 +344,33 @@ function AdminHubContent() {
       }));
     });
 
-    // Real-time listener for cake material purchases
+    // Real-time listener for cake material purchases (limit 50)
     const unsubPurchases = onSnapshot(
-      query(collection(db, "cake_material_purchases"), orderBy("purchaseDate", "desc")),
+      query(collection(db, "cake_material_purchases"), orderBy("purchaseDate", "desc"), limit(50)),
       (snap) => {
         setPurchases(snap.docs.map(d => ({ id: d.id, ...d.data() } as CakeMaterialPurchase)));
       },
       (err) => console.error("Purchases listener err:", err)
     );
 
-    // Real-time listener for home debts
-    const unsubHomeDebts = onSnapshot(doc(db, "home_finance", "debts"), (snap) => {
-      if (snap.exists() && snap.data().data) {
-        setHomeDebts(snap.data().data);
-      } else {
-        setHomeDebts([]);
-      }
-    });
-
-    const unsubHomeExpenses = onSnapshot(doc(db, "home_finance", "expenses"), (snap) => {
-      if (snap.exists() && snap.data().data) setHomeExpenses(snap.data().data);
-      else setHomeExpenses([]);
-    });
-
-    const unsubHomeIncomes = onSnapshot(doc(db, "home_finance", "incomes"), (snap) => {
-      if (snap.exists() && snap.data().data) setHomeIncomes(snap.data().data);
-      else setHomeIncomes([]);
-    });
+    // Defer home finance listeners: only load when audit tab is requested
+    let unsubHomeDebts = () => {};
+    let unsubHomeExpenses = () => {};
+    let unsubHomeIncomes = () => {};
+    if (activeTab === "audit") {
+      unsubHomeDebts = onSnapshot(doc(db, "home_finance", "debts"), (snap) => {
+        if (snap.exists() && snap.data().data) setHomeDebts(snap.data().data);
+        else setHomeDebts([]);
+      });
+      unsubHomeExpenses = onSnapshot(doc(db, "home_finance", "expenses"), (snap) => {
+        if (snap.exists() && snap.data().data) setHomeExpenses(snap.data().data);
+        else setHomeExpenses([]);
+      });
+      unsubHomeIncomes = onSnapshot(doc(db, "home_finance", "incomes"), (snap) => {
+        if (snap.exists() && snap.data().data) setHomeIncomes(snap.data().data);
+        else setHomeIncomes([]);
+      });
+    }
 
     const unsubCustomers = onSnapshot(query(collection(db, "customers"), where("isBlacklisted", "==", true)), (snap) => {
       const names = snap.docs.map(d => d.data().name).filter(Boolean);
@@ -390,7 +388,7 @@ function AdminHubContent() {
       unsubHomeIncomes();
       unsubCustomers();
     };
-  }, [fetchAll]);
+  }, [fetchAll, activeTab]);
 
   // Real-time listeners for orders, external_orders, and store_sales with limits
   useEffect(() => {
@@ -420,11 +418,10 @@ function AdminHubContent() {
       setExtOrdersLoaded(true);
       setLoading(false);
       try {
-        const cleanExt = allExt.slice(0, 100).map(o => {
-          const clean = { ...o };
-          delete clean.tempImageUrl;
-          return clean;
-        });
+        const cleanExt = allExt.slice(0, 50).map(o => ({
+          ...o,
+          imageUrl: o.imageUrl || o.tempImageUrl || "",
+        }));
         setFreshCache("cache_external_orders_v2", cleanExt);
       } catch {}
     }, (err) => {
@@ -437,11 +434,10 @@ function AdminHubContent() {
         setExtOrdersLoaded(true);
         setLoading(false);
         try {
-          const cleanExt = allExt.slice(0, 100).map(o => {
-            const clean = { ...o };
-            delete clean.tempImageUrl;
-            return clean;
-          });
+          const cleanExt = allExt.slice(0, 50).map(o => ({
+            ...o,
+            imageUrl: o.imageUrl || o.tempImageUrl || "",
+          }));
           setFreshCache("cache_external_orders_v2", cleanExt);
         } catch {}
       }).catch(() => {
@@ -1892,8 +1888,16 @@ function AdminHubContent() {
                           
                           {/* Image Top */}
                           <div className="w-full aspect-square rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 border border-gray-100 dark:border-zinc-700 relative">
-                            {order.imageUrl || order.tempImageUrl ? (
-                              <img src={order.imageUrl || order.tempImageUrl} alt={order.cakeName} onClick={() => window.open(order.imageUrl || order.tempImageUrl, '_blank')} className="w-full h-full object-cover mix-blend-multiply dark:mix-blend-normal cursor-pointer" />
+                            {(order.imageUrl || order.tempImageUrl || order.image) ? (
+                              <img 
+                                src={order.imageUrl || order.tempImageUrl || order.image} 
+                                alt={order.cakeName} 
+                                loading="eager"
+                                fetchPriority="high"
+                                decoding="async"
+                                onClick={() => window.open(order.imageUrl || order.tempImageUrl || order.image, '_blank')} 
+                                className="w-full h-full object-cover mix-blend-multiply dark:mix-blend-normal cursor-pointer" 
+                              />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">
                                 <img src="/cp-logo.png" alt="Cake Princess" className="w-10 h-10 opacity-20 grayscale" />

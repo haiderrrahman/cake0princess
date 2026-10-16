@@ -237,9 +237,9 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         isBismayah: deliveryType === "bismayah", bismayahComplex, bismayahBuilding, bismayahApt, deliveryType,
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,
-        // Preserve existing imageUrl when no new image is selected
-        ...(!imageFile && order.imageUrl ? { imageUrl: order.imageUrl } : {}),
-        ...(tempImageUrl ? { tempImageUrl } : {})
+        // Preserve existing imageUrl or assign new image directly to imageUrl
+        ...(!imageFile && (order.imageUrl || order.tempImageUrl) ? { imageUrl: order.imageUrl || order.tempImageUrl } : {}),
+        ...(tempImageUrl ? { imageUrl: tempImageUrl, tempImageUrl } : {})
       });
 
       if (typeof window !== "undefined") {

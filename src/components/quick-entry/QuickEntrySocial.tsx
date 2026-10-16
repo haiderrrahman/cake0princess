@@ -252,7 +252,9 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,      // حقل موحد مع باقي التطبيق
         deliveryTime: deliveryDate, // توافق مع السجلات القديمة
-        imageUrl: "", tempImageUrl: tempImageUrl, createdAt: serverTimestamp(),
+        imageUrl: tempImageUrl || "",
+        tempImageUrl: tempImageUrl || "",
+        createdAt: serverTimestamp(),
       });
 
       if (typeof window !== "undefined") {
