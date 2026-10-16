@@ -524,6 +524,73 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
     ]
   },
   {
+    id: "outings_tours",
+    name: "طلعات وجولات",
+    icon: "🎡",
+    color: "text-teal-700 dark:text-teal-300",
+    bgLight: "bg-teal-50 border-teal-300",
+    bgDark: "dark:bg-teal-950/40 dark:border-teal-700/60",
+    keywords: [
+      "طلعة", "طلعات", "جولة", "جولات", "متنزه", "كورنيش", "مدينة العاب", "العاب اطفال", "مسبح",
+      "سينما", "زوراء", "جادرية", "شارع الرشيد", "متنبي", "ترفيه", "نزهة", "فسحة", "طلعة عائلية"
+    ]
+  },
+  {
+    id: "lotto_games",
+    name: "ألعاب ويانصيب",
+    icon: "🎲",
+    color: "text-purple-700 dark:text-purple-300",
+    bgLight: "bg-purple-50 border-purple-300",
+    bgDark: "dark:bg-purple-950/40 dark:border-purple-700/60",
+    keywords: [
+      "لوتو", "يانصيب", "سوبر كي", "لوتو العراق", "سحب لوتو", "بطاقة لوتو", "بطاقات لوتو", "قمار", "رهان", "توقع"
+    ]
+  },
+  {
+    id: "debts_installments",
+    name: "ديون وأقساط",
+    icon: "🤝",
+    color: "text-rose-700 dark:text-rose-300",
+    bgLight: "bg-rose-50 border-rose-300",
+    bgDark: "dark:bg-rose-950/40 dark:border-rose-700/60",
+    keywords: [
+      "دين", "ديون", "سلفة", "سلف", "قسط", "اقساط", "تسديد دين", "تسديد قسط", "دفع دين", "كمبيالة", "ذمة", "مستحقات"
+    ]
+  },
+  {
+    id: "travel_trips",
+    name: "سفر ورحلات",
+    icon: "✈️",
+    color: "text-sky-700 dark:text-sky-300",
+    bgLight: "bg-sky-50 border-sky-300",
+    bgDark: "dark:bg-sky-950/40 dark:border-sky-700/60",
+    keywords: [
+      "سفر", "سفرة", "رحلة", "تذكرة طيران", "فندق", "حجز فندق", "فيزا", "جواز سفر", "طيران", "سياحة", "مطار"
+    ]
+  },
+  {
+    id: "family_personal",
+    name: "العائلة ومصروف شخصي",
+    icon: "👨‍👩‍👧",
+    color: "text-pink-700 dark:text-pink-300",
+    bgLight: "bg-pink-50 border-pink-300",
+    bgDark: "dark:bg-pink-950/40 dark:border-pink-700/60",
+    keywords: [
+      "مصروف شخصي", "مصروف عائلي", "طلب عائلة", "كسوة", "مصروف يد", "جيب", "مصروف جيب", "حاجة شخصية", "مصاريف اطفال"
+    ]
+  },
+  {
+    id: "cake_debts",
+    name: "ديون الكيك",
+    icon: "🎂",
+    color: "text-pink-600 dark:text-pink-400",
+    bgLight: "bg-pink-50 border-pink-200",
+    bgDark: "dark:bg-pink-950/40 dark:border-pink-800/60",
+    keywords: [
+      "دين كيك", "ديون الكيك", "كيك الاميرة", "مواد كيك", "تجهيز كيك"
+    ]
+  },
+  {
     id: "other_misc",
     name: "أخرى ومتفرقات",
     icon: "📦",
@@ -535,6 +602,19 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
     ]
   }
 ];
+
+export function normalizeArabicText(str?: string): string {
+  if (!str) return "";
+  return str
+    .replace(/[\u064B-\u065F\u0670]/g, "") // remove tashkeel
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .toLowerCase()
+    .trim();
+}
 
 export const PRODUCT_CATEGORY_MAP: Record<string, ProductCategoryDef> = PRODUCT_CATEGORIES.reduce((acc, cat) => {
   acc[cat.name] = cat;
@@ -622,8 +702,8 @@ export function saveLearnedCategory(name: string, category: string): void {
 }
 
 function matchesKeyword(text: string, kw: string): boolean {
-  const t = text.toLowerCase().trim();
-  const k = kw.toLowerCase().trim();
+  const t = normalizeArabicText(text);
+  const k = normalizeArabicText(kw);
   if (!t || !k) return false;
   if (t === k) return true;
   if (k.includes(" ")) {
@@ -633,74 +713,118 @@ function matchesKeyword(text: string, kw: string): boolean {
   for (const w of words) {
     if (w === k) return true;
     if (w === "ال" + k || w === "و" + k || w === "وال" + k || w === "ف" + k || w === "كال" + k || w === "بال" + k) return true;
-    if (k.length >= 4 && (w.startsWith(k) || w.endsWith(k))) return true;
+    if (k.length >= 3 && (w.startsWith(k) || w.endsWith(k))) return true;
   }
   return false;
 }
 
 /**
- * دالة التنبؤ الذكي التلقائي بالفئة حسب اسم المادة (مع دعم التعلم المسبق)
+ * دالة التنبؤ الذكي التلقائي بالفئة حسب اسم المادة (مع دعم التعلم المسبق والتطبيع العربي)
  */
 export function detectProductCategory(name: string): string {
   if (!name || typeof name !== "string") return "";
   const cleaned = name.trim().toLowerCase();
-  if (!cleaned) return "";
+  const norm = normalizeArabicText(cleaned);
+  if (!cleaned && !norm) return "";
 
   // 1. Check user learned memory first
-  const learned = getLearnedCategory(cleaned);
+  const learned = getLearnedCategory(cleaned) || getLearnedCategory(norm);
   if (learned) return learned;
 
   // 2. Exact or word-boundary keyword match across all categories
   for (const cat of PRODUCT_CATEGORIES) {
     for (const kw of cat.keywords) {
-      if (matchesKeyword(cleaned, kw)) {
+      if (matchesKeyword(norm, kw) || matchesKeyword(cleaned, kw)) {
         return cat.name;
       }
     }
   }
 
-  // 4. Heuristic fallbacks for key Iraqi terms:
-  if (cleaned.includes("كراج") || cleaned.includes("بانزين") || cleaned.includes("بنزين") || cleaned.includes("سيار") || cleaned.includes("دهن محرك") || cleaned.includes("فيتر") || cleaned.includes("تاير") || cleaned.includes("غسل سيارة") || cleaned.includes("بنشر") || cleaned.includes("تبديل دهن") || cleaned.includes("وقود") || cleaned.includes("باركنك") || cleaned.includes("تكسي") || cleaned.includes("كروة")) {
+  // 3. Fallbacks for Car & Transport:
+  if (
+    norm.includes("كراج") || norm.includes("بانزين") || norm.includes("بنزين") || norm.includes("سيار") ||
+    norm.includes("دهن محرك") || norm.includes("فيتر") || norm.includes("تاير") || norm.includes("غسل سيار") ||
+    norm.includes("بنشر") || norm.includes("تبديل دهن") || norm.includes("وقود") || norm.includes("باركنك") ||
+    norm.includes("باركنج") || norm.includes("تكسي") || norm.includes("تاكسي") || norm.includes("كروه") ||
+    norm.includes("سفايف") || norm.includes("بريك") || norm.includes("بطاريه سيار") || norm.includes("ميكانيك") ||
+    norm.includes("فيترجي") || norm.includes("كهربائي سيار")
+  ) {
     return "السيارة والنقل";
   }
-  if (cleaned.includes("كارت") || cleaned.includes("رصيد") || cleaned.includes("اسيا") || cleaned.includes("اسياسيل") || cleaned.includes("زين") || cleaned.includes("كورك") || cleaned.includes("سيم كارت") || cleaned.includes("سيمكارت")) {
+
+  // 4. Outings & Entertainment
+  if (norm.includes("طلعه") || norm.includes("جوله") || norm.includes("متنزه") || norm.includes("كورنيش") || norm.includes("زوراء") || norm.includes("جادريه") || norm.includes("شارع الرشيد") || norm.includes("متنبي") || norm.includes("العاب اطفال") || norm.includes("مسبح") || norm.includes("سينما")) {
+    return "طلعات وجولات";
+  }
+
+  // 5. Lotto & Games
+  if (norm.includes("لوتو") || norm.includes("يانصيب") || norm.includes("سوبر كي") || norm.includes("عراق لوتو") || norm.includes("بطاقه لوتو")) {
+    return "ألعاب ويانصيب";
+  }
+
+  // 6. Debts & Installments
+  if (norm.includes("دين كيك") || norm.includes("ديون كيك")) {
+    return "ديون الكيك";
+  }
+  if (norm.includes("دين") || norm.includes("سلفه") || norm.includes("قسط") || norm.includes("تسديد دين") || norm.includes("تسديد قسط") || norm.includes("كمبياله")) {
+    return "ديون وأقساط";
+  }
+
+  // 7. Travel
+  if (norm.includes("سفر") || norm.includes("رحله") || norm.includes("تذكره طيران") || norm.includes("فندق") || norm.includes("مطار") || norm.includes("جواز")) {
+    return "سفر ورحلات";
+  }
+
+  // 8. Cards & Recharge
+  if (norm.includes("كارت") || norm.includes("رصيد") || norm.includes("اسيا") || norm.includes("اسياسيل") || norm.includes("زين") || norm.includes("كورك") || norm.includes("سيم كارت") || norm.includes("سيمكارت")) {
     return "كارتات وشحن";
   }
-  if (cleaned.includes("مطعم") || cleaned.includes("كافيه") || cleaned.includes("كوفي") || cleaned.includes("شاورما") || cleaned.includes("برغر") || cleaned.includes("برجر") || cleaned.includes("بيتزا") || cleaned.includes("مشويات") || cleaned.includes("ريوق") || cleaned.includes("عشاء") || cleaned.includes("غداء") || cleaned.includes("صاج") || cleaned.includes("فلافل") || cleaned.includes("وجبة سفري")) {
+
+  // 9. Restaurants & Cafes
+  if (norm.includes("مطعم") || norm.includes("كافيه") || norm.includes("كوفي") || norm.includes("شاورما") || norm.includes("برغر") || norm.includes("برجر") || norm.includes("بيتزا") || norm.includes("مشويات") || norm.includes("ريوق") || norm.includes("عشاء") || norm.includes("غداء") || norm.includes("صاج") || norm.includes("فلافل") || norm.includes("وجبه سفري") || norm.includes("كنتاكي") || norm.includes("بروستد")) {
     return "مطاعم وكافيهات";
   }
-  if (cleaned.includes("صيانة") || cleaned.includes("تصليح") || cleaned.includes("سبلت") || cleaned.includes("سبالت") || cleaned.includes("كهربائي") || cleaned.includes("سباك") || cleaned.includes("صباغ") || cleaned.includes("تأسيسات") || cleaned.includes("ماطور") || cleaned.includes("دينمو")) {
+
+  // 10. Home maintenance
+  if (norm.includes("صيانه") || norm.includes("تصليح") || norm.includes("سبلت") || norm.includes("سبالت") || norm.includes("كهربائي") || norm.includes("سباك") || norm.includes("صباغ") || norm.includes("تاسيسات") || norm.includes("ماطور") || norm.includes("دينمو")) {
     return "صيانة وترميم المنزل";
   }
-  if (cleaned.includes("ملابس") || cleaned.includes("بنطلون") || cleaned.includes("قميص") || cleaned.includes("تيشرت") || cleaned.includes("حذاء") || cleaned.includes("قندرة") || cleaned.includes("دشداشة") || cleaned.includes("فستان") || cleaned.includes("جاكيت")) {
+
+  // 11. Clothes
+  if (norm.includes("ملابس") || norm.includes("بنطلون") || norm.includes("قميص") || norm.includes("تيشرت") || norm.includes("حذاء") || norm.includes("قندره") || norm.includes("دشداشه") || norm.includes("فستان") || norm.includes("جاكيت")) {
     return "ملابس وأحذية";
   }
-  if (cleaned.includes("صيدلية") || cleaned.includes("دواء") || cleaned.includes("علاج") || cleaned.includes("بندول") || cleaned.includes("فيتامين") || cleaned.includes("مسكن") || cleaned.includes("طبيب") || cleaned.includes("تحليل")) {
+
+  // 12. Pharmacy
+  if (norm.includes("صيدليه") || norm.includes("دواء") || norm.includes("علاج") || norm.includes("بندول") || norm.includes("فيتامين") || norm.includes("مسكن") || norm.includes("طبيب") || norm.includes("تحليل")) {
     return "صيدلية وعلاج";
   }
-  if (cleaned.includes("حفاض") || cleaned.includes("بامبرز") || cleaned.includes("حليب اطفال") || cleaned.includes("سيريلاك") || cleaned.includes("لهاية")) {
+
+  // 13. Baby care
+  if (norm.includes("حفاض") || norm.includes("بامبرز") || norm.includes("حليب اطفال") || norm.includes("سيريلاك") || norm.includes("لهايه")) {
     return "العناية بالطفل";
   }
-  if (cleaned.includes("موبايل") || cleaned.includes("ايفون") || cleaned.includes("سامسونج") || cleaned.includes("كفر") || cleaned.includes("شاحن") || cleaned.includes("سماعة") || cleaned.includes("باور بانك") || cleaned.includes("لزقة شاشة")) {
+
+  // 14. Smartphones & Electronics
+  if (norm.includes("موبايل") || norm.includes("ايفون") || norm.includes("سامسونج") || norm.includes("كفر") || norm.includes("شاحن") || norm.includes("سماعه") || norm.includes("باور بانك") || norm.includes("لزقه شاشه")) {
     return "هواتف واكسسوارات";
   }
-  if (cleaned.includes("لابتوب") || cleaned.includes("كمبيوتر") || cleaned.includes("حاسبة") || cleaned.includes("راوتر") || cleaned.includes("شاشة") || cleaned.includes("طابعة")) {
+  if (norm.includes("لابتوب") || norm.includes("كمبيوتر") || norm.includes("حاسبه") || norm.includes("راوتر") || norm.includes("شاشه") || norm.includes("طابعه")) {
     return "إلكترونيات وكمبيوتر";
   }
-  if (cleaned.includes("غسالة") || cleaned.includes("ثلاجة") || cleaned.includes("مكنسة") || cleaned.includes("طباخ") || cleaned.includes("مروحة") || cleaned.includes("سخان") || cleaned.includes("قلاية")) {
+  if (norm.includes("غساله") || norm.includes("ثلاجه") || norm.includes("مكنسه") || norm.includes("طباخ") || norm.includes("مروحه") || norm.includes("سخان") || norm.includes("قلايه")) {
     return "أجهزة كهربائية ومنزلية";
   }
-  if (cleaned.includes("زاهي") || cleaned.includes("تايد") || cleaned.includes("كلور") || cleaned.includes("قاصر") || cleaned.includes("فلاش") || cleaned.includes("منظف") || cleaned.includes("معطر") || cleaned.includes("صابون")) {
+  if (norm.includes("زاهي") || norm.includes("تايد") || norm.includes("كلور") || norm.includes("قاصر") || norm.includes("فلاش") || norm.includes("منظف") || norm.includes("معطر") || norm.includes("صابون")) {
     return "منظفات ومعقمات";
   }
-  if (cleaned.includes("مولدة") || cleaned.includes("امبير") || cleaned.includes("انترنت") || cleaned.includes("كهرباء") || cleaned.includes("فاتورة") || cleaned.includes("اشتراك")) {
+  if (norm.includes("مولده") || norm.includes("امبير") || norm.includes("انترنت") || norm.includes("كهرباء") || norm.includes("فاتوره") || norm.includes("اشتراك")) {
     return "فواتير وخدمات منزلية";
   }
-  if (cleaned.includes("ماركت") || cleaned.includes("سوبر")) {
+  if (norm.includes("ماركت") || norm.includes("سوبر")) {
     return "سوبر ماركت";
   }
 
-  // 5. No match found - do not arbitrarily return fruits & veg!
   return "";
 }
 
@@ -758,7 +882,6 @@ export function calculateWarrantyExpiryDate(startDateStr: string, period: string
     } else if (period.includes("5 سنوات")) {
       date.setFullYear(date.getFullYear() + 5);
     } else {
-      // Default 1 year
       date.setFullYear(date.getFullYear() + 1);
     }
 
@@ -826,6 +949,8 @@ export function getWarrantyStatus(expiryDateStr?: string): {
 
 export interface ItemNatureClassification {
   type: "discretionary" | "essential" | "neutral";
+  subType: "sweets" | "fast_food" | "drinks" | "smoking" | "entertainment" | "luxury" | "staple" | "health" | "cleaning" | "general";
+  subCategoryTitle: string;
   reason: string;
   badge: string;
   colorClass: string;
@@ -833,74 +958,176 @@ export interface ItemNatureClassification {
 }
 
 export function classifyItemNature(name: string, category?: string): ItemNatureClassification {
-  const n = (name || "").toLowerCase().trim();
-  const cat = (category || "").toLowerCase().trim();
+  const rawN = (name || "").toLowerCase().trim();
+  const rawCat = (category || "").toLowerCase().trim();
+  const normN = normalizeArabicText(rawN);
+  const normCat = normalizeArabicText(rawCat);
 
-  // 1. Definite Discretionary / Snacks / Sweets / Fast Foods / Waste Leaks
-  const snackKeywords = [
+  // 1. Detailed Subcategories of Discretionary / Waste / Non-essentials
+
+  // 1a. Sweets & Snacks (حلويات وسكاكر وتسالي)
+  const sweetsKeywords = [
     "شيبس", "جبس", "ليز", "شيتوس", "دوريتوس", "برينجلز", "كرات الجبن", "فشار", "بفك",
-    "شوكولاته", "نوتيلا", "كت كات", "سنيكرز", "تويكس", "مارس", "كندر", "جالكسي", "مورو", "باونتي",
-    "بسكويت محشى", "ويفر", "كيك جاهز", "دونات", "كرواسون شوكولا", "حلاوة", "حلقوم", "مصاص", "علك", "سكاكر", "مارشميلو",
-    "بيبسي", "كوكاكولا", "سفن اب", "ميراندا", "فانتا", "ماونتن ديو", "ريد بول", "تايجر", "مشروب طاقة", "باور هورس",
-    "عصير مصنع", "عصير معلب", "ايس كريم", "موطه", "دوندورما", "سلاش", "مثلجات",
-    "اندومي", "نودلز",
-    "برغر", "بيتزا", "شاورما", "كنتاكي", "وجبة سريعة", "صاج", "فاهيتا", "سندويش جاهز", "فنكر", "بطاطس مقلية",
-    "كابتشينو جاهز", "لاتيه", "قهوة باردة", "ايس كوفي", "ميلك شيك", "كوكتيل", "مشروبات غازية",
-    "سكائر", "سجائر", "فيب", "معسل", "اركيلة", "سحبة", "تبغ",
-    "العاب", "لعبة", "سلايم", "بالونات", "اكسسوارات"
+    "شوكولاته", "نوتيلا", "كت كات", "كتكات", "سنيكرز", "تويكس", "مارس", "كندر", "جالكسي",
+    "مورو", "باونتي", "بسكويت محشى", "ويفر", "كيك جاهز", "دونات", "كرواسون شوكولا", "حلاوه",
+    "حلقوم", "مصاص", "علك", "علكه", "سكاكر", "مارشميلو", "ايس كريم", "موطه", "دوندورما",
+    "سلاش", "مثلجات", "توتو", "حلوى", "نستله", "كنافه", "بقلاوه", "كراميل", "سويت"
   ];
-
-  if (
-    cat.includes("حلويات") ||
-    cat.includes("سناكات") ||
-    cat.includes("مطاعم") ||
-    cat.includes("سكائر") ||
-    snackKeywords.some(k => n.includes(k))
-  ) {
+  if (normCat.includes("حلويات") || normCat.includes("سناكات") || sweetsKeywords.some(k => normN.includes(k))) {
     return {
       type: "discretionary",
-      reason: "تسالي، حلويات أو جاهز (يمكن ترشيده)",
-      badge: "تبذير / كماليات 🍭",
+      subType: "sweets",
+      subCategoryTitle: "حلويات وسكاكر وتسالي",
+      reason: "تسالي ومسليات يمكن تقنينها بسهولة للتوفير",
+      badge: "تسالي وسكاكر 🍭",
+      colorClass: "text-pink-600 dark:text-pink-400",
+      lightBg: "bg-pink-50 dark:bg-pink-950/40 border-pink-200 dark:border-pink-800/40"
+    };
+  }
+
+  // 1b. Fast Food, Cafes & Delivery (مطاعم ووجبات جاهزة وكافيهات)
+  const fastFoodKeywords = [
+    "برغر", "برجر", "همبرجر", "بيتزا", "شاورما", "كنتاكي", "وجبه سريعه", "صاج", "فاهيتا",
+    "سندويش جاهز", "فنكر", "بطاطس مقليه", "كابتشينو جاهز", "لاتيه", "قهوه بارده", "ايس كوفي",
+    "ميلك شيك", "كوكتيل", "دليفري", "توصيل طلبات", "بروستد", "فلافل جاهزه", "سوشي", "منسف سفري", "برياني سفري", "كباب جاهز"
+  ];
+  if (normCat.includes("مطاعم") || normCat.includes("كافيهات") || fastFoodKeywords.some(k => normN.includes(k))) {
+    return {
+      type: "discretionary",
+      subType: "fast_food",
+      subCategoryTitle: "مطاعم ووجبات سريعة",
+      reason: "وجبات خارجية وسفري يمكن استبدالها بالطبخ المنزلي",
+      badge: "مطاعم وجاهز 🍔",
+      colorClass: "text-amber-600 dark:text-amber-400",
+      lightBg: "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/40"
+    };
+  }
+
+  // 1c. Sodas & Energy Drinks (مشروبات غازية وطاقة)
+  const drinksKeywords = [
+    "بيبسي", "كوكاكولا", "كولا", "سفن اب", "سفن", "ميراندا", "ميرندا", "فانتا", "ماونتن ديو",
+    "ريد بول", "تايجر", "مشروب طاقه", "باور هورس", "بلو", "كينزا", "شاني", "سبرايت", "عصير مصنع", "عصير معلب"
+  ];
+  if (drinksKeywords.some(k => normN.includes(k))) {
+    return {
+      type: "discretionary",
+      subType: "drinks",
+      subCategoryTitle: "مشروبات غازية وطاقة",
+      reason: "مشروبات صناعية ضارة وغير أساسية للمنزل",
+      badge: "مشروبات غازية وطاقة 🥤",
       colorClass: "text-rose-600 dark:text-rose-400",
       lightBg: "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/40"
     };
   }
 
-  // 2. Definite Essentials / Cooking & Household Staples
-  const essentialKeywords = [
-    "طماطة", "طماطم", "خيار", "بصل", "بطاطا", "بتيتة", "خضار", "مخضر", "فاكهة", "فواكه",
-    "لحم", "دجاج", "سمك", "مفروم", "صدر دجاج", "كبة", "فيليه",
-    "حليب", "لبن", "جبن", "جبنة", "بيض", "زبادي", "قشطة", "زبدة",
-    "رز", "تمن", "زيت", "شكر", "سكر", "طحين", "معجون", "ملح", "عدس", "فاصوليا", "حمص",
-    "خبز", "صمون", "توست",
-    "دواء", "علاج", "بانادول", "فيتامين", "شاش", "قطن", "صيدلية", "مرهم", "قطرة",
-    "حفاضات", "بامبرز", "مناديل مبللة", "حليب اطفال",
-    "تايد", "زاهي", "صابون", "شامبو", "كلور", "معقم", "منظف", "اكياس زبالة", "ورق تواليت"
+  // 1d. Tobacco & Shisha (سجائر ومعسل وتدخين)
+  const smokingKeywords = [
+    "سكائر", "سجائر", "فيب", "معسل", "اركيله", "ارجيله", "سحبه", "تبغ", "ولاعه", "فحم اركيله"
   ];
+  if (normCat.includes("سكائر") || normCat.includes("معسل") || smokingKeywords.some(k => normN.includes(k))) {
+    return {
+      type: "discretionary",
+      subType: "smoking",
+      subCategoryTitle: "سجائر وتبغ ومعسل",
+      reason: "مصروف تدخين متكرر يشكل نزيفاً مستمراً للميزانية",
+      badge: "تدخين وتبغ 🚬",
+      colorClass: "text-zinc-600 dark:text-zinc-400",
+      lightBg: "bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700"
+    };
+  }
 
+  // 1e. Lotto & Betting & Entertainment (ألعاب ويانصيب وترفيه فائض)
+  const lottoKeywords = [
+    "لوتو", "يانصيب", "سوبر كي", "عراق لوتو", "بطاقه لوتو", "قمار", "رهان"
+  ];
+  if (normCat.includes("يانصيب") || lottoKeywords.some(k => normN.includes(k))) {
+    return {
+      type: "discretionary",
+      subType: "entertainment",
+      subCategoryTitle: "ألعاب ويانصيب",
+      reason: "شراء بطاقات يانصيب ومصروفات مقامرة وحظ",
+      badge: "ألعاب ويانصيب 🎲",
+      colorClass: "text-purple-600 dark:text-purple-400",
+      lightBg: "bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800/40"
+    };
+  }
+
+  // 1f. Luxury & Impulse Buys (كماليات ونزوات)
+  const luxuryKeywords = [
+    "اكسسوارات كماليه", "سلايم", "بالونات", "لعب اطفال كماليه", "ميداليه", "شموع زينه"
+  ];
+  if (luxuryKeywords.some(k => normN.includes(k))) {
+    return {
+      type: "discretionary",
+      subType: "luxury",
+      subCategoryTitle: "كماليات ونزوات",
+      reason: "مشتريات عابرة غير ضرورية",
+      badge: "كماليات ونزوات 🛍️",
+      colorClass: "text-orange-600 dark:text-orange-400",
+      lightBg: "bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800/40"
+    };
+  }
+
+  // 2. Definite Essentials / Cooking & Household Staples (الأساسيات والمؤونة)
+  const essentialKeywords = [
+    "طماطه", "طماطم", "خيار", "بصل", "بطاطا", "بتيته", "خضار", "مخضر", "فاكهه", "فواكه",
+    "لحم", "دجاج", "سمك", "مفروم", "صدر دجاج", "كبه", "فيليه", "حليب", "لبن", "جبن", "جبنه",
+    "بيض", "زبادي", "قشطه", "زبده", "رز", "تمن", "زيت", "شكر", "سكر", "طحين", "معجون", "ملح",
+    "عدس", "فاصوليا", "حمص", "خبز", "صمون", "توست", "ماء", "مياه صحيه"
+  ];
   if (
-    cat.includes("خضار") ||
-    cat.includes("لحوم") ||
-    cat.includes("ألبان") ||
-    cat.includes("مؤونة") ||
-    cat.includes("بقوليات") ||
-    cat.includes("مياه") ||
-    cat.includes("صيدلية") ||
-    cat.includes("طفل") ||
-    cat.includes("منظفات") ||
-    essentialKeywords.some(k => n.includes(k))
+    normCat.includes("خضار") || normCat.includes("فواكه") || normCat.includes("لحوم") ||
+    normCat.includes("البان") || normCat.includes("مؤونه") || normCat.includes("بقوليات") ||
+    normCat.includes("مياه") || normCat.includes("مخبوزات") || essentialKeywords.some(k => normN.includes(k))
   ) {
     return {
       type: "essential",
-      reason: "مؤونة أساسية وتغذية منزلية ضرورية",
+      subType: "staple",
+      subCategoryTitle: "مؤونة وتغذية أساسية",
+      reason: "غذاء وتموين منزلي أساسي لا يمكن الاستغناء عنه",
       badge: "أساسي وتموين 🥦",
       colorClass: "text-emerald-600 dark:text-emerald-400",
       lightBg: "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/40"
     };
   }
 
+  // Health & Medicine
+  const healthKeywords = [
+    "دواء", "علاج", "بندول", "فيتامين", "شاش", "قطن", "صيدليه", "مرهم", "قطره",
+    "حفاضات", "بامبرز", "مناديل مبلله", "حليب اطفال"
+  ];
+  if (normCat.includes("صيدليه") || normCat.includes("طفل") || healthKeywords.some(k => normN.includes(k))) {
+    return {
+      type: "essential",
+      subType: "health",
+      subCategoryTitle: "صحة وعلاج ورعاية",
+      reason: "أدوية وعناية صحية ضرورية",
+      badge: "صحة وعلاج 💊",
+      colorClass: "text-teal-600 dark:text-teal-400",
+      lightBg: "bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800/40"
+    };
+  }
+
+  // Cleaning & Hygiene
+  const cleanKeywords = [
+    "تايد", "زاهي", "صابون", "شامبو", "كلور", "معقم", "منظف", "اكياس زباله", "ورق تواليت"
+  ];
+  if (normCat.includes("منظفات") || cleanKeywords.some(k => normN.includes(k))) {
+    return {
+      type: "essential",
+      subType: "cleaning",
+      subCategoryTitle: "منظفات ونظافة عامة",
+      reason: "مواد تعقيم ونظافة منزلية",
+      badge: "منظفات ومعقمات 🧼",
+      colorClass: "text-cyan-600 dark:text-cyan-400",
+      lightBg: "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800/40"
+    };
+  }
+
   return {
     type: "neutral",
+    subType: "general",
+    subCategoryTitle: "مستلزمات عامة",
     reason: "مشتريات عامة أو مستلزمات متنوعة",
     badge: "مشتريات عامة 🛒",
     colorClass: "text-indigo-600 dark:text-indigo-400",

@@ -35,12 +35,14 @@ import {
   ProductCategoryDef,
   sortItemsByCategoryPriority,
   getCategoryPriorityIndex,
+  CATEGORY_PRIORITY_INDEX_MAP,
   saveLearnedCategory,
   WARRANTY_PERIOD_PRESETS,
   calculateWarrantyExpiryDate,
   getWarrantyStatus,
   classifyItemNature,
-  ItemNatureClassification
+  ItemNatureClassification,
+  normalizeArabicText
 } from "./productCategories";
 
 // ══════════════════════════════════════════════
@@ -135,6 +137,7 @@ interface InventoryItem {
   images?: string[];
   tripDestination?: string;
   createdAt: string;
+  updatedAt?: string;
   _source?: "inventory" | "car" | "travel";
 }
 
@@ -272,7 +275,12 @@ const EXPENSE_CATEGORIES = [
   { label: "أقساط وسلف", icon: "💳", color: "from-indigo-600 to-blue-700" },
   { label: "سفر ورحلات", icon: "✈️", color: "from-sky-500 to-blue-600" },
   { label: "ديون الكيك", icon: "🎂", color: "from-pink-500 to-rose-600" },
-  { label: "ديون", icon: "🎂", color: "from-pink-500 to-rose-600" },
+  { label: "ديون", icon: "🤝", color: "from-pink-500 to-rose-600" },
+  { label: "ديون وأقساط", icon: "🤝", color: "from-rose-500 to-pink-600" },
+  { label: "العائلة", icon: "👨‍👩‍👧", color: "from-pink-500 to-rose-500" },
+  { label: "العائلة ومصروف شخصي", icon: "👨‍👩‍👧", color: "from-pink-500 to-rose-500" },
+  { label: "موجودات ونواقص", icon: "📦", color: "from-teal-500 to-emerald-600" },
+  { label: "بنزين ووقود", icon: "⛽", color: "from-blue-600 to-cyan-600" },
   { label: "أخرى ومتفرقات", icon: "📦", color: "from-gray-500 to-slate-600" },
   // Backward compatibility aliases for existing data in database:
   { label: "سيارة", icon: "🚗", color: "from-blue-500 to-cyan-500" },
@@ -359,6 +367,41 @@ const syncToFirebase = async (key: string, data: any) => {
     console.error(`Error saving ${key} to firebase:`, error);
     toast.error(`خطأ أثناء الحفظ في السحابة: ${error?.message || "يرجى التحقق من الاتصال"}`);
   }
+};
+
+const getExpenseOriginBadge = (exp: Expense) => {
+  if ((exp as any).isFromCake) return null;
+  const normName = normalizeArabicText(exp.name || "");
+  const cat = exp.category || "";
+
+  if (cat === "ألعاب ويانصيب" || normName.includes("لوتو") || normName.includes("يانصيب")) {
+    return { label: "لوتو ويانصيب", icon: "🎰", bg: "bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/40" };
+  }
+  if (normName.startsWith("تسديد دين") || normName.startsWith("تسديد قسط دين") || cat === "ديون وأقساط" || cat === "ديون") {
+    return { label: "تسديد دين", icon: "🤝", bg: "bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/40" };
+  }
+  if (normName.startsWith("قسط:") || cat === "أقساط وسلف") {
+    return { label: "قسط شهري", icon: "💳", bg: "bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/40" };
+  }
+  if (normName.startsWith("فاتورة:") || cat === "فواتير ومستحقات" || cat === "فواتير وخدمات منزلية") {
+    return { label: "فاتورة وخدمات", icon: "⚡", bg: "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/40" };
+  }
+  if (exp.id.startsWith("travel_") || normName.startsWith("سفره") || cat === "سفر ورحلات") {
+    return { label: "سفرة ورحلة", icon: "✈️", bg: "bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800/40" };
+  }
+  if (cat === "السيارة والنقل" || cat === "بنزين ووقود" || cat === "سيارة" || normName.includes("بنزين") || normName.includes("سيار")) {
+    return { label: "سيارة ووقود", icon: "🚗", bg: "bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/40" };
+  }
+  if (cat === "طلعات وجولات" || normName.includes("طلعه") || normName.includes("كافيه") || normName.includes("مطعم")) {
+    return { label: "مشوار وطلعة", icon: "🎡", bg: "bg-teal-100 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800/40" };
+  }
+  if (cat === "العائلة ومصروف شخصي" || cat === "العائلة" || cat === "عائلة") {
+    return { label: "عائلة ومصروف شخصي", icon: "👨‍👩‍👧", bg: "bg-pink-100 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-800/40" };
+  }
+  if (cat === "موجودات ونواقص" || normName.includes("نواقص") || normName.includes("موجودات")) {
+    return { label: "موجودات ونواقص", icon: "📦", bg: "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40" };
+  }
+  return null;
 };
 
 // ══════════════════════════════════════════════
@@ -574,6 +617,8 @@ export default function HomeFinanceDashboard() {
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string | null>(null);
   const [focusedProductIdx, setFocusedProductIdx] = useState<number | null>(null);
+  const [focusedPlaceIdx, setFocusedPlaceIdx] = useState<number | null>(null);
+  const [categorySearchQuery, setCategorySearchQuery] = useState<string>("");
 
   const [editIncome, setEditIncome] = useState<Income | null>(null);
   const [showIncomeModal, setShowIncomeModal] = useState(false);
@@ -627,7 +672,11 @@ export default function HomeFinanceDashboard() {
     if (!mounted) return OUTING_PLACES_SUGGESTIONS;
     const counts = new Map<string, number>();
 
-    const STORE_KEYWORDS = ["سوق", "ماركت", "هايبر", "محل", "مول", "دكان", "صيدلية", "مخضر", "قصاب", "كافيه", "مطعم", "معرض", "تجهيزات", "بقالة", "محطة", "سنتر", "شوب"];
+    const STORE_KEYWORDS = [
+      "سوق", "ماركت", "هايبر", "محل", "مول", "دكان", "صيدلية", "مخضر", "قصاب", "كافيه",
+      "مطعم", "معرض", "تجهيزات", "بقالة", "محطة", "سنتر", "شوب", "كراج", "فيتر", "غسيل",
+      "ورشة", "بنشر", "بنزين", "بانزين", "باركنك", "باركنج", "موقف"
+    ];
 
     expenses.forEach(exp => {
       const s = (exp as any).storeName?.trim();
@@ -647,8 +696,14 @@ export default function HomeFinanceDashboard() {
       });
     });
 
-    OUTING_PLACES_SUGGESTIONS.forEach(p => {
-      if (!counts.has(p)) counts.set(p, 0);
+    const DEFAULT_IRAQI_PLACES = [
+      "هايبر ماركت", "سوق الخضار", "سوق اللحوم والأسماك", "محطة بنزين", "كراج وميكانيك سيارات",
+      "كراج غسيل سيارات", "فيترجي سيارات", "مطعم وكافيه", "حلويات ومعجنات", "صيدلية وعلاج",
+      "تجهيزات منزلية", "سوبرماركت البركات", "تعاون ماركت", "ماركت غصون", "مطعم كباب"
+    ];
+
+    [...OUTING_PLACES_SUGGESTIONS, ...DEFAULT_IRAQI_PLACES].forEach(p => {
+      if (!counts.has(p)) counts.set(p, 1);
     });
 
     return Array.from(counts.entries())
@@ -662,20 +717,32 @@ export default function HomeFinanceDashboard() {
     if (!mounted) return [];
     return Array.from(new Set([
       ...inventory.map(i => i.name),
+      ...carInventory.map(c => c.name),
       ...expenses.map(e => e.name),
       ...uniqueSuggestedPlaces,
       ...debts.map(d => d.person),
       ...installments.map(i => i.name),
-      ...bills.map(b => b.name)
+      ...bills.map(b => b.name),
+      ...needs.map(n => n.name),
+      "طلعات وجولات", "جولة بغداد", "المتنبي والرشيد", "كورنيش وجادرية", "بنزين سيارة", "صيانة سيارة", "كراج تصليح", "مسواك خضار", "مطعم كباب"
     ])).filter(Boolean);
-  }, [inventory, expenses, uniqueSuggestedPlaces, debts, installments, bills, mounted]);
+  }, [inventory, carInventory, expenses, uniqueSuggestedPlaces, debts, installments, bills, needs, mounted]);
 
   const uniqueProductNames = useMemo(() => {
     if (!mounted) return [];
-    return Array.from(new Set(
-      expenses.flatMap(e => (e.items || []).map(i => i.name))
-    )).filter(Boolean);
-  }, [expenses, mounted]);
+    const pool = new Set<string>();
+    expenses.forEach(e => {
+      (e.items || []).forEach(i => { if (i.name) pool.add(i.name.trim()); });
+      if (e.name) pool.add(e.name.trim());
+    });
+    inventory.forEach(i => { if (i.name) pool.add(i.name.trim()); });
+    carInventory.forEach(c => { if (c.name) pool.add(c.name.trim()); });
+    needs.forEach(n => { if (n.name) pool.add(n.name.trim()); });
+    PRODUCT_CATEGORIES.forEach(cat => {
+      cat.keywords.forEach(kw => { if (kw && kw.length >= 2) pool.add(kw.trim()); });
+    });
+    return Array.from(pool).filter(Boolean);
+  }, [expenses, inventory, carInventory, needs, mounted]);
 
   const [needNameInput, setNeedNameInput] = useState("");
   const [showNeedSuggestions, setShowNeedSuggestions] = useState(false);
@@ -707,6 +774,7 @@ export default function HomeFinanceDashboard() {
   const [wasteSavingsRatio, setWasteSavingsRatio] = useState<number>(30);
   const [wasteActiveTab, setWasteActiveTab] = useState<"overview" | "discretionary" | "essentials" | "receipts">("overview");
   const [wasteSearchQuery, setWasteSearchQuery] = useState("");
+  const [wasteSubtypeFilter, setWasteSubtypeFilter] = useState<string | null>(null);
   const [familyFilter, setFamilyFilter] = useState<"all" | "needs" | "duties" | "completed">("all");
   const [familySearch, setFamilySearch] = useState("");
   const [showFamilyCompetition, setShowFamilyCompetition] = useState(false);
@@ -1076,6 +1144,25 @@ export default function HomeFinanceDashboard() {
   const totalExpensesAmt = allExpenses
     .filter(e => isInCycle(e.date))
     .reduce((s, e) => s + e.amount, 0);
+
+  const categorySpendingMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    allExpenses.forEach(exp => {
+      if (isInCycle(exp.date)) {
+        map[exp.category] = (map[exp.category] || 0) + exp.amount;
+      }
+    });
+    return map;
+  }, [allExpenses, selectedCycleId]);
+
+  const sortedProductCategories = useMemo(() => {
+    return [...PRODUCT_CATEGORIES].sort((a, b) => {
+      const spendA = categorySpendingMap[a.name] || 0;
+      const spendB = categorySpendingMap[b.name] || 0;
+      if (spendA !== spendB) return spendB - spendA;
+      return (CATEGORY_PRIORITY_INDEX_MAP[a.name] ?? 999) - (CATEGORY_PRIORITY_INDEX_MAP[b.name] ?? 999);
+    });
+  }, [categorySpendingMap]);
 
   const totalBillsAmt = bills.reduce((s, b) => s + b.amount, 0);
 
@@ -1989,6 +2076,70 @@ setEditFuturePlan(null);
       await syncToFirebase("expenses", updatedList);
       toast.success("تم تسجيل المصروف وحفظه بنجاح ✅");
 
+      // Automatic Car Sync: واي شي يخص السيارة اضيفه بالمصروف ضيفه بخانة السيارة
+      const CAR_TERMS = [
+        "سيار", "بنزين", "بانزين", "وقود", "دهن محرك", "تبديل دهن", "غسيل سيارة",
+        "فيتر", "بنشر", "تاير", "بطارية", "صيانة سيارة", "كراج", "سفايف", "بريك", "فلتر"
+      ];
+      const isCarExpense = category === "السيارة والنقل" || category === "سيارة" || category === "بنزين ووقود" ||
+        CAR_TERMS.some(t => normalizeArabicText(name).includes(t)) ||
+        cleanedItems.some(it => CAR_TERMS.some(t => normalizeArabicText(it.name).includes(t)));
+
+      if (isCarExpense) {
+        let updatedCar = [...carInventory];
+        if (cleanedItems.length > 0) {
+          cleanedItems.forEach(it => {
+            const isItCar = CAR_TERMS.some(t => normalizeArabicText(it.name).includes(t)) || category === "السيارة والنقل" || category === "سيارة";
+            if (isItCar) {
+              const existingIdx = updatedCar.findIndex(c => normalizeArabicText(c.name) === normalizeArabicText(it.name));
+              if (existingIdx >= 0) {
+                updatedCar[existingIdx] = {
+                  ...updatedCar[existingIdx],
+                  quantity: Number(updatedCar[existingIdx].quantity) + Number(it.quantity || 1),
+                  estimatedPrice: it.price || updatedCar[existingIdx].estimatedPrice,
+                  updatedAt: new Date().toISOString()
+                };
+              } else {
+                updatedCar.push({
+                  id: `car-item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                  name: it.name,
+                  quantity: Number(it.quantity || 1),
+                  threshold: 1,
+                  unit: "عدد",
+                  category: it.category || "صيانة ووقود",
+                  estimatedPrice: it.price,
+                  createdAt: new Date().toISOString()
+                });
+              }
+            }
+          });
+        } else {
+          const existingIdx = updatedCar.findIndex(c => normalizeArabicText(c.name) === normalizeArabicText(name));
+          if (existingIdx >= 0) {
+            updatedCar[existingIdx] = {
+              ...updatedCar[existingIdx],
+              quantity: Number(updatedCar[existingIdx].quantity) + 1,
+              estimatedPrice: finalAmount,
+              updatedAt: new Date().toISOString()
+            };
+          } else {
+            updatedCar.push({
+              id: `car-item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+              name,
+              quantity: 1,
+              threshold: 1,
+              unit: "خدمة/بند",
+              category: "صيانة ووقود",
+              estimatedPrice: finalAmount,
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+        setCarInventory(updatedCar);
+        syncToFirebase("carInventory", updatedCar);
+        toast.success("تم ربط المصروف وإضافته تلقائياً إلى خانة السيارة 🚗✨");
+      }
+
       // Auto-switch to cycle containing the expense date if currently in another cycle
       const matchingCycle = cycles.find(c => {
         const startStr = `${c.start.getFullYear()}-${String(c.start.getMonth() + 1).padStart(2, '0')}-${String(c.start.getDate()).padStart(2, '0')}`;
@@ -2891,10 +3042,16 @@ setEditInventory(null);
     }
 
     if (recordExpense && price > 0) {
+      const derivedCategory = modal.category 
+        || (modal.type === "family" ? "العائلة ومصروف شخصي" 
+           : modal.item?._source === "car" ? "السيارة والنقل" 
+           : modal.item?._source === "travel" ? "سفر ورحلات" 
+           : "أساسيات ومؤونة الطبخ");
+
       const newExpense: Expense = {
         id: Date.now().toString() + Math.random().toString().slice(2, 6),
-        name: modal.type === "family" ? `طلب ${modal.member}: ${modal.title}` : `شراء: ${modal.title}`,
-        category: modal.category || "أخرى",
+        name: modal.type === "family" ? `طلب عائلة (${modal.member}): ${modal.title}` : `شراء: ${modal.title}`,
+        category: derivedCategory,
         amount: price,
         date: today(),
         createdAt: new Date().toISOString()
@@ -3002,7 +3159,7 @@ setEditInventory(null);
                const updatedIncomes = incomes.filter(i => i.id !== editDebt.associatedRecordId);
                setIncomes(updatedIncomes);
                syncToFirebase("incomes", updatedIncomes);
-               const newExp: Expense = { id: editDebt.associatedRecordId, name: `إعطاء سلفة/دين لـ: ${item.person}`, category: "أخرى", amount: item.amount, date: item.date, createdAt: new Date().toISOString() };
+               const newExp: Expense = { id: editDebt.associatedRecordId, name: `إعطاء سلفة/دين لـ: ${item.person}`, category: "ديون وأقساط", amount: item.amount, date: item.date, createdAt: new Date().toISOString() };
                const updatedExps = [newExp, ...expenses];
                setExpenses(updatedExps);
                syncToFirebase("expenses", updatedExps);
@@ -3027,7 +3184,7 @@ setEditInventory(null);
           const newExp: Expense = {
             id: recordId,
             name: `إعطاء سلفة/دين لـ: ${item.person}`,
-            category: "أخرى",
+            category: "ديون وأقساط",
             amount: item.amount,
             date: item.date,
             createdAt: new Date().toISOString(),
@@ -3062,7 +3219,7 @@ setEditInventory(null);
         const expense: Expense = {
           id: recordId,
           name: `إعطاء سلفة/دين لـ: ${item.person}`,
-          category: "أخرى",
+          category: "ديون وأقساط",
           amount: item.amount,
           date: item.date,
           createdAt: new Date().toISOString(),
@@ -3172,7 +3329,7 @@ setEditInventory(null);
         const expense: Expense = {
           id: recordId,
           name: `تسديد قسط دين لـ: ${debt.person}`,
-          category: "أخرى",
+          category: "ديون وأقساط",
           amount: paymentAmount,
           date: today(),
           createdAt: new Date().toISOString(),
@@ -3242,7 +3399,7 @@ setEditInventory(null);
         const expense: Expense = {
           id: recordId,
           name: `تسديد دين لـ: ${debt.person}`,
-          category: "أخرى",
+          category: "ديون وأقساط",
           amount: actualAmount,
           date: today(),
           createdAt: new Date().toISOString(),
@@ -3357,7 +3514,23 @@ setEditTrip(null);
     const updated = [expense, ...travelExpenses];
     setTravelExpenses(updated);
     syncToFirebase("travelExpenses", updated);
-    toast.success("تم تسجيل المصروف");
+
+    // Sync to main expenses under "سفر ورحلات"
+    if (currency === "د.ع" || !currency) {
+      const linkedHomeExp: Expense = {
+        id: `travel_${expense.id}`,
+        name: `سفرة (${selectedTrip.name || selectedTrip.destination}): ${description}`,
+        category: "سفر ورحلات",
+        amount,
+        date: today(),
+        createdAt: new Date().toISOString(),
+      };
+      const updatedHomeExpenses = [linkedHomeExp, ...expenses];
+      setExpenses(updatedHomeExpenses);
+      syncToFirebase("expenses", updatedHomeExpenses);
+    }
+
+    toast.success("تم تسجيل المصروف ومزامنته في المصاريف");
     setShowTripExpenseModal(false);
   };
 
@@ -3367,6 +3540,14 @@ setEditTrip(null);
       const updated = travelExpenses.filter(e => e.id !== id);
       setTravelExpenses(updated);
       syncToFirebase("travelExpenses", updated);
+
+      const linkedId = `travel_${id}`;
+      const updatedHome = expenses.filter(e => e.id !== linkedId);
+      if (updatedHome.length !== expenses.length) {
+        setExpenses(updatedHome);
+        syncToFirebase("expenses", updatedHome);
+      }
+
       toast.success("تم الحذف بنجاح");
     }, true, "تأكيد حذف المصروف؟");
   };
@@ -4297,6 +4478,81 @@ setEditTrip(null);
               </div>
             </div>
 
+            {/* Smart Financial Insights Bar */}
+            {(() => {
+              const cycleExps = allExpenses.filter(e => isInCycle(e.date));
+              const cycleSpendTotal = cycleExps.reduce((s, e) => s + e.amount, 0);
+              
+              // Discretionary spend
+              let cycleDiscSpend = 0;
+              cycleExps.forEach(exp => {
+                if (exp.items && exp.items.length > 0) {
+                  exp.items.forEach(it => {
+                    const nat = classifyItemNature(it.name, it.category || exp.category);
+                    if (nat.type === "discretionary") cycleDiscSpend += (it.price || 0);
+                  });
+                } else {
+                  const nat = classifyItemNature(exp.name, exp.category);
+                  if (nat.type === "discretionary") cycleDiscSpend += (exp.amount || 0);
+                }
+              });
+
+              const discRatio = cycleSpendTotal > 0 ? Math.round((cycleDiscSpend / cycleSpendTotal) * 100) : 0;
+              
+              // Top category
+              const catTotals: Record<string, number> = {};
+              cycleExps.forEach(e => {
+                const c = e.category || "عام";
+                catTotals[c] = (catTotals[c] || 0) + e.amount;
+              });
+              const topCatEntry = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
+              const topCatName = topCatEntry ? topCatEntry[0] : "لا يوجد";
+              const topCatTotal = topCatEntry ? topCatEntry[1] : 0;
+              const topCatIcon = EXPENSE_CATEGORIES.find(c => c.label === topCatName)?.icon || "📦";
+
+              // Approximate days into cycle
+              const cycleDays = Math.max(1, new Date().getDate());
+              const dailyAvg = Math.round(cycleSpendTotal / cycleDays);
+
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-gradient-to-r from-rose-500/5 via-amber-500/5 to-indigo-500/5 border border-rose-100 dark:border-zinc-800">
+                  <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-2xs">
+                    <span className="text-[10px] font-bold text-gray-400 block">إجمالي صرف الدورة</span>
+                    <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
+                      {fmt(cycleSpendTotal)} <span className="text-[9px] text-gray-400">د.ع</span>
+                    </span>
+                  </div>
+
+                  <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-2xs">
+                    <span className="text-[10px] font-bold text-gray-400 block">معدل الصرف اليومي</span>
+                    <span className="text-sm sm:text-base font-black text-rose-600 dark:text-rose-400">
+                      {fmt(dailyAvg)} <span className="text-[9px] text-gray-400">د.ع / يوم</span>
+                    </span>
+                  </div>
+
+                  <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-2xs">
+                    <span className="text-[10px] font-bold text-gray-400 block">أعلى قسم صرفاً</span>
+                    <span className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400 truncate block">
+                      {topCatIcon} {topCatName} ({fmt(topCatTotal)} د.ع)
+                    </span>
+                  </div>
+
+                  <div 
+                    onClick={() => setShowWasteStudyModal(true)}
+                    className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-amber-200/70 dark:border-amber-900/40 shadow-2xs cursor-pointer hover:border-amber-400 transition"
+                  >
+                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center justify-between">
+                      <span>تسالي وتبذير 🍭</span>
+                      <span className="text-[9px] font-black underline">تفاصيل ↗</span>
+                    </span>
+                    <span className="text-sm sm:text-base font-black text-amber-600 dark:text-amber-400">
+                      {fmt(cycleDiscSpend)} <span className="text-[9px] text-gray-400">د.ع ({discRatio}%)</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Budget Limits Progress Cards */}
             {settings.budgetLimits && Object.entries(settings.budgetLimits).length > 0 && (
               <div className="relative z-10 bg-white dark:bg-zinc-900 rounded-[1.5rem] p-4 border border-gray-100 dark:border-zinc-800 shadow-sm mb-4">
@@ -4654,6 +4910,20 @@ setEditTrip(null);
                             </span>
                           </div>
                         )}
+
+                        {/* Smart Origin Badge */}
+                        {(() => {
+                          const origin = getExpenseOriginBadge(exp);
+                          if (!origin) return null;
+                          return (
+                            <div className="flex items-center gap-1">
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border flex items-center gap-1 ${origin.bg}`}>
+                                <span>{origin.icon}</span>
+                                <span>{origin.label}</span>
+                              </span>
+                            </div>
+                          );
+                        })()}
 
                         {/* Name */}
                         <div className="font-black text-gray-800 dark:text-gray-100 text-xs leading-tight line-clamp-2">{exp.name}</div>
@@ -7700,6 +7970,55 @@ setEditTrip(null);
             )}
 
             <form onSubmit={handleSaveExpense} className="space-y-3.5">
+              {/* Quick Spend Type Switcher (Outings, Supermarket, Fast Food, Car, Debts, etc.) */}
+              <div className="space-y-1.5 pb-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                    <span>⚡ تصنيف سريع للمصروف:</span>
+                    <span className="text-[10px] text-gray-400 font-bold">(اضغط للتحويل والتحديد الفوري)</span>
+                  </span>
+                  {expCategoryInput && (
+                    <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800/40">
+                      {expCategoryInput}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+                  {[
+                    { label: "🎡 طلعات وجولات", cat: "طلعات وجولات", defaultDesc: "مشوار وجولة" },
+                    { label: "🛒 سوبر ماركت", cat: "سوبر ماركت", defaultDesc: "سوبر ماركت" },
+                    { label: "🍌 خضار وفواكه", cat: "الفواكه والخضار", defaultDesc: "مخضر وفواكه" },
+                    { label: "🍽️ مطاعم وجاهز", cat: "مطاعم وكافيهات", defaultDesc: "مطعم" },
+                    { label: "🚗 بنزين وصيانة سيارة", cat: "السيارة والنقل", defaultDesc: "بنزين سيارة" },
+                    { label: "⚡ فواتير وخدمات", cat: "فواتير ومستحقات", defaultDesc: "فاتورة" },
+                    { label: "🤝 ديون وأقساط", cat: "ديون وأقساط", defaultDesc: "تسديد دين" },
+                    { label: "👨‍👩‍👧 العائلة وشخصي", cat: "العائلة ومصروف شخصي", defaultDesc: "مصروف عائلي" },
+                    { label: "📦 موجودات ونواقص", cat: "موجودات ونواقص", defaultDesc: "نواقص منزلية" }
+                  ].map(preset => {
+                    const isSelected = expCategoryInput === preset.cat;
+                    return (
+                      <button
+                        key={preset.cat}
+                        type="button"
+                        onClick={() => {
+                          setExpCategoryInput(preset.cat);
+                          if (!expNameInput || expNameInput === "غير محدد" || expNameInput === "مصروف عام") {
+                            setExpNameInput(preset.defaultDesc);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black shrink-0 transition flex items-center gap-1 ${
+                          isSelected 
+                            ? "bg-rose-500 text-white shadow-md shadow-rose-500/25 scale-105" 
+                            : "bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Main Fields */}
               <div className="relative w-full">
                 <label className="label-sm">وصف المصروف / المتجر</label>
@@ -7718,13 +8037,13 @@ setEditTrip(null);
                     }
                   }}
                   onFocus={() => setShowExpSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowExpSuggestions(false), 200)}
+                  onBlur={() => setTimeout(() => setShowExpSuggestions(false), 250)}
                   className="input-field" 
-                  placeholder="مثال: هايبرماركت البركات، بنزين السيارة، صيانة..." 
+                  placeholder="مثال: هايبرماركت البركات، بنزين السيارة، كراج، مطعم، صيانة..." 
                 />
                 
                 {showExpSuggestions && (
-                  <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                  <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl max-h-52 overflow-y-auto">
                     {expNameInput.trim().length === 0 ? (
                       <div>
                         <div className="px-3 py-1.5 text-[10px] font-black text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-700/60 flex items-center justify-between">
@@ -7734,7 +8053,8 @@ setEditTrip(null);
                         {uniqueSuggestedPlaces.slice(0, 8).map((suggestedStore, idx) => (
                           <div 
                             key={idx} 
-                            onClick={() => { 
+                            onMouseDown={(e) => { 
+                              e.preventDefault();
                               setExpNameInput(suggestedStore); 
                               setShowExpSuggestions(false); 
                               const pred = detectProductCategory(suggestedStore);
@@ -7747,22 +8067,51 @@ setEditTrip(null);
                           </div>
                         ))}
                       </div>
-                    ) : (
-                      uniqueNames.filter(n => n.toLowerCase().includes(expNameInput.toLowerCase())).map((suggestedName, idx) => (
-                        <div 
-                          key={idx} 
-                          onClick={() => { 
-                            setExpNameInput(suggestedName); 
-                            setShowExpSuggestions(false); 
-                            const pred = detectProductCategory(suggestedName);
-                            if (pred) setExpCategoryInput(pred);
-                          }} 
-                          className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200"
-                        >
-                          {suggestedName}
-                        </div>
-                      ))
-                    )}
+                    ) : (() => {
+                      const normQ = normalizeArabicText(expNameInput.trim());
+                      const matchedNames = uniqueNames.filter(n => normalizeArabicText(n).includes(normQ));
+                      const matchedPlaces = uniqueSuggestedPlaces.filter(p => normalizeArabicText(p).includes(normQ) && !matchedNames.includes(p));
+                      const combined = [...matchedNames, ...matchedPlaces].slice(0, 10);
+
+                      if (combined.length === 0) {
+                        return (
+                          <div className="p-3 text-center text-xs text-gray-400 font-bold">
+                            لا توجد اقتراحات مطابقة لـ &quot;{expNameInput}&quot;
+                          </div>
+                        );
+                      }
+
+                      return combined.map((suggestedName, idx) => {
+                        const pred = detectProductCategory(suggestedName);
+                        const isCar = suggestedName.includes("كراج") || suggestedName.includes("فيتر") || suggestedName.includes("بنزين") || suggestedName.includes("سيارة");
+                        const isFood = suggestedName.includes("مطعم") || suggestedName.includes("كافيه") || suggestedName.includes("كباب");
+                        const isOuting = suggestedName.includes("جولة") || suggestedName.includes("طلعة") || suggestedName.includes("زوراء");
+                        const icon = isCar ? "🚗" : isFood ? "🍽️" : isOuting ? "🎡" : "🛒";
+
+                        return (
+                          <div 
+                            key={idx} 
+                            onMouseDown={(e) => { 
+                              e.preventDefault();
+                              setExpNameInput(suggestedName); 
+                              setShowExpSuggestions(false); 
+                              if (pred) setExpCategoryInput(pred);
+                            }} 
+                            className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center justify-between"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <span>{icon}</span>
+                              <span>{suggestedName}</span>
+                            </span>
+                            {pred && (
+                              <span className="text-[10px] text-gray-400 bg-gray-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                                {pred}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 )}
 
@@ -8230,34 +8579,58 @@ setEditTrip(null);
                               }} 
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
                             />
-                            {focusedProductIdx === idx && (item.name || "").length >= 1 && uniqueProductNames.filter(n => n.includes(item.name || "")).length > 0 && (
-                              <div className="absolute z-30 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-36 overflow-y-auto">
-                                {uniqueProductNames.filter(n => n.includes(item.name || "")).slice(0, 5).map((suggestedName, sIdx) => (
-                                  <div 
-                                    key={sIdx} 
-                                    onClick={() => { 
-                                      const newItems = [...expenseItems];
-                                      newItems[idx].name = suggestedName;
-                                      const pred = detectProductCategory(suggestedName);
-                                      if (pred) {
-                                        newItems[idx].category = pred;
-                                        if (idx === 0 && (!expNameInput.trim() || expCategoryInput === "سوبر ماركت")) {
-                                          setExpCategoryInput(pred);
-                                        }
-                                      }
-                                      setExpenseItems(newItems);
-                                      setFocusedProductIdx(null);
-                                    }} 
-                                    className="px-3 py-1.5 hover:bg-indigo-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200"
-                                  >
-                                    {suggestedName}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            {focusedProductIdx === idx && (item.name || "").length >= 1 && (() => {
+                              const pQuery = normalizeArabicText(item.name || "");
+                              const matched = uniqueProductNames.filter(n => normalizeArabicText(n).includes(pQuery)).slice(0, 6);
+                              if (matched.length === 0) return null;
+                              return (
+                                <div className="absolute z-30 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-44 overflow-y-auto">
+                                  {matched.map((suggestedName, sIdx) => {
+                                    const pred = detectProductCategory(suggestedName);
+                                    const nature = classifyItemNature(suggestedName, pred);
+                                    return (
+                                      <div 
+                                        key={sIdx} 
+                                        onMouseDown={(e) => { 
+                                          e.preventDefault();
+                                          const newItems = [...expenseItems];
+                                          newItems[idx].name = suggestedName;
+                                          if (pred) {
+                                            newItems[idx].category = pred;
+                                            if (idx === 0 && (!expNameInput.trim() || expCategoryInput === "سوبر ماركت")) {
+                                              setExpCategoryInput(pred);
+                                            }
+                                          }
+                                          setExpenseItems(newItems);
+                                          setFocusedProductIdx(null);
+                                        }} 
+                                        className="px-3 py-1.5 hover:bg-indigo-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center justify-between"
+                                      >
+                                        <div className="flex items-center gap-1.5">
+                                          <span>{nature.type === "essential" ? "🥦" : nature.type === "discretionary" ? "🍭" : "📦"}</span>
+                                          <span>{suggestedName}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          {nature.badge && (
+                                            <span className={`text-[9px] px-1.5 py-0.2 rounded font-black ${nature.colorClass} ${nature.lightBg}`}>
+                                              {nature.badge}
+                                            </span>
+                                          )}
+                                          {pred && (
+                                            <span className="text-[9px] text-gray-400 bg-gray-100 dark:bg-zinc-800 px-1 py-0.2 rounded">
+                                              {pred}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                           </div>
 
-                          {/* Category Selector (Comprehensive Departments) */}
+                          {/* Category Selector (Comprehensive Departments Sorted by Spend) */}
                           <div className="w-full sm:col-span-3">
                             <select
                               value={item.category || ""}
@@ -8273,33 +8646,76 @@ setEditTrip(null);
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200 cursor-pointer"
                             >
                               <option value="">اختر القسم (تنبؤ ذكي 🧠)</option>
-                              {PRODUCT_CATEGORIES.map(cat => (
-                                <option key={cat.id} value={cat.name}>
-                                  {cat.icon} {cat.name}
-                                </option>
-                              ))}
+                              {sortedProductCategories.map(cat => {
+                                const spent = categorySpendingMap[cat.name] || 0;
+                                return (
+                                  <option key={cat.id} value={cat.name}>
+                                    {cat.icon} {cat.name} {spent > 0 ? `(${fmt(spent)} د.ع)` : ""}
+                                  </option>
+                                );
+                              })}
                             </select>
                           </div>
 
-                          {/* Place / Shop Selector */}
-                          <div className="w-full sm:col-span-2">
+                          {/* Place / Shop Selector (Interactive Dropdown on First Letter) */}
+                          <div className="w-full sm:col-span-2 relative">
                             <input
                               type="text"
-                              list={`places-list-${idx}`}
                               placeholder="المحل (سوق، كراج، مطعم..)"
                               value={item.place || ""}
+                              autoComplete="off"
+                              onFocus={() => setFocusedPlaceIdx(idx)}
+                              onBlur={() => setTimeout(() => setFocusedPlaceIdx(null), 250)}
                               onChange={e => {
                                 const newItems = [...expenseItems];
                                 newItems[idx].place = e.target.value;
+                                const pred = detectProductCategory(e.target.value);
+                                if (pred && !newItems[idx].category) {
+                                  newItems[idx].category = pred;
+                                }
                                 setExpenseItems(newItems);
                               }}
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
                             />
-                            <datalist id={`places-list-${idx}`}>
-                              {uniqueSuggestedPlaces.map((p, pIdx) => (
-                                <option key={pIdx} value={p} />
-                              ))}
-                            </datalist>
+                            {focusedPlaceIdx === idx && (() => {
+                              const pQuery = normalizeArabicText(item.place || "");
+                              const matching = pQuery.length === 0
+                                ? uniqueSuggestedPlaces.slice(0, 8)
+                                : uniqueSuggestedPlaces.filter(p => normalizeArabicText(p).includes(pQuery)).slice(0, 8);
+                              if (matching.length === 0) return null;
+                              return (
+                                <div className="absolute z-30 w-full min-w-[170px] mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-44 overflow-y-auto">
+                                  <div className="px-2 py-1 text-[9px] font-black text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-700/60">
+                                    {pQuery.length === 0 ? "🏪 محلات مقترحة:" : "🔍 نتائج المحلات والكراجات:"}
+                                  </div>
+                                  {matching.map((pName, sIdx) => {
+                                    const isCar = pName.includes("كراج") || pName.includes("فيتر") || pName.includes("بنزين");
+                                    const isFood = pName.includes("مطعم") || pName.includes("كافيه") || pName.includes("مشويات");
+                                    const isMarket = pName.includes("ماركت") || pName.includes("سوق");
+                                    const icon = isCar ? "🚗" : isFood ? "🍽️" : isMarket ? "🛒" : "📍";
+                                    return (
+                                      <div
+                                        key={sIdx}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          const newItems = [...expenseItems];
+                                          newItems[idx].place = pName;
+                                          const pred = detectProductCategory(pName);
+                                          if (pred && !newItems[idx].category) {
+                                            newItems[idx].category = pred;
+                                          }
+                                          setExpenseItems(newItems);
+                                          setFocusedPlaceIdx(null);
+                                        }}
+                                        className="px-2.5 py-1.5 hover:bg-indigo-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center justify-between"
+                                      >
+                                        <span className="truncate">{icon} {pName}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Quantity & Price Row */}
@@ -10873,7 +11289,7 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
             });
           }
 
-          if (expDiscCount > 0) {
+          if (expDiscTotal > 0) {
             receiptsWithDisc.push({
               exp,
               discTotal: expDiscTotal,
@@ -10886,15 +11302,73 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
         receiptsWithDisc.sort((a, b) => b.discTotal - a.discTotal);
 
         // Grouping
-        const discMap: { [name: string]: { name: string; totalAmount: number; count: number; totalQty: number; category: string; places: string[]; dates: string[] } } = {};
+        const discMap: { [name: string]: { name: string; totalAmount: number; count: number; totalQty: number; category: string; places: string[]; dates: string[]; nature: ItemNatureClassification } } = {};
         const essMap: { [name: string]: { name: string; totalAmount: number; count: number; totalQty: number; category: string; places: string[] } } = {};
         const placeMap: { [place: string]: { place: string; totalAmount: number; itemsCount: number; topItems: string[] } } = {};
+
+        // Breakdown by Discretionary Subtype
+        const discByType: Record<string, { key: string; title: string; icon: string; totalAmount: number; count: number; color: string; bg: string }> = {
+          sweets_snacks: {
+            key: "sweets_snacks",
+            title: "حلويات ومكسرات وسناكات",
+            icon: "🍫",
+            totalAmount: 0,
+            count: 0,
+            color: "text-pink-600 dark:text-pink-400",
+            bg: "bg-pink-500/10 border-pink-200 dark:border-pink-800/40"
+          },
+          fast_food: {
+            key: "fast_food",
+            title: "وجبات سريعة ومطاعم",
+            icon: "🍔",
+            totalAmount: 0,
+            count: 0,
+            color: "text-amber-600 dark:text-amber-400",
+            bg: "bg-amber-500/10 border-amber-200 dark:border-amber-800/40"
+          },
+          soda_energy: {
+            key: "soda_energy",
+            title: "مشروبات غازية وطاقة",
+            icon: "🥤",
+            totalAmount: 0,
+            count: 0,
+            color: "text-red-600 dark:text-red-400",
+            bg: "bg-red-500/10 border-red-200 dark:border-red-800/40"
+          },
+          smoking: {
+            key: "smoking",
+            title: "سجائر وتبغ ومعسل",
+            icon: "🚬",
+            totalAmount: 0,
+            count: 0,
+            color: "text-zinc-600 dark:text-zinc-400",
+            bg: "bg-zinc-500/10 border-zinc-200 dark:border-zinc-700"
+          },
+          entertainment: {
+            key: "entertainment",
+            title: "ألعاب ويانصيب وترفيه",
+            icon: "🎲",
+            totalAmount: 0,
+            count: 0,
+            color: "text-purple-600 dark:text-purple-400",
+            bg: "bg-purple-500/10 border-purple-200 dark:border-purple-800/40"
+          },
+          luxury: {
+            key: "luxury",
+            title: "كماليات ونزوات عابرة",
+            icon: "🛍️",
+            totalAmount: 0,
+            count: 0,
+            color: "text-orange-600 dark:text-orange-400",
+            bg: "bg-orange-500/10 border-orange-200 dark:border-orange-800/40"
+          }
+        };
 
         flatItems.forEach(it => {
           const clean = it.name.trim();
           if (it.nature.type === "discretionary") {
             if (!discMap[clean]) {
-              discMap[clean] = { name: clean, totalAmount: 0, count: 0, totalQty: 0, category: it.category, places: [], dates: [] };
+              discMap[clean] = { name: clean, totalAmount: 0, count: 0, totalQty: 0, category: it.category, places: [], dates: [], nature: it.nature };
             }
             discMap[clean].totalAmount += it.price;
             discMap[clean].count += 1;
@@ -10908,6 +11382,16 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
             placeMap[p].itemsCount += 1;
             if (!placeMap[p].topItems.includes(clean) && placeMap[p].topItems.length < 3) {
               placeMap[p].topItems.push(clean);
+            }
+
+            // subType tallying
+            const st = it.nature.subType || "sweets_snacks";
+            if (discByType[st]) {
+              discByType[st].totalAmount += it.price;
+              discByType[st].count += 1;
+            } else if (discByType.luxury) {
+              discByType.luxury.totalAmount += it.price;
+              discByType.luxury.count += 1;
             }
           } else if (it.nature.type === "essential") {
             if (!essMap[clean]) {
@@ -10970,33 +11454,41 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
 
         const handleCopyReport = () => {
           const report = `🧠 *تقرير دراسة المصروفات والترشيد الذكي* 📊\n` +
-            `📅 الفترة: ${wastePeriodFilter === "cycle" ? "الدورة المالية الحالية" : wastePeriodFilter === "month" ? "الشهر الحالي" : "كافة السجلات"}\n` +
+            `🗓️ النطاق: ${wastePeriodFilter === 'cycle' ? 'الدورة الحالية' : wastePeriodFilter === 'month' ? 'الشهر الحالي' : 'كافة السجلات'}\n` +
             `💰 إجمالي الصرف: ${fmt(totalSpend)} د.ع\n` +
-            `🥦 الأساسيات والتموين: ${fmt(essSpend)} د.ع (${essPercent}%)\n` +
-            `🍭 الكماليات والتسالي والجاهز: ${fmt(discSpend)} د.ع (${discPercent}%)\n` +
-            `🛒 مشتريات عامة: ${fmt(neutralSpend)} د.ع (${neutralPercent}%)\n` +
-            `🌟 مؤشر الانضباط المالي: ${healthScore}/100 (${healthLevel.label})\n\n` +
-            `💡 *خطة الترشيد (عند تخفيض الكماليات ${wasteSavingsRatio}%):*\n` +
-            `💵 التوفير الشهري المتوقع: ${fmt(monthlySavings)} د.ع\n` +
-            `💎 التوفير السنوي المتوقع: ${fmt(yearlySavings)} د.ع\n\n` +
-            `🚨 *أبرز مصاريف التبذير والتسالي:*\n` +
-            topDiscretionary.slice(0, 5).map((it, idx) => `${idx + 1}. ${it.name} - ${fmt(it.totalAmount)} د.ع (تكررت ${it.count} مرات)`).join("\n");
+            `🥦 الأساسيات والمؤونة: ${fmt(essSpend)} د.ع (${essPercent}%)\n` +
+            `🍭 التبذير والتسالي: ${fmt(discSpend)} د.ع (${discPercent}%)\n` +
+            `🌟 مؤشر الانضباط: ${healthScore} / 100 (${healthLevel.label})\n` +
+            `💵 إمكانية التوفير بنسبة %${wasteSavingsRatio}: ${fmt(monthlySavings)} د.ع شهرياً (${fmt(yearlySavings)} د.ع سنوياً)\n\n` +
+            `🔥 *أعلى 5 مواد تسالي استنزافاً:*\n` +
+            topDiscretionary.slice(0, 5).map((it, i) => `${i + 1}. ${it.name}: ${fmt(it.totalAmount)} د.ع (تكررت ${it.count} مرات)`).join('\n');
 
-          if (navigator.clipboard) {
-            navigator.clipboard.writeText(report);
-            toast.success("تم نسخ تقرير دراسة التبذير والترشيد بنجاح 📋");
-          }
+          navigator.clipboard.writeText(report);
+          toast.success("تم نسخ تقرير الترشيد المالي بنجاح! 📋");
         };
 
-        const filteredTopDisc = topDiscretionary.filter(it => 
-          !wasteSearchQuery || it.name.toLowerCase().includes(wasteSearchQuery.toLowerCase())
-        );
-        const filteredTopEss = topEssentials.filter(it =>
-          !wasteSearchQuery || it.name.toLowerCase().includes(wasteSearchQuery.toLowerCase())
-        );
-        const filteredReceipts = receiptsWithDisc.filter(r =>
-          !wasteSearchQuery || r.exp.name.toLowerCase().includes(wasteSearchQuery.toLowerCase()) || r.discItemNames.some(n => n.toLowerCase().includes(wasteSearchQuery.toLowerCase()))
-        );
+        const filteredTopDisc = topDiscretionary.filter(it => {
+          const normQ = normalizeArabicText(wasteSearchQuery);
+          const matchesSearch = !wasteSearchQuery ||
+            normalizeArabicText(it.name).includes(normQ) ||
+            normalizeArabicText(it.category || "").includes(normQ);
+          const matchesSubtype = !wasteSubtypeFilter || it.nature?.subType === wasteSubtypeFilter;
+          return matchesSearch && matchesSubtype;
+        });
+
+        const filteredTopEss = topEssentials.filter(it => {
+          const normQ = normalizeArabicText(wasteSearchQuery);
+          return !wasteSearchQuery ||
+            normalizeArabicText(it.name).includes(normQ) ||
+            normalizeArabicText(it.category || "").includes(normQ);
+        });
+
+        const filteredReceipts = receiptsWithDisc.filter(r => {
+          const normQ = normalizeArabicText(wasteSearchQuery);
+          return !wasteSearchQuery ||
+            normalizeArabicText(r.exp.name).includes(normQ) ||
+            r.discItemNames.some(n => normalizeArabicText(n).includes(normQ));
+        });
 
         return (
           <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200">
@@ -11282,6 +11774,58 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
                         <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/60 px-3 py-1 rounded-full inline-block">
                           🎯 هذا التوفير كافي لتغطية سلفة شهرية كاملة أو شراء مؤونة غذائية منزلية لأشهر إضافية!
                         </span>
+                      </div>
+                    </div>
+
+                    {/* Discretionary Subcategories Smart Cards */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-rose-500/5 via-amber-500/5 to-purple-500/5 border border-rose-100 dark:border-zinc-800">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">🧠</span>
+                          <h4 className="text-xs font-black text-gray-800 dark:text-white">
+                            تصنيف مجالات التبذير والتسالي (بالأقسام الفرعية)
+                          </h4>
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-bold">
+                          اضغط على أي قسم للتصفية
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                        {Object.values(discByType).map(cat => {
+                          const catPercent = discSpend > 0 ? Math.round((cat.totalAmount / discSpend) * 100) : 0;
+                          return (
+                            <button
+                              key={cat.key}
+                              type="button"
+                              onClick={() => {
+                                setWasteSubtypeFilter(cat.key);
+                                setWasteActiveTab("discretionary");
+                              }}
+                              className={`p-3 rounded-2xl border text-right transition flex flex-col justify-between hover:scale-[1.02] active:scale-95 shadow-2xs ${cat.bg}`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <span className="text-xl">{cat.icon}</span>
+                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${cat.color} bg-white/70 dark:bg-zinc-900/70 border border-current/20`}>
+                                  {catPercent}%
+                                </span>
+                              </div>
+                              <div className="mt-2">
+                                <span className="text-xs font-black text-gray-900 dark:text-gray-100 block truncate">
+                                  {cat.title}
+                                </span>
+                                <div className="flex items-center justify-between mt-1">
+                                  <span className={`text-xs font-black ${cat.color}`}>
+                                    {fmt(cat.totalAmount)} <span className="text-[9px] text-gray-400">د.ع</span>
+                                  </span>
+                                  <span className="text-[10px] text-gray-400 font-bold">
+                                    {cat.count} مواد
+                                  </span>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
