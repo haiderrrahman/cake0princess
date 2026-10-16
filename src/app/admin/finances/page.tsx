@@ -73,6 +73,7 @@ export default function FinancesAdmin() {
   
   const [settleDebtModalOpen, setSettleDebtModalOpen] = useState(false);
   const [settleAmount, setSettleAmount] = useState("");
+  const [settleMode, setSettleMode] = useState<"settle" | "repay" | "withdraw">("settle");
 
   // Cake Materials scan state
   const [isScanCakeInvoiceOpen, setIsScanCakeInvoiceOpen] = useState(false);
@@ -203,7 +204,7 @@ export default function FinancesAdmin() {
       return cat === "مشتريات مخزنية" || cat === "مواد الكيك" || cat === "مواد كيك" || cat === "المواد الأولية (كيك وكريمة)" || 
              desc.includes("المخزن") || desc.includes("مادة") || desc.includes("مواد");
     }).reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const netProfit = revenueData.totalRevenue - totalExpenses - totalSalaryDebt; // Profit based on Revenue - Expenses - Debt
+    const netProfit = revenueData.totalRevenue - totalExpenses - Math.max(0, totalSalaryDebt); // Profit based on Revenue - Expenses - Debt (only subtracts unpaid material liabilities)
     
     const newStats = {
       totalRevenue: revenueData.totalRevenue,
@@ -348,35 +349,84 @@ export default function FinancesAdmin() {
     e.preventDefault();
     const sAmount = Number(settleAmount);
     if (!sAmount || sAmount <= 0) return;
-    if (sAmount > stats.totalSalaryDebt) {
-      toast.error("المبلغ المدخل أكبر من الدين الكلي!");
+
+    if (settleMode === "settle" && stats.totalSalaryDebt > 0 && sAmount > stats.totalSalaryDebt) {
+      toast.error("المبلغ المدخل أكبر من الدين الكلي المستحق للراتب!");
       return;
     }
+    if (settleMode === "repay" && stats.totalSalaryDebt < 0 && sAmount > Math.abs(stats.totalSalaryDebt)) {
+      toast.error("المبلغ المدخل أكبر من المبلغ المطلوب إرجاعه للكيك!");
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await addDoc(collection(db, "expenses"), {
-        amount: -sAmount,
-        category: "تسديد دين",
-        description: `تسديد جزء من الدين المستحق (تحويل)`,
-        month: new Date().getMonth() + 1,
-        createdAt: serverTimestamp(),
-        isDebt: true
-      });
+      if (settleMode === "settle") {
+        // تسديد من الكيك للراتب: ينقص الدين المسجل بذمة الكيك
+        await addDoc(collection(db, "expenses"), {
+          amount: -sAmount,
+          category: "تسديد دين",
+          description: `تسديد جزء من الدين المستحق (تحويل للراتب)`,
+          month: new Date().getMonth() + 1,
+          createdAt: serverTimestamp(),
+          isDebt: true
+        });
 
-      await addDoc(collection(db, "expenses"), {
-        amount: sAmount,
-        category: "تسديد دين",
-        description: `تسديد جزء من الدين المستحق`,
-        month: new Date().getMonth() + 1,
-        createdAt: serverTimestamp(),
-        isDebt: false
-      });
+        await addDoc(collection(db, "expenses"), {
+          amount: sAmount,
+          category: "تسديد دين",
+          description: `تسديد دين للراتب (من أموال الكيك)`,
+          month: new Date().getMonth() + 1,
+          createdAt: serverTimestamp(),
+          isDebt: false
+        });
+        toast.success("تم تسديد المبلغ للراتب بنجاح وتحويله للمصاريف ✅");
+      } else if (settleMode === "repay") {
+        // إرجاع وتسديد للكيك: الراتب يدفع للكيك (يزيد دين الراتب نحو الصفر)
+        await addDoc(collection(db, "expenses"), {
+          amount: sAmount,
+          category: "تسديد دين",
+          description: `إرجاع وتسديد أموال للكيك (من الراتب)`,
+          month: new Date().getMonth() + 1,
+          createdAt: serverTimestamp(),
+          isDebt: true
+        });
+
+        await addDoc(collection(db, "expenses"), {
+          amount: -sAmount,
+          category: "تسديد دين",
+          description: `استلام تسديد من الراتب لصندوق الكيك`,
+          month: new Date().getMonth() + 1,
+          createdAt: serverTimestamp(),
+          isDebt: false
+        });
+        toast.success("تم إرجاع وتسديد المبلغ لصندوق الكيك بنجاح ✅");
+      } else {
+        // سحب نقدي من الكيك للراتب (دين على الراتب لصالح الكيك)
+        await addDoc(collection(db, "expenses"), {
+          amount: -sAmount,
+          category: "سحب أرباح",
+          description: `سحب نقدي من أموال الكيك للراتب (دين على الراتب)`,
+          month: new Date().getMonth() + 1,
+          createdAt: serverTimestamp(),
+          isDebt: true
+        });
+
+        await addDoc(collection(db, "expenses"), {
+          amount: sAmount,
+          category: "سحب أرباح",
+          description: `سحب نقدي للراتب الشخصي (من أموال الكيك)`,
+          month: new Date().getMonth() + 1,
+          createdAt: serverTimestamp(),
+          isDebt: false
+        });
+        toast.success("تم تسجيل سحب الأموال كدين على الراتب بنجاح ✅");
+      }
       
       setSettleAmount("");
       setSettleDebtModalOpen(false);
-      toast.success("تم تسديد جزء من الدين بنجاح وتحويله للمصاريف");
     } catch (e) {
-      toast.error("حدث خطأ أثناء التسديد");
+      toast.error("حدث خطأ أثناء معالجة العملية");
     }
     setSubmitting(false);
   };
@@ -457,16 +507,60 @@ export default function FinancesAdmin() {
         </div>
 
         {/* Salary Debt Breakdown */}
-        <div className="bg-orange-500/20 border border-orange-400/30 rounded-2xl px-4 py-3 mt-3 relative z-10 flex items-center justify-between">
+        <div className={`border rounded-2xl px-4 py-3 mt-3 relative z-10 flex items-center justify-between transition-all ${
+          stats.totalSalaryDebt > 0
+            ? "bg-orange-500/20 border-orange-400/30"
+            : stats.totalSalaryDebt < 0
+            ? "bg-rose-500/20 border-rose-400/30"
+            : "bg-emerald-500/20 border-emerald-400/30"
+        }`}>
           <div className="flex items-center gap-3">
-            <span className="text-2xl">👤</span>
+            <span className="text-2xl">
+              {stats.totalSalaryDebt > 0 ? "👤" : stats.totalSalaryDebt < 0 ? "⚠️" : "✅"}
+            </span>
             <div>
-              <p className="text-xs text-orange-200 font-bold mb-1">دين مستحق (اموال الراتب)</p>
-              <p className="text-lg font-black text-white">{stats.totalSalaryDebt.toLocaleString()} <span className="text-[10px]">د.ع</span></p>
+              <p className={`text-xs font-bold mb-1 ${
+                stats.totalSalaryDebt > 0
+                  ? "text-orange-200"
+                  : stats.totalSalaryDebt < 0
+                  ? "text-rose-200"
+                  : "text-emerald-200"
+              }`}>
+                {stats.totalSalaryDebt > 0
+                  ? "دين مستحق للراتب بذمة الكيك (الراتب يطلب الكيك)"
+                  : stats.totalSalaryDebt < 0
+                  ? "دين على الراتب لصالح الكيك (الكيك يطلبنا)"
+                  : "دين أموال الراتب (خالص ومسدد بالكامل)"}
+              </p>
+              <p className="text-lg font-black text-white">
+                {stats.totalSalaryDebt === 0 
+                  ? "0 د.ع (خالص تماماً)"
+                  : `${Math.abs(stats.totalSalaryDebt).toLocaleString()} د.ع`}
+              </p>
             </div>
           </div>
-          <button onClick={() => setSettleDebtModalOpen(true)} disabled={submitting || stats.totalSalaryDebt <= 0} className="bg-orange-600 disabled:opacity-50 hover:bg-orange-700 text-white font-black text-xs px-4 py-2 rounded-xl transition shadow-md">
-            تسديد جزء من الدين
+          <button
+            onClick={() => {
+              if (stats.totalSalaryDebt > 0) setSettleMode("settle");
+              else if (stats.totalSalaryDebt < 0) setSettleMode("repay");
+              else setSettleMode("withdraw");
+              setSettleAmount("");
+              setSettleDebtModalOpen(true);
+            }}
+            disabled={submitting}
+            className={`font-black text-xs px-4 py-2 rounded-xl transition shadow-md text-white ${
+              stats.totalSalaryDebt > 0
+                ? "bg-orange-600 hover:bg-orange-700"
+                : stats.totalSalaryDebt < 0
+                ? "bg-rose-600 hover:bg-rose-700"
+                : "bg-emerald-600 hover:bg-emerald-700"
+            }`}
+          >
+            {stats.totalSalaryDebt > 0
+              ? "تسديد جزء من الدين"
+              : stats.totalSalaryDebt < 0
+              ? "تسديد وإرجاع للكيك ↩️"
+              : "سحب نقدي من الكيك"}
           </button>
         </div>
 
@@ -699,23 +793,92 @@ export default function FinancesAdmin() {
       {settleDebtModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-scale-in">
-            <div className="p-5 border-b border-gray-100 dark:border-zinc-800 bg-orange-50 dark:bg-orange-900/10 flex justify-between items-center">
-              <h3 className="font-black text-orange-900 dark:text-orange-100 flex items-center gap-2">
-                تسديد جزء من الدين
+            <div className={`p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center ${
+              settleMode === "repay"
+                ? "bg-rose-50 dark:bg-rose-900/10"
+                : settleMode === "withdraw"
+                ? "bg-purple-50 dark:bg-purple-900/10"
+                : "bg-orange-50 dark:bg-orange-900/10"
+            }`}>
+              <h3 className={`font-black flex items-center gap-2 ${
+                settleMode === "repay"
+                  ? "text-rose-900 dark:text-rose-100"
+                  : settleMode === "withdraw"
+                  ? "text-purple-900 dark:text-purple-100"
+                  : "text-orange-900 dark:text-orange-100"
+              }`}>
+                {settleMode === "repay" ? "↩️ إرجاع وتسديد للكيك" : settleMode === "withdraw" ? "💸 سحب نقدي للراتب" : "💳 تسديد من الكيك للراتب"}
               </h3>
               <button onClick={() => setSettleDebtModalOpen(false)} className="text-gray-400 hover:text-gray-600 w-8 h-8 bg-white/50 rounded-full flex items-center justify-center">✕</button>
             </div>
             <form onSubmit={submitSettleDebt} className="p-5 space-y-4">
+              {/* Mode Selector Tabs */}
+              <div className="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setSettleMode("settle")}
+                  className={`py-1.5 rounded-lg font-bold text-[10px] transition ${
+                    settleMode === "settle"
+                      ? "bg-white dark:bg-zinc-700 text-orange-600 shadow-xs"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  تسديد للراتب
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettleMode("repay")}
+                  className={`py-1.5 rounded-lg font-bold text-[10px] transition ${
+                    settleMode === "repay"
+                      ? "bg-white dark:bg-zinc-700 text-rose-600 shadow-xs"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  إرجاع للكيك
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettleMode("withdraw")}
+                  className={`py-1.5 rounded-lg font-bold text-[10px] transition ${
+                    settleMode === "withdraw"
+                      ? "bg-white dark:bg-zinc-700 text-purple-600 shadow-xs"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  سحب للراتب
+                </button>
+              </div>
+
               <div>
-                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">المبلغ المراد تسديده (د.ع)</label>
-                <input required type="number" min="500" max={stats.totalSalaryDebt} value={settleAmount} onChange={e => setSettleAmount(e.target.value)}
-                  className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 font-bold focus:border-orange-500 focus:outline-none"
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  {settleMode === "repay"
+                    ? "المبلغ المراد إرجاعه وتسديده لصندوق الكيك (د.ع)"
+                    : settleMode === "withdraw"
+                    ? "المبلغ المسحوب من أموال الكيك للراتب (د.ع)"
+                    : "المبلغ المراد تسديده للراتب من الكيك (د.ع)"}
+                </label>
+                <input required type="number" min="500" value={settleAmount} onChange={e => setSettleAmount(e.target.value)}
+                  className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 font-bold focus:outline-none"
                   placeholder="مثال: 50000" />
-                <p className="text-xs text-gray-500 mt-2">الدين الكلي: {stats.totalSalaryDebt.toLocaleString()} د.ع</p>
+                <p className="text-xs text-gray-500 mt-2">
+                  {stats.totalSalaryDebt > 0
+                    ? `الرصيد الحالي: الراتب يطلب الكيك (${stats.totalSalaryDebt.toLocaleString()} د.ع)`
+                    : stats.totalSalaryDebt < 0
+                    ? `الرصيد الحالي: الكيك يطلب الراتب (${Math.abs(stats.totalSalaryDebt).toLocaleString()} د.ع)`
+                    : "الرصيد الحالي: خالص ومسدد تماماً (0 د.ع)"}
+                </p>
               </div>
               <button disabled={submitting} type="submit"
-                className="w-full bg-orange-600 text-white rounded-xl py-3.5 font-black flex items-center justify-center gap-2 hover:bg-orange-700 transition disabled:opacity-50 mt-2">
-                {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "تسديد وتحويل للمصاريف"}
+                className={`w-full text-white rounded-xl py-3.5 font-black flex items-center justify-center gap-2 transition disabled:opacity-50 mt-2 ${
+                  settleMode === "repay"
+                    ? "bg-rose-600 hover:bg-rose-700"
+                    : settleMode === "withdraw"
+                    ? "bg-purple-600 hover:bg-purple-700"
+                    : "bg-orange-600 hover:bg-orange-700"
+                }`}>
+                {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                  settleMode === "repay" ? "تأكيد إرجاع المبلغ للكيك" : settleMode === "withdraw" ? "تأكيد سحب المبلغ كدين" : "تأكيد التسديد للراتب"
+                )}
               </button>
             </form>
           </div>

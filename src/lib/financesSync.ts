@@ -195,8 +195,8 @@ export function calculateFinancesStats(
     .reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
   // Net Profit formula identical to finances/page.tsx:
-  // Revenue - Cake Expenses - Salary Debt
-  const netProfit = totalRevenue - totalExpenses - totalSalaryDebt;
+  // Revenue - Cake Expenses - Salary Debt (unpaid material liabilities only)
+  const netProfit = totalRevenue - totalExpenses - Math.max(0, totalSalaryDebt);
 
   return {
     todaySales,

@@ -1683,13 +1683,28 @@ export default function HomeFinanceDashboard() {
 
   const effectiveDebts = useMemo(() => {
     // إخفاء الدين القديم الذي كان يسجل يدوياً باسم "دين الكيك"
-    const cleaned = debts.filter(d => d.person !== "دين الكيك" && d.person !== "دين الكيك (اموال الراتب)");
+    const cleaned = debts.filter(d => 
+      d.person !== "دين الكيك" && 
+      d.person !== "دين الكيك (اموال الراتب)" &&
+      d.person !== "دين الكيك (اموال الراتب - مطلوب للكيك)" &&
+      d.person !== "دين الكيك (اموال الراتب - يطلبنا)"
+    );
     if (cakeSalaryDebt > 0) {
       cleaned.push({
         id: "virtual-cake-debt",
         person: "دين الكيك (اموال الراتب)",
         amount: cakeSalaryDebt,
         type: "دين لي",
+        date: today(),
+        payments: [], // المدفوعات تتم إدارتها داخل مقر القيادة المركزية مباشرة (expenses)
+        createdAt: today()
+      });
+    } else if (cakeSalaryDebt < 0) {
+      cleaned.push({
+        id: "virtual-cake-debt",
+        person: "دين الكيك (اموال الراتب - يطلبنا)",
+        amount: Math.abs(cakeSalaryDebt),
+        type: "دين علي",
         date: today(),
         payments: [], // المدفوعات تتم إدارتها داخل مقر القيادة المركزية مباشرة (expenses)
         createdAt: today()
@@ -3617,33 +3632,59 @@ setEditInventory(null);
       : (debt.amount - paidForMe) + paidOnMe;
     
     if (debt.id === "virtual-cake-debt") {
+      const isOwedByMe = debt.type === "دين علي";
       const remainingCake = Math.max(0, (debt.amount - paidOnMe) + paidForMe);
-      showPrompt("تسديد جزء من دين الكيك (اموال الراتب)", async (amountStr) => {
+      const promptTitle = isOwedByMe 
+        ? "تسديد وإرجاع دين الكيك (دفع من الراتب للكيك)"
+        : "تسديد جزء من دين الكيك (قبض من أموال الكيك للراتب)";
+
+      showPrompt(promptTitle, async (amountStr) => {
         const actualAmount = Number(amountStr);
         if (isNaN(actualAmount) || actualAmount <= 0) { toast.error("مبلغ غير صحيح"); return; }
         if (actualAmount > remainingCake) { toast.error("لا يمكن تسجيل مبلغ أكبر من المتبقي"); return; }
 
         try {
-          // Exactly like finances/page.tsx
-          await addDoc(collection(db, "expenses"), {
-            amount: -actualAmount,
-            category: "تسديد دين",
-            description: `تسديد جزء من الدين المستحق (تحويل من إدارة المنزل)`,
-            month: new Date().getMonth() + 1,
-            createdAt: serverTimestamp(),
-            isDebt: true
-          });
+          if (isOwedByMe) {
+            // دفع وإرجاع للكيك: يزيد دين الراتب نحو الصفر (لأنه سالب) ويدخل أموال لصندوق الكيك
+            await addDoc(collection(db, "expenses"), {
+              amount: actualAmount,
+              category: "تسديد دين",
+              description: `إرجاع وتسديد أموال للكيك (من إدارة المنزل)`,
+              month: new Date().getMonth() + 1,
+              createdAt: serverTimestamp(),
+              isDebt: true
+            });
 
-          await addDoc(collection(db, "expenses"), {
-            amount: actualAmount,
-            category: "تسديد دين",
-            description: `تسديد جزء من الدين المستحق (من إدارة المنزل)`,
-            month: new Date().getMonth() + 1,
-            createdAt: serverTimestamp(),
-            isDebt: false
-          });
+            await addDoc(collection(db, "expenses"), {
+              amount: -actualAmount,
+              category: "تسديد دين",
+              description: `استلام تسديد من الراتب لأموال الكيك (إدارة المنزل)`,
+              month: new Date().getMonth() + 1,
+              createdAt: serverTimestamp(),
+              isDebt: false
+            });
+          } else {
+            // Exactly like finances/page.tsx: سداد من الكيك للراتب
+            await addDoc(collection(db, "expenses"), {
+              amount: -actualAmount,
+              category: "تسديد دين",
+              description: `تسديد جزء من الدين المستحق (تحويل من إدارة المنزل)`,
+              month: new Date().getMonth() + 1,
+              createdAt: serverTimestamp(),
+              isDebt: true
+            });
 
-          toast.success("تم تسديد جزء من دين الكيك بنجاح");
+            await addDoc(collection(db, "expenses"), {
+              amount: actualAmount,
+              category: "تسديد دين",
+              description: `تسديد جزء من الدين المستحق (من إدارة المنزل)`,
+              month: new Date().getMonth() + 1,
+              createdAt: serverTimestamp(),
+              isDebt: false
+            });
+          }
+
+          toast.success(isOwedByMe ? "تم تسديد وإرجاع المبلغ للكيك بنجاح ✅" : "تم تسديد جزء من دين الكيك بنجاح ✅");
         } catch (e) {
           toast.error("حدث خطأ أثناء التسديد");
         }
@@ -6469,8 +6510,8 @@ setEditTrip(null);
                   {isVirtualCake ? (
                     !isPaid && (
                       <button onClick={() => handlePayDebt(debt)}
-                        className="w-full bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-black py-2 rounded-xl active:scale-95 transition shadow-sm flex items-center justify-center gap-1">
-                        <Check className="w-3.5 h-3.5" /> تسديد دين الكيك
+                        className={`w-full ${debt.type === "دين علي" ? "bg-rose-500 hover:bg-rose-600" : "bg-emerald-500 hover:bg-emerald-600"} text-white text-[11px] font-black py-2 rounded-xl active:scale-95 transition shadow-sm flex items-center justify-center gap-1`}>
+                        <Check className="w-3.5 h-3.5" /> {debt.type === "دين علي" ? "تسديد وإرجاع دين الكيك (دفع للكيك)" : "تسديد دين الكيك (قبض للراتب)"}
                       </button>
                     )
                   ) : (
