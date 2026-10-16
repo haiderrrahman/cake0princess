@@ -524,73 +524,6 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
     ]
   },
   {
-    id: "outings_tours",
-    name: "طلعات وجولات",
-    icon: "🎡",
-    color: "text-teal-700 dark:text-teal-300",
-    bgLight: "bg-teal-50 border-teal-300",
-    bgDark: "dark:bg-teal-950/40 dark:border-teal-700/60",
-    keywords: [
-      "طلعة", "طلعات", "جولة", "جولات", "متنزه", "كورنيش", "مدينة العاب", "العاب اطفال", "مسبح",
-      "سينما", "زوراء", "جادرية", "شارع الرشيد", "متنبي", "ترفيه", "نزهة", "فسحة", "طلعة عائلية"
-    ]
-  },
-  {
-    id: "lotto_games",
-    name: "ألعاب ويانصيب",
-    icon: "🎲",
-    color: "text-purple-700 dark:text-purple-300",
-    bgLight: "bg-purple-50 border-purple-300",
-    bgDark: "dark:bg-purple-950/40 dark:border-purple-700/60",
-    keywords: [
-      "لوتو", "يانصيب", "سوبر كي", "لوتو العراق", "سحب لوتو", "بطاقة لوتو", "بطاقات لوتو", "قمار", "رهان", "توقع"
-    ]
-  },
-  {
-    id: "debts_installments",
-    name: "ديون وأقساط",
-    icon: "🤝",
-    color: "text-rose-700 dark:text-rose-300",
-    bgLight: "bg-rose-50 border-rose-300",
-    bgDark: "dark:bg-rose-950/40 dark:border-rose-700/60",
-    keywords: [
-      "دين", "ديون", "سلفة", "سلف", "قسط", "اقساط", "تسديد دين", "تسديد قسط", "دفع دين", "كمبيالة", "ذمة", "مستحقات"
-    ]
-  },
-  {
-    id: "travel_trips",
-    name: "سفر ورحلات",
-    icon: "✈️",
-    color: "text-sky-700 dark:text-sky-300",
-    bgLight: "bg-sky-50 border-sky-300",
-    bgDark: "dark:bg-sky-950/40 dark:border-sky-700/60",
-    keywords: [
-      "سفر", "سفرة", "رحلة", "تذكرة طيران", "فندق", "حجز فندق", "فيزا", "جواز سفر", "طيران", "سياحة", "مطار"
-    ]
-  },
-  {
-    id: "family_personal",
-    name: "العائلة ومصروف شخصي",
-    icon: "👨‍👩‍👧",
-    color: "text-pink-700 dark:text-pink-300",
-    bgLight: "bg-pink-50 border-pink-300",
-    bgDark: "dark:bg-pink-950/40 dark:border-pink-700/60",
-    keywords: [
-      "مصروف شخصي", "مصروف عائلي", "طلب عائلة", "كسوة", "مصروف يد", "جيب", "مصروف جيب", "حاجة شخصية", "مصاريف اطفال"
-    ]
-  },
-  {
-    id: "cake_debts",
-    name: "ديون الكيك",
-    icon: "🎂",
-    color: "text-pink-600 dark:text-pink-400",
-    bgLight: "bg-pink-50 border-pink-200",
-    bgDark: "dark:bg-pink-950/40 dark:border-pink-800/60",
-    keywords: [
-      "دين كيك", "ديون الكيك", "كيك الاميرة", "مواد كيك", "تجهيز كيك"
-    ]
-  },
-  {
     id: "other_misc",
     name: "أخرى ومتفرقات",
     icon: "📦",
@@ -660,6 +593,87 @@ export function sortItemsByCategoryPriority<T extends { category?: string; name:
     }
     return (a.name || "").localeCompare(b.name || "", "ar");
   });
+}
+
+/**
+ * كشف ما إذا كان المصروف متعلقاً بالسيارة
+ */
+export function isCarExpenseMatch(name?: string, category?: string, items?: { name?: string; category?: string }[]): boolean {
+  if (category === "السيارة والنقل" || category === "السيارة" || category === "سيارة" || category === "صيانة ووقود" || category === "صيانة سيارة") {
+    return true;
+  }
+  const CAR_KEYWORDS = [
+    "سيار", "بنزين", "بانزين", "وقود", "دهن محرك", "تبديل دهن", "تبديل زيت", "غسيل سيار",
+    "فيتر", "بنشر", "بنجر", "تاير", "اطارات", "بطارية سيار", "صيانة سيار", "كراج", "سفايف", "بريك",
+    "فلتر هواء", "فلتر دهن", "كهربائي سيار", "سنوية", "فحص دوري", "قطع غيار سيار", "ميكانيك سيار",
+    "سفايف امامي", "سفايف خلفي", "تبريد سيار", "غاز تبريد سيار", "محطة وقود", "محطه وقود"
+  ];
+  const normN = normalizeArabicText(name || "");
+  if (CAR_KEYWORDS.some(kw => normN.includes(normalizeArabicText(kw)))) return true;
+  
+  if (items && items.length > 0) {
+    return items.some(it => {
+      if (it.category === "السيارة والنقل" || it.category === "السيارة" || it.category === "سيارة") return true;
+      const itN = normalizeArabicText(it.name || "");
+      return CAR_KEYWORDS.some(kw => itN.includes(normalizeArabicText(kw)));
+    });
+  }
+  return false;
+}
+
+/**
+ * كشف فرد العائلة المستفيد من النص (رقية، قنوت، إيمان، إيڤا، حيدر)
+ */
+export function detectFamilyMemberMatch(text?: string): "رقية" | "قنوت" | "إيمان" | "إيڤا" | "حيدر" | null {
+  if (!text) return null;
+  const norm = normalizeArabicText(text).replace(/ڤ/g, "ف");
+  
+  // Ruqaya: "رقيه", "رقية", "روقيه", "ruqaya"
+  if (norm.includes("رقيه") || norm.includes("روقيه") || norm.includes("ruqaya")) {
+    return "رقية";
+  }
+  // Qunoot: "قنوت", "قنوته", "qanoot"
+  if (norm.includes("قنوت") || norm.includes("qanoot")) {
+    return "قنوت";
+  }
+  // Eva: "ايفا", "ايفه", "ايڤا", "eva"
+  if (norm.includes("ايفا") || norm.includes("ايفه") || norm.includes("eva")) {
+    return "إيڤا";
+  }
+  // Iman: "ايمان", "iman"
+  if (norm.includes("ايمان") || norm.includes("iman")) {
+    return "إيمان";
+  }
+  // Haider: "حيدر", "haider"
+  if (norm.includes("حيدر") || norm.includes("haider")) {
+    return "حيدر";
+  }
+  return null;
+}
+
+/**
+ * كشف هل مصروف السيارة وقود وبنزين
+ */
+export function isCarFuelExpense(exp: { name?: string; category?: string; items?: { name?: string }[] }): boolean {
+  const FUEL_WORDS = ["بنزين", "بانزين", "وقود", "محطة وقود", "محطه وقود"];
+  const normN = normalizeArabicText(exp.name || "");
+  if (FUEL_WORDS.some(w => normN.includes(w))) return true;
+  if (exp.items && exp.items.some(i => FUEL_WORDS.some(w => normalizeArabicText(i.name || "").includes(w)))) return true;
+  return false;
+}
+
+/**
+ * كشف هل مصروف السيارة صيانة وفيتر
+ */
+export function isCarMaintenanceExpense(exp: { name?: string; category?: string; items?: { name?: string }[] }): boolean {
+  const MAINT_WORDS = [
+    "صيانة", "فيتر", "دهن", "تبديل دهن", "زيت", "بنشر", "تاير", "بطارية", "كراج",
+    "سفايف", "بريك", "فلتر", "كهربائي", "حدادية", "قطع غيار"
+  ];
+  const normN = normalizeArabicText(exp.name || "");
+  if (MAINT_WORDS.some(w => normN.includes(w))) return true;
+  if (exp.items && exp.items.some(i => MAINT_WORDS.some(w => normalizeArabicText(i.name || "").includes(w)))) return true;
+  return false;
 }
 
 /**
@@ -947,8 +961,97 @@ export function getWarrantyStatus(expiryDateStr?: string): {
   };
 }
 
+export type ProductPriority = "مهم" | "مال داعي" | "تبذير";
+
+export interface ProductPriorityInfo {
+  priority: ProductPriority;
+  badge: string;
+  icon: string;
+  colorClass: string;
+  bgClass: string;
+  borderClass: string;
+  label: string;
+}
+
+export function getProductPriorityInfo(priority: ProductPriority): ProductPriorityInfo {
+  switch (priority) {
+    case "مهم":
+      return {
+        priority: "مهم",
+        badge: "مهم 🟢",
+        icon: "🟢",
+        colorClass: "text-emerald-700 dark:text-emerald-300",
+        bgClass: "bg-emerald-50 dark:bg-emerald-950/50",
+        borderClass: "border-emerald-200 dark:border-emerald-800/50",
+        label: "أساسي ومهم"
+      };
+    case "مال داعي":
+      return {
+        priority: "مال داعي",
+        badge: "مال داعي 🟡",
+        icon: "🟡",
+        colorClass: "text-amber-700 dark:text-amber-300",
+        bgClass: "bg-amber-50 dark:bg-amber-950/50",
+        borderClass: "border-amber-200 dark:border-amber-800/50",
+        label: "غير ضروري / كماليات"
+      };
+    case "تبذير":
+      return {
+        priority: "تبذير",
+        badge: "تبذير 🔴",
+        icon: "🔴",
+        colorClass: "text-rose-700 dark:text-rose-300",
+        bgClass: "bg-rose-50 dark:bg-rose-950/50",
+        borderClass: "border-rose-200 dark:border-rose-800/50",
+        label: "تبذير ونزيف مالي"
+      };
+  }
+}
+
+export function detectProductPriority(name: string, category?: string): ProductPriority {
+  const normN = normalizeArabicText(name || "");
+  const normCat = normalizeArabicText(category || "");
+
+  // 1. تبذير (Gambling, tobacco, lottery, energy drinks, pure wasteful splurges)
+  const wasteKeywords = [
+    "لوتو", "يانصيب", "سوبر كي", "عراق لوتو", "بطاقه لوتو", "بطاقات لوتو", "قمار", "رهان",
+    "سكائر", "سجائر", "فيب", "معسل", "اركيله", "ارجيله", "سحبه", "تبغ", "ولاعه", "فحم اركيله",
+    "ريد بول", "تايجر", "مشروب طاقه", "باور هورس", "بلو", "سلايم", "العاب ناريه", "مفرقعات"
+  ];
+  if (
+    normCat.includes("يانصيب") || normCat.includes("سكائر") || normCat.includes("معسل") ||
+    wasteKeywords.some(k => normN.includes(k))
+  ) {
+    return "تبذير";
+  }
+
+  // 2. مال داعي (Fast food delivery, sweets, chocolates, chips, soft drinks, luxury accessories)
+  const unnecessaryKeywords = [
+    "شيبس", "جبس", "ليز", "شيتوس", "دوريتوس", "برينجلز", "كرات الجبن", "فشار", "بفك",
+    "شوكولاته", "نوتيلا", "كت كات", "كتكات", "سنيكرز", "تويكس", "مارس", "كندر", "جالكسي",
+    "مورو", "باونتي", "بسكويت محشى", "ويفر", "كيك جاهز", "دونات", "كرواسون شوكولا", "حلاوه",
+    "حلقوم", "مصاص", "علك", "علكه", "سكاكر", "مارشميلو", "ايس كريم", "موطه", "دوندورما",
+    "سلاش", "مثلجات", "توتو", "نستله", "كنافه", "بقلاوه", "كراميل", "سويت",
+    "برغر", "برجر", "همبرجر", "بيتزا", "شاورما", "كنتاكي", "وجبه سريعه", "صاج", "فاهيتا",
+    "سندويش جاهز", "فنكر", "بطاطس مقليه", "كابتشينو جاهز", "لاتيه", "قهوه بارده", "ايس كوفي",
+    "ميلك شيك", "كوكتيل", "دليفري", "توصيل طلبات", "بروستد", "فلافل جاهزه", "سوشي",
+    "بيبسي", "كوكاكولا", "كولا", "سفن اب", "سفن", "ميراندا", "ميرندا", "فانتا", "ماونتن ديو", "شاني", "سبرايت", "عصير مصنع",
+    "اكسسوارات كماليه", "شموع زينه", "ميداليه", "بالونات", "العاب اطفال كماليه"
+  ];
+  if (
+    normCat.includes("حلويات") || normCat.includes("سناكات") || normCat.includes("مطاعم") ||
+    normCat.includes("كافيهات") || unnecessaryKeywords.some(k => normN.includes(k))
+  ) {
+    return "مال داعي";
+  }
+
+  // 3. مهم (Staples, food, dairy, meat, bread, veggies, cleaning, pharmacy, utilities, repairs)
+  return "مهم";
+}
+
 export interface ItemNatureClassification {
   type: "discretionary" | "essential" | "neutral";
+  priority: ProductPriority;
   subType: "sweets" | "fast_food" | "drinks" | "smoking" | "entertainment" | "luxury" | "staple" | "health" | "cleaning" | "general";
   subCategoryTitle: string;
   reason: string;
@@ -957,7 +1060,7 @@ export interface ItemNatureClassification {
   lightBg: string;
 }
 
-export function classifyItemNature(name: string, category?: string): ItemNatureClassification {
+function classifyRawItemNature(name: string, category?: string): Omit<ItemNatureClassification, "priority"> {
   const rawN = (name || "").toLowerCase().trim();
   const rawCat = (category || "").toLowerCase().trim();
   const normN = normalizeArabicText(rawN);
@@ -1134,3 +1237,12 @@ export function classifyItemNature(name: string, category?: string): ItemNatureC
     lightBg: "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800/40"
   };
 }
+
+export function classifyItemNature(name: string, category?: string): ItemNatureClassification {
+  const raw = classifyRawItemNature(name, category);
+  return {
+    ...raw,
+    priority: detectProductPriority(name, category)
+  };
+}
+

@@ -20,22 +20,22 @@ import MapLink from "@/components/MapLink";
 import CakeCostBreakdownModal from "@/components/CakeCostBreakdownModal";
 import { CakeCostBreakdown } from "@/lib/cakeCostCalculator";
 
-// Safe TTL cache helper: ensures we NEVER display stale ghost orders from weeks/months ago
-// Default TTL is 30 seconds for immediate freshness
-const getFreshCache = (key: string, maxAgeMs = 30 * 1000) => {
+// Stale-While-Revalidate cache helper: ensures instant 0ms display on navigation
+// while real-time Firestore listeners immediately refresh in background
+const getFreshCache = (key: string) => {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && parsed._timestamp) {
-      if (Date.now() - parsed._timestamp < maxAgeMs && Array.isArray(parsed.data) && parsed.data.length > 0) {
+    if (parsed && typeof parsed === 'object') {
+      if (Array.isArray(parsed.data) && parsed.data.length > 0) {
         return parsed.data;
       }
-      localStorage.removeItem(key);
-      return null;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
     }
-    localStorage.removeItem(key);
     return null;
   } catch (e) {
     return null;
@@ -60,7 +60,7 @@ export default function ExternalOrdersAdmin() {
   const [orders, setOrders] = useState<any[]>(() => {
     return getFreshCache("cache_external_orders_v2") || [];
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => (getFreshCache("cache_external_orders_v2") || []).length === 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");

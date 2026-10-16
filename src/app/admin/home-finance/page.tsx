@@ -42,7 +42,14 @@ import {
   getWarrantyStatus,
   classifyItemNature,
   ItemNatureClassification,
-  normalizeArabicText
+  normalizeArabicText,
+  ProductPriority,
+  detectProductPriority,
+  getProductPriorityInfo,
+  isCarExpenseMatch,
+  detectFamilyMemberMatch,
+  isCarFuelExpense,
+  isCarMaintenanceExpense
 } from "./productCategories";
 
 // ══════════════════════════════════════════════
@@ -96,6 +103,7 @@ interface ExpenseItem {
   warrantyExpiryDate?: string;
   warrantyCardImage?: string;
   warrantyNotes?: string;
+  priority?: ProductPriority;
 }
 
 interface Expense {
@@ -112,6 +120,8 @@ interface Expense {
   hasWarranty?: boolean;
   warrantiesCount?: number;
   warrantyCardImage?: string;
+  targetMember?: string;
+  isCar?: boolean;
 }
 
 interface Income {
@@ -176,7 +186,7 @@ interface FamilyMemberNeed {
   id: string;
   member: string; // "حيدر" | "إيمان" | "رقية" | "قنوت" | "إيڤا"
   title: string;
-  type?: "need" | "duty"; // "need" = طلبات واحتياجات, "duty" = واجبات ومسؤوليات
+  type?: "need" | "duty" | "expense"; // "need" = طلبات واحتياجات, "duty" = واجبات ومسؤوليات, "expense" = مصاريف ومشتريات
   category: string;
   quantity?: number;
   estimatedPrice?: number;
@@ -184,6 +194,8 @@ interface FamilyMemberNeed {
   notes?: string;
   status: "pending" | "available" | "completed";
   createdAt: string;
+  expenseId?: string;
+  expenseDate?: string;
 }
 
 interface TravelTrip {
@@ -447,13 +459,53 @@ export default function HomeFinanceDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "expenses" | "income" | "installments" | "needs" | "bills" | "debts" | "inventory" | "car" | "travel" | "familyNeeds" | "futurePlans">("overview");
 
   // Data state
-  const [cakeSalaryDebt, setCakeSalaryDebt] = useState<number>(0);
-  const [cakeDebtExpenses, setCakeDebtExpenses] = useState<Expense[]>([]);
-  const [cakeDebtIncomes, setCakeDebtIncomes] = useState<Income[]>([]);
+  const [cakeSalaryDebt, setCakeSalaryDebt] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = localStorage.getItem("cached_hf_cakeSalaryDebt");
+        if (c) return JSON.parse(c);
+      } catch (e) {}
+    }
+    return 0;
+  });
+  const [cakeDebtExpenses, setCakeDebtExpenses] = useState<Expense[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = localStorage.getItem("cached_hf_cakeDebtExpenses");
+        if (c) return JSON.parse(c);
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [cakeDebtIncomes, setCakeDebtIncomes] = useState<Income[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = localStorage.getItem("cached_hf_cakeDebtIncomes");
+        if (c) return JSON.parse(c);
+      } catch (e) {}
+    }
+    return [];
+  });
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [incomes, setIncomes] = useState<Income[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = localStorage.getItem("cached_hf_expenses");
+        if (c) return JSON.parse(c);
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [incomes, setIncomes] = useState<Income[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = localStorage.getItem("cached_hf_incomes");
+        if (c) return JSON.parse(c);
+      } catch (e) {}
+    }
+    return [];
+  });
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [carInventory, setCarInventory] = useState<InventoryItem[]>([]);
   const [travelInventory, setTravelInventory] = useState<InventoryItem[]>([]);
@@ -472,6 +524,9 @@ export default function HomeFinanceDashboard() {
   const [newFamilyNeedTitle, setNewFamilyNeedTitle] = useState("");
   const [newFamilyNeedCategory, setNewFamilyNeedCategory] = useState("عائلة");
   
+  const [carSubTab, setCarSubTab] = useState<"expenses" | "inventory" | "shopping">("expenses");
+  const [carSearch, setCarSearch] = useState("");
+  const [carExpenseFilter, setCarExpenseFilter] = useState<"all" | "fuel" | "maintenance" | "other">("all");
   const [travelSubTab, setTravelSubTab] = useState<"inventory" | "trips">("inventory");
   const [showTripModal, setShowTripModal] = useState(false);
   const [editTrip, setEditTrip] = useState<TravelTrip | null>(null);
@@ -752,6 +807,7 @@ export default function HomeFinanceDashboard() {
 
   const [expNameInput, setExpNameInput] = useState("");
   const [showExpSuggestions, setShowExpSuggestions] = useState(false);
+  const [expBeneficiary, setExpBeneficiary] = useState<string>("عام للبيت");
 
   const [debtNameInput, setDebtNameInput] = useState("");
   const [showDebtSuggestions, setShowDebtSuggestions] = useState(false);
@@ -775,7 +831,7 @@ export default function HomeFinanceDashboard() {
   const [wasteActiveTab, setWasteActiveTab] = useState<"overview" | "discretionary" | "essentials" | "receipts">("overview");
   const [wasteSearchQuery, setWasteSearchQuery] = useState("");
   const [wasteSubtypeFilter, setWasteSubtypeFilter] = useState<string | null>(null);
-  const [familyFilter, setFamilyFilter] = useState<"all" | "needs" | "duties" | "completed">("all");
+  const [familyFilter, setFamilyFilter] = useState<"all" | "needs" | "duties" | "expenses" | "completed">("all");
   const [familySearch, setFamilySearch] = useState("");
   const [showFamilyCompetition, setShowFamilyCompetition] = useState(false);
   const [showCompletedFamilyItems, setShowCompletedFamilyItems] = useState(false);
@@ -795,6 +851,7 @@ export default function HomeFinanceDashboard() {
       setExpDateInput(today());
       setExpenseItems([]);
       setAttachedReceiptImages([]);
+      setExpBeneficiary("عام للبيت");
     } else if (showExpenseModal && editExpense) {
       setExpNameInput(editExpense.name || "");
       setExpCategoryInput(editExpense.category || "سوبر ماركت");
@@ -804,6 +861,10 @@ export default function HomeFinanceDashboard() {
         editExpense.receiptImages && editExpense.receiptImages.length > 0
           ? editExpense.receiptImages
           : (editExpense.imageUrl ? [editExpense.imageUrl] : [])
+      );
+      setExpBeneficiary(
+        editExpense.targetMember || 
+        (editExpense.isCar || isCarExpenseMatch(editExpense.name, editExpense.category, editExpense.items) ? "السيارة" : detectFamilyMemberMatch(editExpense.name) || "عام للبيت")
       );
     }
   }, [showExpenseModal, editExpense]);
@@ -869,6 +930,15 @@ export default function HomeFinanceDashboard() {
           }
         } catch (e) {}
       });
+
+      try {
+        const cachedCakeExps = localStorage.getItem("cached_hf_cakeDebtExpenses");
+        if (cachedCakeExps) setCakeDebtExpenses(JSON.parse(cachedCakeExps));
+        const cachedCakeIncs = localStorage.getItem("cached_hf_cakeDebtIncomes");
+        if (cachedCakeIncs) setCakeDebtIncomes(JSON.parse(cachedCakeIncs));
+        const cachedCakeDebt = localStorage.getItem("cached_hf_cakeSalaryDebt");
+        if (cachedCakeDebt) setCakeSalaryDebt(JSON.parse(cachedCakeDebt));
+      } catch (e) {}
     }
 
     const loadedKeys = new Set<string>();
@@ -946,7 +1016,16 @@ export default function HomeFinanceDashboard() {
         createdAt: e.createdAt?.toDate ? e.createdAt.toDate().toISOString() : new Date().toISOString(),
         isFromCake: true
       } as any));
+      setCakeSalaryDebt(debt);
+      setCakeDebtExpenses(convertedCakeExps);
       setCakeDebtIncomes(convertedCakeIncs);
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("cached_hf_cakeSalaryDebt", JSON.stringify(debt));
+          localStorage.setItem("cached_hf_cakeDebtExpenses", JSON.stringify(convertedCakeExps));
+          localStorage.setItem("cached_hf_cakeDebtIncomes", JSON.stringify(convertedCakeIncs));
+        } catch (e) {}
+      }
       cakeExpensesLoaded = true;
       checkAllLoaded();
     }, (error) => {
@@ -1863,7 +1942,8 @@ setEditFuturePlan(null);
             quantity: Number(it.quantity) || 1,
             price: Number(it.price) || 0,
             place: itemPlace,
-            category: cat
+            category: cat,
+            priority: (it as any).priority || detectProductPriority(it.name || "", cat)
           };
         });
 
@@ -1942,13 +2022,15 @@ setEditFuturePlan(null);
         }
 
         if (name && price > 0) {
+          const cat = detectProductCategory(name);
           newItems.push({
             id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
             name,
             quantity,
             price,
-            category: detectProductCategory(name),
-            place: expNameInput.trim() || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت")
+            category: cat,
+            place: expNameInput.trim() || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت"),
+            priority: detectProductPriority(name, cat)
           });
           continue;
         }
@@ -1960,13 +2042,15 @@ setEditFuturePlan(null);
         const price = parseFloat(lastPart) || 0;
         const name = parts.slice(0, parts.length - 1).join(" ");
         if (name && price > 0) {
+          const cat = detectProductCategory(name);
           newItems.push({
             id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
             name,
             quantity: 1,
             price,
-            category: detectProductCategory(name),
-            place: expNameInput.trim() || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت")
+            category: cat,
+            place: expNameInput.trim() || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت"),
+            priority: detectProductPriority(name, cat)
           });
         }
       }
@@ -2046,8 +2130,14 @@ setEditFuturePlan(null);
       warrantyPeriod: vit.warrantyPeriod || "",
       warrantyExpiryDate: vit.warrantyExpiryDate || "",
       warrantyCardImage: vit.warrantyCardImage || "",
-      warrantyNotes: vit.warrantyNotes || ""
+      warrantyNotes: vit.warrantyNotes || "",
+      priority: vit.priority || detectProductPriority(vit.name || "", vit.category || category)
     }));
+
+    const isCarExpense = expBeneficiary === "السيارة" || isCarExpenseMatch(name, category, cleanedItems);
+    const assignedMember = (expBeneficiary !== "عام للبيت" && expBeneficiary !== "السيارة") 
+      ? expBeneficiary 
+      : detectFamilyMemberMatch(name);
 
     const item: Expense = {
       id: isEdit ? editExpense!.id : Date.now().toString(),
@@ -2059,7 +2149,9 @@ setEditFuturePlan(null);
       hasWarranty: hasAnyWarranty || Boolean(isEdit && editExpense?.hasWarranty),
       warrantiesCount: warrantiesCount || (isEdit ? editExpense?.warrantiesCount : 0),
       imageUrl: finalReceiptImages[0] || (isEdit ? editExpense?.imageUrl : "") || "",
-      receiptImages: finalReceiptImages.length > 0 ? finalReceiptImages : (isEdit ? (editExpense?.receiptImages || []) : [])
+      receiptImages: finalReceiptImages.length > 0 ? finalReceiptImages : (isEdit ? (editExpense?.receiptImages || []) : []),
+      isCar: isCarExpense,
+      targetMember: assignedMember || undefined
     };
     if (cleanedItems.length > 0) {
       item.items = cleanedItems;
@@ -2076,20 +2168,12 @@ setEditFuturePlan(null);
       await syncToFirebase("expenses", updatedList);
       toast.success("تم تسجيل المصروف وحفظه بنجاح ✅");
 
-      // Automatic Car Sync: واي شي يخص السيارة اضيفه بالمصروف ضيفه بخانة السيارة
-      const CAR_TERMS = [
-        "سيار", "بنزين", "بانزين", "وقود", "دهن محرك", "تبديل دهن", "غسيل سيارة",
-        "فيتر", "بنشر", "تاير", "بطارية", "صيانة سيارة", "كراج", "سفايف", "بريك", "فلتر"
-      ];
-      const isCarExpense = category === "السيارة والنقل" || category === "سيارة" || category === "بنزين ووقود" ||
-        CAR_TERMS.some(t => normalizeArabicText(name).includes(t)) ||
-        cleanedItems.some(it => CAR_TERMS.some(t => normalizeArabicText(it.name).includes(t)));
-
+      // 1. Automatic Car Sync: تسجيل المصروف للسيارة وإضافة قطع الغيار والمستلزمات للموجودات
       if (isCarExpense) {
         let updatedCar = [...carInventory];
         if (cleanedItems.length > 0) {
           cleanedItems.forEach(it => {
-            const isItCar = CAR_TERMS.some(t => normalizeArabicText(it.name).includes(t)) || category === "السيارة والنقل" || category === "سيارة";
+            const isItCar = isCarExpenseMatch(it.name, it.category || category);
             if (isItCar) {
               const existingIdx = updatedCar.findIndex(c => normalizeArabicText(c.name) === normalizeArabicText(it.name));
               if (existingIdx >= 0) {
@@ -2113,31 +2197,106 @@ setEditFuturePlan(null);
               }
             }
           });
-        } else {
-          const existingIdx = updatedCar.findIndex(c => normalizeArabicText(c.name) === normalizeArabicText(name));
-          if (existingIdx >= 0) {
-            updatedCar[existingIdx] = {
-              ...updatedCar[existingIdx],
-              quantity: Number(updatedCar[existingIdx].quantity) + 1,
-              estimatedPrice: finalAmount,
-              updatedAt: new Date().toISOString()
-            };
-          } else {
-            updatedCar.push({
-              id: `car-item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-              name,
-              quantity: 1,
-              threshold: 1,
-              unit: "خدمة/بند",
-              category: "صيانة ووقود",
-              estimatedPrice: finalAmount,
-              createdAt: new Date().toISOString()
-            });
-          }
         }
         setCarInventory(updatedCar);
         syncToFirebase("carInventory", updatedCar);
-        toast.success("تم ربط المصروف وإضافته تلقائياً إلى خانة السيارة 🚗✨");
+        toast.success("تم ربط المصروف وإضافته تلقائياً إلى خانة وسجل السيارة 🚗✨");
+      }
+
+      // 2. Automatic Family Member Sync (رقية، قنوت، إيمان، إيڤا، حيدر)
+      const detectedMembers = new Set<string>();
+      let updatedFamilyNeeds = [...familyNeeds];
+
+      if (cleanedItems.length > 0) {
+        cleanedItems.forEach((it, idx) => {
+          const mem = (expBeneficiary !== "عام للبيت" && expBeneficiary !== "السيارة") 
+            ? expBeneficiary 
+            : (detectFamilyMemberMatch(it.name) || detectFamilyMemberMatch(name));
+          
+          if (mem) {
+            detectedMembers.add(mem);
+            const existingNeedIdx = updatedFamilyNeeds.findIndex(n => 
+              n.member === mem && 
+              n.status === "pending" && 
+              n.type !== "duty" &&
+              normalizeArabicText(n.title).includes(normalizeArabicText(it.name))
+            );
+
+            if (existingNeedIdx >= 0) {
+              updatedFamilyNeeds[existingNeedIdx] = {
+                ...updatedFamilyNeeds[existingNeedIdx],
+                status: "completed",
+                estimatedPrice: it.price || updatedFamilyNeeds[existingNeedIdx].estimatedPrice,
+                notes: `تم الشراء بتاريخ ${date}${it.place ? ` (${it.place})` : ""}`,
+                expenseId: item.id,
+                expenseDate: date
+              };
+            } else {
+              updatedFamilyNeeds.unshift({
+                id: `fam-exp-${Date.now()}-${idx}-${Math.random().toString(36).substring(7)}`,
+                member: mem,
+                title: it.name,
+                type: "expense",
+                category: it.category || category || "مصروف شخصي",
+                quantity: Number(it.quantity) || 1,
+                estimatedPrice: Number(it.price) || 0,
+                priority: it.priority || "مهم",
+                notes: `تم الشراء من المصاريف بتاريخ ${date}${it.place ? ` (${it.place})` : ""}`,
+                status: "completed",
+                createdAt: new Date().toISOString(),
+                expenseId: item.id,
+                expenseDate: date
+              });
+            }
+          }
+        });
+      } else {
+        const mem = (expBeneficiary !== "عام للبيت" && expBeneficiary !== "السيارة")
+          ? expBeneficiary
+          : detectFamilyMemberMatch(name);
+
+        if (mem) {
+          detectedMembers.add(mem);
+          const existingNeedIdx = updatedFamilyNeeds.findIndex(n => 
+            n.member === mem && 
+            n.status === "pending" && 
+            n.type !== "duty" &&
+            normalizeArabicText(n.title).includes(normalizeArabicText(name))
+          );
+
+          if (existingNeedIdx >= 0) {
+            updatedFamilyNeeds[existingNeedIdx] = {
+              ...updatedFamilyNeeds[existingNeedIdx],
+              status: "completed",
+              estimatedPrice: finalAmount,
+              notes: `تم الشراء بتاريخ ${date}`,
+              expenseId: item.id,
+              expenseDate: date
+            };
+          } else {
+            updatedFamilyNeeds.unshift({
+              id: `fam-exp-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+              member: mem,
+              title: name,
+              type: "expense",
+              category: category || "مصروف شخصي",
+              quantity: 1,
+              estimatedPrice: finalAmount,
+              priority: "مهم",
+              notes: `تم الشراء من المصاريف بتاريخ ${date}`,
+              status: "completed",
+              createdAt: new Date().toISOString(),
+              expenseId: item.id,
+              expenseDate: date
+            });
+          }
+        }
+      }
+
+      if (detectedMembers.size > 0) {
+        setFamilyNeeds(updatedFamilyNeeds);
+        await syncToFirebase("familyNeeds", updatedFamilyNeeds);
+        toast.success(`تم حفظ نسخة من المشتريات لـ (${Array.from(detectedMembers).join("، ")}) في خانة العائلة 👧🏻✨`);
       }
 
       // Auto-switch to cycle containing the expense date if currently in another cycle
@@ -4716,7 +4875,19 @@ setEditTrip(null);
               {(() => {
                 const availableCats = EXPENSE_CATEGORIES.map(cat => ({
                   ...cat,
-                  catTotal: allExpenses.filter(e => isExpenseInDateRange(e.date) && e.category === cat.label).reduce((s,e)=>s+e.amount,0)
+                  catTotal: allExpenses.filter(e => isExpenseInDateRange(e.date)).reduce((sum, exp) => {
+                    if (exp.items && exp.items.length > 0) {
+                      const itTotal = exp.items
+                        .filter(it => (it.category || detectProductCategory(it.name)) === cat.label)
+                        .reduce((s, it) => s + (it.price || 0), 0);
+                      if (itTotal > 0) return sum + itTotal;
+                      if (exp.category === cat.label && !exp.items.some(it => it.category)) {
+                        return sum + exp.amount;
+                      }
+                      return sum;
+                    }
+                    return exp.category === cat.label ? sum + exp.amount : sum;
+                  }, 0)
                 })).filter(cat => cat.catTotal > 0 || expenseCategoryFilter === cat.label)
                 .sort((a, b) => b.catTotal - a.catTotal);
 
@@ -4783,7 +4954,11 @@ setEditTrip(null);
 
                 if (!isDateValid) return false;
 
-                if (expenseCategoryFilter && exp.category !== expenseCategoryFilter) return false;
+                if (expenseCategoryFilter) {
+                  const matchesMain = exp.category === expenseCategoryFilter;
+                  const matchesItems = exp.items && exp.items.some(it => (it.category || detectProductCategory(it.name)) === expenseCategoryFilter);
+                  if (!matchesMain && !matchesItems) return false;
+                }
 
                 if (onlyWarrantyFilter) {
                   const hasW = exp.hasWarranty || (exp.warrantiesCount && exp.warrantiesCount > 0) || (exp.items && exp.items.some(it => it.hasWarranty));
@@ -6395,8 +6570,507 @@ setEditTrip(null);
           );
         })()}
 
+        {/* ═══════════════ CAR MANAGEMENT & EXPENSES TAB ═══════════════ */}
+        {activeTab === "car" && (() => {
+          // 1. Car Expenses
+          const carExpenses = expenses.filter(e => e.isCar || isCarExpenseMatch(e.name, e.category, e.items));
+          const searchedExpenses = carExpenses.filter(e => {
+            if (!carSearch.trim()) return true;
+            const q = normalizeArabicText(carSearch);
+            return normalizeArabicText(e.name).includes(q) ||
+                   normalizeArabicText(e.category).includes(q) ||
+                   (e.items && e.items.some(it => normalizeArabicText(it.name).includes(q) || normalizeArabicText(it.place || "").includes(q)));
+          });
+
+          // Filter by category within car
+          const filteredCarExpenses = searchedExpenses.filter(e => {
+            if (carExpenseFilter === "fuel") return isCarFuelExpense(e);
+            if (carExpenseFilter === "maintenance") return isCarMaintenanceExpense(e);
+            if (carExpenseFilter === "other") return !isCarFuelExpense(e) && !isCarMaintenanceExpense(e);
+            return true;
+          });
+
+          // Metrics
+          const totalCarSpend = carExpenses.reduce((s, e) => s + (e.amount || 0), 0);
+          const totalCarFuel = carExpenses.filter(e => isCarFuelExpense(e)).reduce((s, e) => s + (e.amount || 0), 0);
+          const totalCarMaint = carExpenses.filter(e => isCarMaintenanceExpense(e)).reduce((s, e) => s + (e.amount || 0), 0);
+
+          // 2. Car Inventory & Supplies
+          const currentInv = carInventory;
+          const currentShoppingList = currentInv.filter(i => (i.neededQuantity || 0) > 0);
+          const searchedInv = currentInv.filter(item => {
+            if (!carSearch.trim()) return true;
+            const q = normalizeArabicText(carSearch);
+            return normalizeArabicText(item.name).includes(q) || normalizeArabicText(item.category).includes(q);
+          });
+          const totalItems = currentInv.length;
+          const okItems = currentInv.filter(i => i.quantity > i.threshold).length;
+          const completionPct = totalItems > 0 ? (okItems / totalItems) * 100 : 100;
+
+          return (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              {/* Header & Quick Action */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-cyan-500 text-white flex items-center justify-center text-xl shadow-md shadow-blue-500/20">
+                    🚗
+                  </div>
+                  <div>
+                    <h2 className="font-black text-gray-800 dark:text-white text-base sm:text-lg flex items-center gap-2">
+                      <span>السيارة والمصاريف والصيانة</span>
+                    </h2>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 font-bold">
+                      سجل البنزين والصيانة، قطع الغيار، ومستلزمات السيارة
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExpCategoryInput("السيارة والنقل");
+                      setExpBeneficiary("السيارة");
+                      setExpNameInput("بنزين / صيانة السيارة");
+                      setShowExpenseModal(true);
+                    }}
+                    className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white text-xs font-black px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-blue-500/20 active:scale-95 transition cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة مصروف سيارة 🚗</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowInventoryModal(true)}
+                    className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 hover:border-blue-400 text-gray-700 dark:text-gray-200 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 active:scale-95 transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-blue-500" />
+                    <span>مادة للموجودات 📦</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Top Stats Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="bg-gradient-to-br from-blue-500/10 via-cyan-500/5 to-transparent border border-blue-200/70 dark:border-blue-800/40 rounded-2xl p-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-blue-700 dark:text-blue-300 mb-1">
+                    <span>إجمالي المصاريف</span>
+                    <span>🚗</span>
+                  </div>
+                  <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
+                    {fmt(totalCarSpend)} <span className="text-[10px] text-gray-400">د.ع</span>
+                  </div>
+                  <div className="text-[10px] text-gray-400 font-bold mt-0.5">
+                    {carExpenses.length} عملية مسجلة
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-transparent border border-amber-200/70 dark:border-amber-800/40 rounded-2xl p-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300 mb-1">
+                    <span>وقود وبنزين</span>
+                    <span>⛽</span>
+                  </div>
+                  <div className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400">
+                    {fmt(totalCarFuel)} <span className="text-[10px] text-gray-400">د.ع</span>
+                  </div>
+                  <div className="text-[10px] text-gray-400 font-bold mt-0.5">
+                    {carExpenses.filter(e => isCarFuelExpense(e)).length} تفويلة
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-500/10 via-indigo-500/5 to-transparent border border-purple-200/70 dark:border-purple-800/40 rounded-2xl p-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-purple-700 dark:text-purple-300 mb-1">
+                    <span>صيانة وفيتر</span>
+                    <span>🔧</span>
+                  </div>
+                  <div className="text-base sm:text-lg font-black text-purple-600 dark:text-purple-400">
+                    {fmt(totalCarMaint)} <span className="text-[10px] text-gray-400">د.ع</span>
+                  </div>
+                  <div className="text-[10px] text-gray-400 font-bold mt-0.5">
+                    {carExpenses.filter(e => isCarMaintenanceExpense(e)).length} تصليح وصيانة
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-200/70 dark:border-emerald-800/40 rounded-2xl p-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-700 dark:text-emerald-300 mb-1">
+                    <span>موجودات السيارة</span>
+                    <span>📦</span>
+                  </div>
+                  <div className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400">
+                    {totalItems} <span className="text-[10px] text-gray-400">مادة</span>
+                  </div>
+                  <div className="text-[10px] text-gray-400 font-bold mt-0.5">
+                    {currentShoppingList.length > 0 ? (
+                      <span className="text-orange-500 font-black">⚠️ {currentShoppingList.length} نواقص</span>
+                    ) : (
+                      "جاهزة ومكتملة ✅"
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-tab Navigation */}
+              <div className="bg-gray-100/90 dark:bg-zinc-800/80 p-1.5 rounded-2xl flex items-center shadow-inner gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCarSubTab("expenses")}
+                  className={`flex-1 py-2 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    carSubTab === "expenses"
+                      ? "bg-white shadow-sm dark:bg-zinc-700 text-blue-600 dark:text-blue-400"
+                      : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                >
+                  <span>🚗 سجل المصاريف والمشتريات</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-bold">
+                    {carExpenses.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCarSubTab("inventory")}
+                  className={`flex-1 py-2 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    carSubTab === "inventory"
+                      ? "bg-white shadow-sm dark:bg-zinc-700 text-blue-600 dark:text-blue-400"
+                      : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                >
+                  <span>📦 مستلزمات وموجودات السيارة</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-bold">
+                    {totalItems}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCarSubTab("shopping")}
+                  className={`flex-1 py-2 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    carSubTab === "shopping"
+                      ? "bg-white shadow-sm dark:bg-zinc-700 text-blue-600 dark:text-blue-400"
+                      : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                >
+                  <span>🛒 نواقص واحتياجات</span>
+                  {currentShoppingList.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 font-bold">
+                      {currentShoppingList.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Instant Search Bar */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder={carSubTab === "expenses" ? "ابحث في مصاريف وصيانة وبنزين السيارة..." : "ابحث في مستلزمات وقطع غيار السيارة..."}
+                  value={carSearch}
+                  onChange={e => setCarSearch(e.target.value)}
+                  className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-4 py-2.5 pr-10 text-xs sm:text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+                {carSearch && (
+                  <button onClick={() => setCarSearch('')} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* ─── TAB 1: CAR EXPENSES LOG ─── */}
+              {carSubTab === "expenses" && (
+                <div className="space-y-3">
+                  {/* Category filter pills for car expenses */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs custom-scrollbar">
+                    <span className="text-[10px] font-bold text-gray-400 shrink-0">التصنيف:</span>
+                    {[
+                      { id: "all", label: `الكل (${searchedExpenses.length})` },
+                      { id: "fuel", label: `⛽ بنزين ووقود (${searchedExpenses.filter(e => isCarFuelExpense(e)).length})` },
+                      { id: "maintenance", label: `🔧 صيانة وفيتر (${searchedExpenses.filter(e => isCarMaintenanceExpense(e)).length})` },
+                      { id: "other", label: `🚗 غسيل وكراج وأخرى (${searchedExpenses.filter(e => !isCarFuelExpense(e) && !isCarMaintenanceExpense(e)).length})` }
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setCarExpenseFilter(f.id as any)}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition active:scale-95 shrink-0 ${
+                          carExpenseFilter === f.id
+                            ? "bg-blue-600 text-white shadow-xs font-black"
+                            : "bg-white dark:bg-zinc-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-zinc-800 hover:border-blue-300"
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {filteredCarExpenses.length === 0 ? (
+                    <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
+                      <span className="text-3xl block mb-2">🚗</span>
+                      <p className="text-gray-500 dark:text-gray-400 font-bold text-sm">
+                        لا توجد مصاريف أو وصولات مسجلة للسيارة
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        أي مصروف تضيفه وتكتب فيه &quot;سيارة&quot; أو &quot;بنزين&quot; أو فئته سيارة سيظهر هنا تلقائياً
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {filteredCarExpenses.map(exp => {
+                        const isFuel = isCarFuelExpense(exp);
+                        const isMaint = isCarMaintenanceExpense(exp);
+                        const expIcon = isFuel ? "⛽" : isMaint ? "🔧" : "🚗";
+
+                        return (
+                          <div
+                            key={exp.id}
+                            className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 hover:border-blue-300 dark:hover:border-blue-800/60 rounded-2xl p-3.5 shadow-xs transition"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              {/* Right details */}
+                              <div className="flex items-start gap-3 min-w-0 flex-1">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0 ${
+                                  isFuel ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300" :
+                                  isMaint ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300" :
+                                  "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                                }`}>
+                                  {expIcon}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="font-black text-sm text-gray-900 dark:text-white leading-tight">
+                                      {exp.name}
+                                    </h4>
+                                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200/50">
+                                      {isFuel ? "وقود وبنزين" : isMaint ? "صيانة وتصليح" : exp.category}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-400 font-bold flex-wrap">
+                                    <span>📅 {exp.date}</span>
+                                    {exp.items && exp.items.length > 0 && (
+                                      <span className="text-gray-500">
+                                        📦 {exp.items.length} مواد
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Itemized sub-rows */}
+                                  {exp.items && exp.items.length > 0 && (
+                                    <div className="mt-2.5 pt-2 border-t border-gray-100 dark:border-zinc-800/80 flex flex-wrap gap-1.5">
+                                      {exp.items.map((it, idx) => {
+                                        const pInfo = it.priority ? getProductPriorityInfo(it.priority) : null;
+                                        return (
+                                          <div
+                                            key={idx}
+                                            className="text-[11px] font-bold bg-gray-50 dark:bg-zinc-800 px-2 py-1 rounded-lg border border-gray-200/60 dark:border-zinc-700/60 flex items-center gap-1.5"
+                                          >
+                                            <span className="text-gray-800 dark:text-gray-200">{it.name}</span>
+                                            {it.quantity && it.quantity > 1 && (
+                                              <span className="text-gray-400 text-[10px]">×{it.quantity}</span>
+                                            )}
+                                            {it.price > 0 && (
+                                              <span className="text-rose-600 dark:text-rose-400 font-black">{fmt(it.price)} د.ع</span>
+                                            )}
+                                            {pInfo && (
+                                              <span className={`text-[9px] px-1 py-0.2 rounded ${pInfo.bgClass} ${pInfo.colorClass}`}>
+                                                {pInfo.badge}
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Left price & actions */}
+                              <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                <div className="text-sm sm:text-base font-black text-rose-600 dark:text-rose-400">
+                                  {fmt(exp.amount)} <span className="text-[10px] text-gray-400">د.ع</span>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  {(exp.imageUrl || (exp.receiptImages && exp.receiptImages.length > 0)) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
+                                      className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition"
+                                      title="عرض الوصل والصور"
+                                    >
+                                      <Receipt className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => { setEditExpense(exp); setShowExpenseModal(true); }}
+                                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition"
+                                    title="تعديل"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteExpense(exp.id)}
+                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition"
+                                    title="حذف"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ─── TAB 2: CAR INVENTORY / SUPPLIES ─── */}
+              {carSubTab === "inventory" && (
+                <div className="space-y-3">
+                  {/* Completion bar */}
+                  {totalItems > 0 && (
+                    <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-gray-500">اكتمال موجودات السيارة</span>
+                        <span className="text-xs font-black text-gray-700 dark:text-gray-300">{okItems}/{totalItems} سليم ومتوفر</span>
+                      </div>
+                      <div className="h-2.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${completionPct >= 80 ? 'bg-gradient-to-l from-emerald-500 to-teal-500' : completionPct >= 50 ? 'bg-gradient-to-l from-amber-500 to-orange-400' : 'bg-gradient-to-l from-red-500 to-rose-500'}`}
+                          style={{ width: `${completionPct}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-gray-400 text-center mt-1 font-bold">{completionPct.toFixed(0)}% مكتمل</div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {searchedInv.map(item => {
+                      const low = item.quantity <= item.threshold;
+                      const stockPct = Math.min(100, Math.round((Number(item.quantity) / Math.max(1, (Number(item.threshold) || 1) * 2)) * 100));
+                      return (
+                        <div key={item.id} className={`rounded-2xl p-3 border ${low ? "border-orange-200 dark:border-orange-800/50 bg-orange-50/50 dark:bg-orange-900/10" : "border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900"} shadow-sm flex flex-col gap-2 relative overflow-hidden`}>
+                          <div className={`absolute top-0 right-0 left-0 h-1 ${low ? 'bg-gradient-to-r from-orange-400 to-red-500' : 'bg-gradient-to-r from-blue-400 to-cyan-500'} opacity-60 rounded-t-2xl`} />
+                          
+                          <div className="flex items-start justify-between mt-0.5">
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${low ? "bg-orange-100 dark:bg-orange-900/30" : "bg-blue-100 dark:bg-blue-900/30"}`}>
+                              {item.imageUrl ? (
+                                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="text-xl">🔧</span>
+                              )}
+                            </div>
+                            <div className="flex gap-0.5">
+                              <button onClick={() => { setEditInventory(item); setShowInventoryModal(true); }} className="p-1 bg-white/70 dark:bg-zinc-800/70 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition">
+                                <Edit2 className="w-3 h-3 text-gray-500" />
+                              </button>
+                              <button onClick={() => handleDeleteInventoryItem(item.id)} className="p-1 bg-white/70 dark:bg-zinc-800/70 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition">
+                                <Trash2 className="w-3 h-3 text-gray-500" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="font-black text-gray-800 dark:text-gray-100 text-xs line-clamp-1">{item.name}</div>
+                            <div className="text-[10px] text-gray-500 font-bold mt-0.5">السعر: {item.estimatedPrice ? fmt(item.estimatedPrice) : '0'} د.ع</div>
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                              {low && <span className="text-[8px] bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 px-1 py-0.5 rounded-full font-black animate-pulse">⚠️ نقص</span>}
+                              <span className="text-[9px] text-gray-400">{item.category}</span>
+                            </div>
+                          </div>
+
+                          <div className="h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${stockPct > 60 ? 'bg-blue-500' : stockPct > 30 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${stockPct}%` }} />
+                          </div>
+
+                          <div className="flex items-center justify-between mt-auto">
+                            <div className="flex items-center gap-1 bg-gray-100 dark:bg-zinc-800 rounded-xl p-0.5 w-full justify-between">
+                              <button onClick={() => updateQty(item.id, -1)} className="w-6 h-6 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-lg flex items-center justify-center hover:bg-red-200 transition">
+                                <Minus className="w-2.5 h-2.5" />
+                              </button>
+                              <span className="font-black text-xs text-gray-800 dark:text-gray-200 text-center">{item.quantity}<span className="text-[9px] text-gray-400 font-normal ml-1">{item.unit}</span></span>
+                              <button onClick={() => updateQty(item.id, 1)} className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-lg flex items-center justify-center hover:bg-blue-200 transition">
+                                <Plus className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ─── TAB 3: CAR SHOPPING & NEEDS ─── */}
+              {carSubTab === "shopping" && (
+                <div className="space-y-3">
+                  {currentShoppingList.length === 0 ? (
+                    <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800">
+                      <span className="text-3xl block mb-2">🎉</span>
+                      <p className="text-gray-500 dark:text-gray-400 font-bold text-sm">
+                        لا توجد نواقص مطلوبة للسيارة حالياً، كل الاحتياجات متوفرة!
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {currentShoppingList.map(item => {
+                        const estimatedTotal = (item.neededQuantity || 1) * (item.estimatedPrice || 0);
+                        return (
+                          <div key={item.id} className="bg-white dark:bg-zinc-900 rounded-2xl border border-orange-200 dark:border-orange-800/40 shadow-sm p-3 flex flex-col justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/60 flex items-center justify-center text-xl flex-shrink-0">
+                                🔧
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-black text-xs text-gray-900 dark:text-white truncate">{item.name}</div>
+                                <div className="text-[10px] text-orange-600 dark:text-orange-400 font-bold mt-0.5">
+                                  نقص: {item.neededQuantity} {item.unit}
+                                </div>
+                              </div>
+                            </div>
+
+                            {estimatedTotal > 0 && (
+                              <div className="text-[11px] font-black text-gray-700 dark:text-gray-300">
+                                التكلفة التقديرية: {fmt(estimatedTotal)} د.ع
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFulfillModal({
+                                  isOpen: true,
+                                  title: item.name,
+                                  category: "السيارة والنقل",
+                                  estimatedPrice: estimatedTotal,
+                                  quantity: item.neededQuantity || 1,
+                                  type: "shopping",
+                                  item: { ...item, _source: "car" }
+                                });
+                              }}
+                              className="w-full py-1.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-xs rounded-xl shadow-xs active:scale-95 transition"
+                            >
+                              شراء وتوفير 🛒
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ═══════════════ INVENTORY TABS ═══════════════ */}
-        {["inventory", "car", "travel"].includes(activeTab) && (() => {
+        {["inventory", "travel"].includes(activeTab) && (() => {
           const { data: currentInv } = getActiveInventory();
           const currentShoppingList = currentInv.filter(i => (i.neededQuantity || 0) > 0);
           const filteredInv = currentInv.filter(item =>
@@ -6408,7 +7082,6 @@ setEditTrip(null);
           
           let title = "موجودات البيت";
           let TabIcon = Package;
-          if (activeTab === "car") { title = "السيارة"; TabIcon = Car; }
           if (activeTab === "travel") { title = "السفر"; TabIcon = Plane; }
 
           return (
@@ -6901,8 +7574,12 @@ setEditTrip(null);
           const pendingDuties = searchedItems.filter(n => n.type === "duty" && n.status === "pending");
           const completedDuties = searchedItems.filter(n => n.type === "duty" && (n.status === "available" || n.status === "completed"));
 
-          const pendingNeeds = searchedItems.filter(n => n.type !== "duty" && n.status === "pending");
-          const completedNeeds = searchedItems.filter(n => n.type !== "duty" && (n.status === "available" || n.status === "completed"));
+          const pendingNeeds = searchedItems.filter(n => n.type !== "duty" && n.type !== "expense" && n.status === "pending");
+          const completedNeeds = searchedItems.filter(n => n.type !== "duty" && n.type !== "expense" && (n.status === "available" || n.status === "completed"));
+
+          // All purchases and expenses for this member
+          const memberPurchases = searchedItems.filter(n => n.type === "expense" || (n.type !== "duty" && (n.status === "available" || n.status === "completed")));
+          const totalMemberPurchasesSpend = memberPurchases.reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
 
           const activeItems = [...pendingNeeds, ...pendingDuties];
           const completedItems = [...completedNeeds, ...completedDuties];
@@ -6916,12 +7593,15 @@ setEditTrip(null);
             displayItems = pendingNeeds;
           } else if (familyFilter === "duties") {
             displayItems = pendingDuties;
+          } else if (familyFilter === "expenses") {
+            displayItems = memberPurchases;
           } else if (familyFilter === "completed") {
             displayItems = completedItems;
           }
 
           const renderItemRow = (need: FamilyMemberNeed, isCompleted: boolean) => {
             const isDuty = need.type === "duty";
+            const isExpense = need.type === "expense";
             const priorityColors: Record<string, string> = {
               "عاجل": "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border-rose-300/50",
               "مهم": "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border-amber-300/50",
@@ -6933,32 +7613,36 @@ setEditTrip(null);
               <div 
                 key={need.id}
                 className={`p-3 sm:p-3.5 rounded-2xl transition-all duration-200 border flex items-center justify-between gap-3 ${
-                  isCompleted 
+                  isExpense
+                    ? "bg-gradient-to-r from-pink-50/40 via-white to-purple-50/30 dark:from-pink-950/20 dark:via-zinc-900 dark:to-purple-950/10 border-pink-200/70 dark:border-pink-900/30 shadow-xs"
+                    : isCompleted 
                     ? "bg-gray-50/70 dark:bg-zinc-900/40 border-gray-200/60 dark:border-zinc-800/60 opacity-60 hover:opacity-100" 
                     : "bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-600/60 shadow-xs hover:shadow-sm"
                 }`}
               >
-                {/* Right side: Checkbox + Title + Meta */}
+                {/* Right side: Checkbox/Icon + Title + Meta */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {/* Circular 1-tap Action Toggle */}
                   <button
                     type="button"
                     onClick={() => handleToggleFamilyNeedStatus(need)}
                     className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
-                      isCompleted 
+                      isExpense
+                        ? "bg-emerald-500 text-white shadow-xs"
+                        : isCompleted 
                         ? "bg-emerald-500 text-white shadow-xs" 
                         : isDuty 
                           ? "border-2 border-violet-400 text-transparent hover:text-white hover:bg-violet-500 hover:border-violet-500" 
                           : "border-2 border-pink-400 text-transparent hover:text-white hover:bg-pink-500 hover:border-pink-500"
                     }`}
-                    title={isCompleted ? "إعادة فتح" : isDuty ? "إنجاز الواجب" : "توفير وشراء الطلب"}
+                    title={isExpense ? "تم الشراء" : isCompleted ? "إعادة فتح" : isDuty ? "إنجاز الواجب" : "توفير وشراء الطلب"}
                   >
-                    <Check className={`w-4 h-4 ${isCompleted ? "stroke-[3]" : ""}`} />
+                    <Check className={`w-4 h-4 ${(isCompleted || isExpense) ? "stroke-[3]" : ""}`} />
                   </button>
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`font-black text-xs sm:text-sm text-gray-900 dark:text-white leading-tight ${isCompleted ? "line-through text-gray-400 dark:text-gray-500" : ""}`}>
+                      <span className={`font-black text-xs sm:text-sm text-gray-900 dark:text-white leading-tight ${isCompleted && !isExpense ? "line-through text-gray-400 dark:text-gray-500" : ""}`}>
                         {need.title}
                       </span>
                       {need.quantity && need.quantity > 1 && (
@@ -6976,11 +7660,13 @@ setEditTrip(null);
                         </span>
                       )}
                       <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
-                        isDuty 
+                        isExpense
+                          ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/50"
+                          : isDuty 
                           ? "bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200/50" 
                           : "bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border border-pink-200/50"
                       }`}>
-                        {isDuty ? "🎯 واجب" : "🛍️ احتياج"}
+                        {isExpense ? "💳 تم الشراء" : isDuty ? "🎯 واجب" : "🛍️ احتياج"}
                       </span>
                       {need.priority && (
                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${priorityColors[need.priority] || priorityColors["متوسط"]}`}>
@@ -7000,7 +7686,9 @@ setEditTrip(null);
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {need.estimatedPrice && Number(need.estimatedPrice) > 0 ? (
                     <span className={`font-black text-xs px-2.5 py-1 rounded-xl flex items-baseline gap-1 ${
-                      isCompleted 
+                      isExpense
+                        ? "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200/50 dark:border-rose-800/40"
+                        : isCompleted 
                         ? "bg-gray-100 dark:bg-zinc-800 text-gray-400 line-through" 
                         : "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/40"
                     }`}>
@@ -7010,18 +7698,20 @@ setEditTrip(null);
                   ) : null}
 
                   <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditFamilyNeed(need);
-                        setFamilyNeedType(need.type || "need");
-                        setShowFamilyNeedModal(true);
-                      }}
-                      className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition cursor-pointer"
-                      title="تعديل"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
+                    {!isExpense && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditFamilyNeed(need);
+                          setFamilyNeedType(need.type === "duty" ? "duty" : "need");
+                          setShowFamilyNeedModal(true);
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition cursor-pointer"
+                        title="تعديل"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleDeleteFamilyNeed(need.id)}
@@ -7079,7 +7769,8 @@ setEditTrip(null);
                 {FAMILY_MEMBERS_LIST.map(m => {
                   const isSelected = activeFamilyMember === m.name;
                   const memberDuties = familyNeeds.filter(n => (m.isAll || n.member === m.name) && n.type === "duty" && n.status === "pending").length;
-                  const memberNeedsCount = familyNeeds.filter(n => (m.isAll || n.member === m.name) && n.type !== "duty" && n.status === "pending").length;
+                  const memberNeedsCount = familyNeeds.filter(n => (m.isAll || n.member === m.name) && n.type !== "duty" && n.type !== "expense" && n.status === "pending").length;
+                  const memberPurchasesCount = familyNeeds.filter(n => (m.isAll || n.member === m.name) && (n.type === "expense" || (n.type !== "duty" && (n.status === "available" || n.status === "completed")))).length;
                   const isCycleMember = m.name === "إيمان" || m.name === "رقية";
 
                   return (
@@ -7098,7 +7789,7 @@ setEditTrip(null);
                       {isCycleMember && (
                         <span className="text-[10px]" title="مفعل لها ركن متابعة الدورة الشهرية">🌸</span>
                       )}
-                      {(memberDuties > 0 || memberNeedsCount > 0) && (
+                      {(memberDuties > 0 || memberNeedsCount > 0 || memberPurchasesCount > 0) && (
                         <div className="flex items-center gap-1">
                           {memberNeedsCount > 0 && (
                             <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300"}`}>
@@ -7108,6 +7799,11 @@ setEditTrip(null);
                           {memberDuties > 0 && (
                             <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"}`}>
                               {memberDuties} 🎯
+                            </span>
+                          )}
+                          {memberPurchasesCount > 0 && (
+                            <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"}`}>
+                              {memberPurchasesCount} 💳
                             </span>
                           )}
                         </div>
@@ -7195,6 +7891,12 @@ setEditTrip(null);
                   </div>
 
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200/60 dark:border-emerald-800/40">
+                    <span>💳 مشتريات:</span>
+                    <span className="font-black text-rose-600 dark:text-rose-400">{fmt(totalMemberPurchasesSpend)} د.ع</span>
+                    <span className="text-[10px] opacity-75">({memberPurchases.length})</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-bold border border-gray-200/60 dark:border-zinc-700/60">
                     <span>✅ منجز:</span>
                     <span className="font-black">{completedItems.length}</span>
                   </div>
@@ -7203,11 +7905,11 @@ setEditTrip(null);
 
               {/* 4. Filters & Search */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
-                <div className="flex bg-gray-100 dark:bg-zinc-900 p-1 rounded-2xl gap-1 flex-1">
+                <div className="flex bg-gray-100 dark:bg-zinc-900 p-1 rounded-2xl gap-1 flex-1 overflow-x-auto custom-scrollbar">
                   <button
                     type="button"
                     onClick={() => setFamilyFilter("all")}
-                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer ${
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer min-w-[70px] ${
                       familyFilter === "all"
                         ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
                         : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
@@ -7218,7 +7920,7 @@ setEditTrip(null);
                   <button
                     type="button"
                     onClick={() => setFamilyFilter("needs")}
-                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer ${
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer min-w-[70px] ${
                       familyFilter === "needs"
                         ? "bg-white dark:bg-zinc-800 text-pink-600 dark:text-pink-400 shadow-sm"
                         : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
@@ -7229,7 +7931,7 @@ setEditTrip(null);
                   <button
                     type="button"
                     onClick={() => setFamilyFilter("duties")}
-                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer ${
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer min-w-[70px] ${
                       familyFilter === "duties"
                         ? "bg-white dark:bg-zinc-800 text-violet-600 dark:text-violet-400 shadow-sm"
                         : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
@@ -7239,8 +7941,19 @@ setEditTrip(null);
                   </button>
                   <button
                     type="button"
+                    onClick={() => setFamilyFilter("expenses")}
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer min-w-[85px] ${
+                      familyFilter === "expenses"
+                        ? "bg-white dark:bg-zinc-800 text-rose-600 dark:text-rose-400 shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    💳 المشتريات ({memberPurchases.length})
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setFamilyFilter("completed")}
-                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer ${
+                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer min-w-[65px] ${
                       familyFilter === "completed"
                         ? "bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm"
                         : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
@@ -7256,7 +7969,7 @@ setEditTrip(null);
                     type="text"
                     value={familySearch}
                     onChange={e => setFamilySearch(e.target.value)}
-                    placeholder="ابحث في الطلبات والواجبات..."
+                    placeholder="ابحث في الطلبات والواجبات والمشتريات..."
                     className="w-full bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl px-3.5 py-1.5 pr-8 text-xs font-bold text-gray-800 dark:text-white outline-none focus:border-indigo-400"
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
@@ -7279,11 +7992,13 @@ setEditTrip(null);
                   <p className="text-gray-500 dark:text-gray-400 font-bold text-sm">
                     {familyFilter === "completed" 
                       ? "لا توجد عناصر منجزة حالياً"
-                      : familyFilter === "needs"
-                        ? `لا توجد نواقص معلقة لـ ${activeFamilyMember}`
-                        : familyFilter === "duties"
-                          ? `لا توجد واجبات معلقة على ${activeFamilyMember}`
-                          : `جميع الطلبات والواجبات لـ ${activeFamilyMember} مكتملة!`}
+                      : familyFilter === "expenses"
+                        ? `لا توجد مشتريات ومصاريف مسجلة لـ ${activeFamilyMember} بعد`
+                        : familyFilter === "needs"
+                          ? `لا توجد نواقص معلقة لـ ${activeFamilyMember}`
+                          : familyFilter === "duties"
+                            ? `لا توجد واجبات معلقة على ${activeFamilyMember}`
+                            : `جميع الطلبات والواجبات لـ ${activeFamilyMember} مكتملة!`}
                   </p>
                 </div>
               ) : (
@@ -7970,58 +8685,16 @@ setEditTrip(null);
             )}
 
             <form onSubmit={handleSaveExpense} className="space-y-3.5">
-              {/* Quick Spend Type Switcher (Outings, Supermarket, Fast Food, Car, Debts, etc.) */}
-              <div className="space-y-1.5 pb-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-black text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                    <span>⚡ تصنيف سريع للمصروف:</span>
-                    <span className="text-[10px] text-gray-400 font-bold">(اضغط للتحويل والتحديد الفوري)</span>
-                  </span>
+              {/* Main Fields */}
+              <div className="relative w-full">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="label-sm mb-0">وصف المصروف / المتجر</label>
                   {expCategoryInput && (
                     <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800/40">
                       {expCategoryInput}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-                  {[
-                    { label: "🎡 طلعات وجولات", cat: "طلعات وجولات", defaultDesc: "مشوار وجولة" },
-                    { label: "🛒 سوبر ماركت", cat: "سوبر ماركت", defaultDesc: "سوبر ماركت" },
-                    { label: "🍌 خضار وفواكه", cat: "الفواكه والخضار", defaultDesc: "مخضر وفواكه" },
-                    { label: "🍽️ مطاعم وجاهز", cat: "مطاعم وكافيهات", defaultDesc: "مطعم" },
-                    { label: "🚗 بنزين وصيانة سيارة", cat: "السيارة والنقل", defaultDesc: "بنزين سيارة" },
-                    { label: "⚡ فواتير وخدمات", cat: "فواتير ومستحقات", defaultDesc: "فاتورة" },
-                    { label: "🤝 ديون وأقساط", cat: "ديون وأقساط", defaultDesc: "تسديد دين" },
-                    { label: "👨‍👩‍👧 العائلة وشخصي", cat: "العائلة ومصروف شخصي", defaultDesc: "مصروف عائلي" },
-                    { label: "📦 موجودات ونواقص", cat: "موجودات ونواقص", defaultDesc: "نواقص منزلية" }
-                  ].map(preset => {
-                    const isSelected = expCategoryInput === preset.cat;
-                    return (
-                      <button
-                        key={preset.cat}
-                        type="button"
-                        onClick={() => {
-                          setExpCategoryInput(preset.cat);
-                          if (!expNameInput || expNameInput === "غير محدد" || expNameInput === "مصروف عام") {
-                            setExpNameInput(preset.defaultDesc);
-                          }
-                        }}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-black shrink-0 transition flex items-center gap-1 ${
-                          isSelected 
-                            ? "bg-rose-500 text-white shadow-md shadow-rose-500/25 scale-105" 
-                            : "bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700"
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Main Fields */}
-              <div className="relative w-full">
-                <label className="label-sm">وصف المصروف / المتجر</label>
                 <input 
                   name="name" 
                   type="text" 
@@ -8030,58 +8703,45 @@ setEditTrip(null);
                   onChange={e => {
                     const val = e.target.value;
                     setExpNameInput(val);
-                    setShowExpSuggestions(true);
+                    setShowExpSuggestions(val.trim().length >= 1);
                     const pred = detectProductCategory(val);
                     if (pred) {
                       setExpCategoryInput(pred);
                     }
+                    if (isCarExpenseMatch(val, pred)) {
+                      setExpBeneficiary("السيارة");
+                    } else {
+                      const mem = detectFamilyMemberMatch(val);
+                      if (mem) setExpBeneficiary(mem);
+                    }
                   }}
-                  onFocus={() => setShowExpSuggestions(true)}
+                  onFocus={() => {
+                    if (expNameInput.trim().length >= 1) {
+                      setShowExpSuggestions(true);
+                    }
+                  }}
                   onBlur={() => setTimeout(() => setShowExpSuggestions(false), 250)}
                   className="input-field" 
                   placeholder="مثال: هايبرماركت البركات، بنزين السيارة، كراج، مطعم، صيانة..." 
                 />
                 
-                {showExpSuggestions && (
-                  <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl max-h-52 overflow-y-auto">
-                    {expNameInput.trim().length === 0 ? (
-                      <div>
-                        <div className="px-3 py-1.5 text-[10px] font-black text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-700/60 flex items-center justify-between">
-                          <span>🏪 المحلات والأسواق الأكثر تكراراً:</span>
-                          <span className="text-[9px]">اضغط للاختيار السريع</span>
-                        </div>
-                        {uniqueSuggestedPlaces.slice(0, 8).map((suggestedStore, idx) => (
-                          <div 
-                            key={idx} 
-                            onMouseDown={(e) => { 
-                              e.preventDefault();
-                              setExpNameInput(suggestedStore); 
-                              setShowExpSuggestions(false); 
-                              const pred = detectProductCategory(suggestedStore);
-                              if (pred) setExpCategoryInput(pred);
-                            }} 
-                            className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center justify-between"
-                          >
-                            <span>🛒 {suggestedStore}</span>
-                            <span className="text-[10px] text-gray-400">محل مسجل مسبقاً</span>
-                          </div>
-                        ))}
+                {showExpSuggestions && expNameInput.trim().length >= 1 && (() => {
+                  const normQ = normalizeArabicText(expNameInput.trim());
+                  const matchedNames = uniqueNames.filter(n => normalizeArabicText(n).includes(normQ));
+                  const matchedPlaces = uniqueSuggestedPlaces.filter(p => normalizeArabicText(p).includes(normQ) && !matchedNames.includes(p));
+                  const combined = [...matchedNames, ...matchedPlaces].slice(0, 10);
+
+                  if (combined.length === 0) {
+                    return (
+                      <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl p-3 text-center text-xs text-gray-400 font-bold">
+                        لا توجد اقتراحات مطابقة لـ &quot;{expNameInput}&quot;
                       </div>
-                    ) : (() => {
-                      const normQ = normalizeArabicText(expNameInput.trim());
-                      const matchedNames = uniqueNames.filter(n => normalizeArabicText(n).includes(normQ));
-                      const matchedPlaces = uniqueSuggestedPlaces.filter(p => normalizeArabicText(p).includes(normQ) && !matchedNames.includes(p));
-                      const combined = [...matchedNames, ...matchedPlaces].slice(0, 10);
+                    );
+                  }
 
-                      if (combined.length === 0) {
-                        return (
-                          <div className="p-3 text-center text-xs text-gray-400 font-bold">
-                            لا توجد اقتراحات مطابقة لـ &quot;{expNameInput}&quot;
-                          </div>
-                        );
-                      }
-
-                      return combined.map((suggestedName, idx) => {
+                  return (
+                    <div className="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                      {combined.map((suggestedName, idx) => {
                         const pred = detectProductCategory(suggestedName);
                         const isCar = suggestedName.includes("كراج") || suggestedName.includes("فيتر") || suggestedName.includes("بنزين") || suggestedName.includes("سيارة");
                         const isFood = suggestedName.includes("مطعم") || suggestedName.includes("كافيه") || suggestedName.includes("كباب");
@@ -8096,6 +8756,12 @@ setEditTrip(null);
                               setExpNameInput(suggestedName); 
                               setShowExpSuggestions(false); 
                               if (pred) setExpCategoryInput(pred);
+                              if (isCarExpenseMatch(suggestedName, pred)) {
+                                setExpBeneficiary("السيارة");
+                              } else {
+                                const mem = detectFamilyMemberMatch(suggestedName);
+                                if (mem) setExpBeneficiary(mem);
+                              }
                             }} 
                             className="px-4 py-2 hover:bg-rose-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center justify-between"
                           >
@@ -8110,31 +8776,69 @@ setEditTrip(null);
                             )}
                           </div>
                         );
-                      });
-                    })()}
-                  </div>
-                )}
+                      })}
+                    </div>
+                  );
+                })()}
 
-                {/* Quick Store Chips when input is empty */}
-                {!expNameInput && uniqueSuggestedPlaces.length > 0 && (
-                  <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] custom-scrollbar">
-                    <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 shrink-0">محلات سابقة:</span>
-                    {uniqueSuggestedPlaces.slice(0, 8).map((pl, pIdx) => (
-                      <button
-                        key={pIdx}
-                        type="button"
-                        onClick={() => {
-                          setExpNameInput(pl);
-                          const pred = detectProductCategory(pl);
-                          if (pred) setExpCategoryInput(pred);
-                        }}
-                        className="px-2 py-0.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 border border-gray-200/80 dark:border-zinc-700/60 transition shrink-0 active:scale-95 text-[10px]"
-                      >
-                        🏪 {pl}
-                      </button>
-                    ))}
+                {/* Beneficiary / Allocation selector: عام للبيت | السيارة | رقية | قنوت | إيمان | إيڤا | حيدر */}
+                <div className="mt-2.5 pt-2 border-t border-gray-100 dark:border-zinc-800">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[11px] font-black text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
+                      <span>🎯 تخصيص الوجهة / الفرد:</span>
+                      <span className="text-[10px] text-gray-400 font-normal">(نسخة تلقائية للقسم المختار)</span>
+                    </label>
+                    {expBeneficiary !== "عام للبيت" && (
+                      <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800/40">
+                        محدد: {expBeneficiary}
+                      </span>
+                    )}
                   </div>
-                )}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+                    {[
+                      { id: "عام للبيت", label: "🏠 عام للبيت", color: "text-gray-700 dark:text-gray-300" },
+                      { id: "السيارة", label: "🚗 السيارة", color: "text-blue-700 dark:text-blue-300" },
+                      { id: "رقية", label: "👧🏻 رقية", color: "text-pink-700 dark:text-pink-300" },
+                      { id: "قنوت", label: "👧🏻 قنوت", color: "text-purple-700 dark:text-purple-300" },
+                      { id: "إيمان", label: "👩🏻 إيمان", color: "text-rose-700 dark:text-rose-300" },
+                      { id: "إيڤا", label: "👶🏻 إيڤا", color: "text-amber-700 dark:text-amber-300" },
+                      { id: "حيدر", label: "👨🏻 حيدر", color: "text-indigo-700 dark:text-indigo-300" }
+                    ].map(b => {
+                      const isSelected = expBeneficiary === b.id;
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => {
+                            setExpBeneficiary(b.id);
+                            if (b.id === "السيارة" && (!expCategoryInput || expCategoryInput === "سوبر ماركت")) {
+                              setExpCategoryInput("السيارة والنقل");
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-xl text-[11px] font-black shrink-0 transition-all border active:scale-95 cursor-pointer flex items-center gap-1 ${
+                            isSelected
+                              ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-transparent shadow-sm scale-[1.03]"
+                              : `bg-gray-50/80 dark:bg-zinc-800/70 border-gray-200 dark:border-zinc-700 ${b.color} hover:bg-gray-100`
+                          }`}
+                        >
+                          {b.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {expBeneficiary === "السيارة" && (
+                    <div className="mt-1.5 text-[10px] font-black text-blue-700 dark:text-blue-300 bg-blue-50/70 dark:bg-blue-950/40 px-2.5 py-1 rounded-xl border border-blue-200/60 dark:border-blue-800/40 flex items-center gap-1.5 animate-fadeIn">
+                      <span>🚗</span>
+                      <span>سيتم حفظ نسخة تلقائياً في صفحة السيارة وسجل الصيانة والمصاريف</span>
+                    </div>
+                  )}
+                  {["رقية", "قنوت", "إيمان", "إيڤا", "حيدر"].includes(expBeneficiary) && (
+                    <div className="mt-1.5 text-[10px] font-black text-pink-700 dark:text-pink-300 bg-pink-50/70 dark:bg-pink-950/40 px-2.5 py-1 rounded-xl border border-pink-200/60 dark:border-pink-800/40 flex items-center gap-1.5 animate-fadeIn">
+                      <span>👧🏻</span>
+                      <span>سيتم حفظ نسخة تلقائياً في خانة ({expBeneficiary}) ضمن قسم العائلة والمشتريات</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {(expCategoryInput === "ألعاب ويانصيب" || expNameInput.includes("لوتو")) && (
@@ -8510,13 +9214,14 @@ setEditTrip(null);
                       onClick={() => {
                         const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
                         const defaultPlace = selectedOutingPlace || (expCategoryInput === "طلعات وجولات" ? "هايبر ماركت" : expNameInput.trim() || "سوبر ماركت");
-                        const updated = [...expenseItems, { 
+                        const updated: ExpenseItem[] = [...expenseItems, { 
                           id: newId, 
                           name: "", 
                           quantity: 1, 
                           price: 0,
                           category: "",
-                          place: defaultPlace
+                          place: defaultPlace,
+                          priority: "مهم"
                         }];
                         setExpenseItems(updated);
                         setTimeout(() => {
@@ -8575,6 +9280,7 @@ setEditTrip(null);
                                     setExpCategoryInput(pred);
                                   }
                                 }
+                                newItems[idx].priority = detectProductPriority(val, newItems[idx].category || pred);
                                 setExpenseItems(newItems);
                               }} 
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40 font-bold transition" 
@@ -8601,6 +9307,7 @@ setEditTrip(null);
                                               setExpCategoryInput(pred);
                                             }
                                           }
+                                          newItems[idx].priority = detectProductPriority(suggestedName, pred);
                                           setExpenseItems(newItems);
                                           setFocusedProductIdx(null);
                                         }} 
@@ -8638,6 +9345,9 @@ setEditTrip(null);
                                 const newCat = e.target.value;
                                 const newItems = [...expenseItems];
                                 newItems[idx].category = newCat;
+                                if (!newItems[idx].priority) {
+                                  newItems[idx].priority = detectProductPriority(newItems[idx].name, newCat);
+                                }
                                 setExpenseItems(newItems);
                                 if (newItems[idx].name && newCat) {
                                   saveLearnedCategory(newItems[idx].name, newCat);
@@ -8664,12 +9374,22 @@ setEditTrip(null);
                               placeholder="المحل (سوق، كراج، مطعم..)"
                               value={item.place || ""}
                               autoComplete="off"
-                              onFocus={() => setFocusedPlaceIdx(idx)}
+                              onFocus={() => {
+                                if ((item.place || "").trim().length >= 1) {
+                                  setFocusedPlaceIdx(idx);
+                                }
+                              }}
                               onBlur={() => setTimeout(() => setFocusedPlaceIdx(null), 250)}
                               onChange={e => {
+                                const val = e.target.value;
                                 const newItems = [...expenseItems];
-                                newItems[idx].place = e.target.value;
-                                const pred = detectProductCategory(e.target.value);
+                                newItems[idx].place = val;
+                                if (val.trim().length >= 1) {
+                                  setFocusedPlaceIdx(idx);
+                                } else {
+                                  setFocusedPlaceIdx(null);
+                                }
+                                const pred = detectProductCategory(val);
                                 if (pred && !newItems[idx].category) {
                                   newItems[idx].category = pred;
                                 }
@@ -8678,15 +9398,14 @@ setEditTrip(null);
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
                             />
                             {focusedPlaceIdx === idx && (() => {
-                              const pQuery = normalizeArabicText(item.place || "");
-                              const matching = pQuery.length === 0
-                                ? uniqueSuggestedPlaces.slice(0, 8)
-                                : uniqueSuggestedPlaces.filter(p => normalizeArabicText(p).includes(pQuery)).slice(0, 8);
+                              const pQuery = normalizeArabicText(item.place || "").trim();
+                              if (pQuery.length === 0) return null;
+                              const matching = uniqueSuggestedPlaces.filter(p => normalizeArabicText(p).includes(pQuery)).slice(0, 8);
                               if (matching.length === 0) return null;
                               return (
                                 <div className="absolute z-30 w-full min-w-[170px] mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-44 overflow-y-auto">
                                   <div className="px-2 py-1 text-[9px] font-black text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-700/60">
-                                    {pQuery.length === 0 ? "🏪 محلات مقترحة:" : "🔍 نتائج المحلات والكراجات:"}
+                                    🔍 نتائج المحلات والكراجات:
                                   </div>
                                   {matching.map((pName, sIdx) => {
                                     const isCar = pName.includes("كراج") || pName.includes("فيتر") || pName.includes("بنزين");
@@ -8750,13 +9469,14 @@ setEditTrip(null);
                                     if (idx === expenseItems.length - 1) {
                                       const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
                                       const defaultPlace = selectedOutingPlace || (expCategoryInput === "طلعات وجولات" ? "هايبر ماركت" : expNameInput.trim() || "سوبر ماركت");
-                                      const updated = [...expenseItems, { 
+                                      const updated: ExpenseItem[] = [...expenseItems, { 
                                         id: newId, 
                                         name: "", 
                                         quantity: 1, 
                                         price: 0, 
                                         category: "",
-                                        place: defaultPlace
+                                        place: defaultPlace,
+                                        priority: "مهم"
                                       }];
                                       setExpenseItems(updated);
                                       setTimeout(() => {
@@ -8804,6 +9524,52 @@ setEditTrip(null);
                               </button>
                             </div>
                           </div>
+
+                          {/* Item Priority Classification Strip: مهم | مال داعي | تبذير */}
+                          <div className="w-full sm:col-span-12 flex flex-wrap items-center justify-between gap-1.5 pt-1.5 mt-0.5 border-t border-gray-100 dark:border-zinc-800/60">
+                            <div className="flex items-center gap-1.5 text-[11px]">
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500">تصنيف المادة:</span>
+                              {(() => {
+                                const currentPriority = item.priority || detectProductPriority(item.name, item.category);
+                                const pInfo = getProductPriorityInfo(currentPriority);
+                                return (
+                                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${pInfo.bgClass} ${pInfo.colorClass} ${pInfo.borderClass}`}>
+                                    {pInfo.badge}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+
+                            <div className="flex items-center gap-1 bg-gray-100 dark:bg-zinc-900 p-0.5 rounded-lg border border-gray-200/80 dark:border-zinc-800">
+                              {(["مهم", "مال داعي", "تبذير"] as ProductPriority[]).map((pType) => {
+                                const currentPriority = item.priority || detectProductPriority(item.name, item.category);
+                                const isSelected = currentPriority === pType;
+                                return (
+                                  <button
+                                    key={pType}
+                                    type="button"
+                                    onClick={() => {
+                                      const newItems = [...expenseItems];
+                                      newItems[idx].priority = pType;
+                                      setExpenseItems(newItems);
+                                    }}
+                                    className={`px-2.5 py-0.5 rounded-md text-[10px] font-black transition flex items-center gap-1 ${
+                                      isSelected
+                                        ? pType === "مهم"
+                                          ? "bg-emerald-600 text-white shadow-xs"
+                                          : pType === "مال داعي"
+                                          ? "bg-amber-500 text-white shadow-xs"
+                                          : "bg-rose-600 text-white shadow-xs"
+                                        : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                                    }`}
+                                  >
+                                    <span>{pType === "مهم" ? "🟢" : pType === "مال داعي" ? "🟡" : "🔴"}</span>
+                                    <span>{pType}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -8845,7 +9611,8 @@ setEditTrip(null);
                           quantity: 1, 
                           price: 0,
                           category: "",
-                          place: expNameInput.trim() || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت")
+                          place: expNameInput.trim() || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت"),
+                          priority: "مهم"
                         }])}
                         className="text-xs font-black text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-zinc-800 px-3 py-1.5 rounded-xl hover:bg-gray-200 transition flex items-center gap-1.5"
                       >
@@ -9565,9 +10332,15 @@ setEditTrip(null);
                                 <span>{resolvedCat}</span>
                               </span>
                             )}
-                            <span className={`inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-md font-bold border ${nature.lightBg} ${nature.colorClass}`}>
-                              {nature.badge}
-                            </span>
+                            {(() => {
+                              const itPriority = item.priority || detectProductPriority(item.name, resolvedCat);
+                              const pInfo = getProductPriorityInfo(itPriority);
+                              return (
+                                <span className={`inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-md font-black border ${pInfo.bgClass} ${pInfo.colorClass} ${pInfo.borderClass}`}>
+                                  {pInfo.badge}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
 
@@ -11231,6 +12004,14 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
             exp.items.forEach((it, idx) => {
               const resCat = it.category || detectProductCategory(it.name) || exp.category || "عام";
               const nature = classifyItemNature(it.name, resCat);
+              if (it.priority) {
+                nature.priority = it.priority;
+                if (it.priority === "تبذير" || it.priority === "مال داعي") {
+                  nature.type = "discretionary";
+                } else if (it.priority === "مهم") {
+                  nature.type = "essential";
+                }
+              }
               const p = Math.max(0, it.price || 0);
               const q = Math.max(1, it.quantity || 1);
 

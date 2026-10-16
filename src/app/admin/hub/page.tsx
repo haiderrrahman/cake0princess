@@ -71,23 +71,22 @@ export default function AdminHub() {
   );
 }
 
-// Safe TTL cache helper: ensures we NEVER display stale ghost orders from weeks/months ago
-// Default TTL is 30 seconds for immediate freshness upon navigation
-const getFreshCache = (key: string, maxAgeMs = 30 * 1000) => {
+// Stale-While-Revalidate cache helper: ensures instant 0ms display on navigation
+// while real-time Firestore listeners immediately refresh in background
+const getFreshCache = (key: string) => {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && parsed._timestamp) {
-      if (Date.now() - parsed._timestamp < maxAgeMs && Array.isArray(parsed.data) && parsed.data.length > 0) {
+    if (parsed && typeof parsed === 'object') {
+      if (Array.isArray(parsed.data) && parsed.data.length > 0) {
         return parsed.data;
       }
-      localStorage.removeItem(key);
-      return null;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
     }
-    // Remove stale un-enveloped cache from previous versions
-    localStorage.removeItem(key);
     return null;
   } catch (e) {
     return null;
@@ -108,8 +107,14 @@ const setFreshCache = (key: string, data: any) => {
 };
 
 function AdminHubContent() {
-  const [extOrdersLoaded, setExtOrdersLoaded] = useState(false);
-  const [ordersLoaded, setOrdersLoaded] = useState(false);
+  const [extOrdersLoaded, setExtOrdersLoaded] = useState(() => {
+    const cached = getFreshCache('cache_external_orders_v2');
+    return Array.isArray(cached) && cached.length > 0;
+  });
+  const [ordersLoaded, setOrdersLoaded] = useState(() => {
+    const cached = getFreshCache('cache_orders_v2');
+    return Array.isArray(cached) && cached.length > 0;
+  });
   const [loading, setLoading] = useState(false);
   const [isRefreshingExt, setIsRefreshingExt] = useState(false);
 
@@ -229,8 +234,13 @@ function AdminHubContent() {
 
   const [stats, setStats] = useState<any>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('hub_stats');
-      if (saved) return JSON.parse(saved);
+      try {
+        const saved = localStorage.getItem('hub_stats');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+      } catch (e) {}
     }
     return {
       todaySales: 0, weekSales: 0, monthSales: 0, allTimeSales: 0, 
@@ -244,7 +254,14 @@ function AdminHubContent() {
   });
 
   useEffect(() => {
-    localStorage.setItem('hub_stats', JSON.stringify(stats));
+    if (typeof window !== 'undefined') {
+      // Only cache stats when we actually have computed stats, never overwrite with blank zeroes
+      if (stats.allTimeExtSales > 0 || stats.allTimeSales > 0 || stats.totalOrders > 0 || stats.pendingExtOrders > 0) {
+        try {
+          localStorage.setItem('hub_stats', JSON.stringify(stats));
+        } catch (e) {}
+      }
+    }
   }, [stats]);
   
   useEffect(() => {
@@ -402,6 +419,14 @@ function AdminHubContent() {
       setExternalOrders(allExt);
       setExtOrdersLoaded(true);
       setLoading(false);
+      try {
+        const cleanExt = allExt.slice(0, 100).map(o => {
+          const clean = { ...o };
+          delete clean.tempImageUrl;
+          return clean;
+        });
+        setFreshCache("cache_external_orders_v2", cleanExt);
+      } catch {}
     }, (err) => {
       console.error("External orders listener error:", err);
       // Fallback
@@ -411,6 +436,14 @@ function AdminHubContent() {
         setExternalOrders(allExt.slice(0, 100));
         setExtOrdersLoaded(true);
         setLoading(false);
+        try {
+          const cleanExt = allExt.slice(0, 100).map(o => {
+            const clean = { ...o };
+            delete clean.tempImageUrl;
+            return clean;
+          });
+          setFreshCache("cache_external_orders_v2", cleanExt);
+        } catch {}
       }).catch(() => {
         setExtOrdersLoaded(true);
         setLoading(false);
@@ -422,6 +455,10 @@ function AdminHubContent() {
       const allOrd = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setOrders(allOrd);
       setOrdersLoaded(true);
+      try {
+        const cleanOrders = allOrd.slice(0, 50).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
+        setFreshCache("cache_orders_v2", cleanOrders);
+      } catch {}
     }, (err) => {
       console.error("Orders listener error:", err);
     });
@@ -430,6 +467,9 @@ function AdminHubContent() {
     const unsubStore = onSnapshot(qStore, (snap) => {
       const allStore = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setStoreSales(allStore);
+      try {
+        setFreshCache("cache_store_sales_v2", allStore.slice(0, 50));
+      } catch {}
     }, (err) => {
       console.error("Store sales listener error:", err);
     });
@@ -565,6 +605,11 @@ function AdminHubContent() {
     const pendingExtOrders = pendingExtOrdersList.length;
     const pendingExtOrdersAmount = pendingExtOrdersList.reduce((s, o) => s + Number(o.price || 0), 0);
     const pendingOrdersAmount = pendingOrders.reduce((s, o) => s + (Number(o.toPayNow) || Number(o.total) || 0), 0);
+
+    // Guard: Never overwrite populated stats with blank zeroes while waiting for initial network load
+    if (orders.length === 0 && externalOrders.length === 0 && storeSales.length === 0 && !extOrdersLoaded && !ordersLoaded) {
+      return;
+    }
 
     setStats((prev: any) => ({
       ...prev,
