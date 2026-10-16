@@ -519,6 +519,7 @@ export default function AdminDashboard() {
                 <Link
                   key={idx}
                   href={item.href}
+                  prefetch={true}
                   className={`bg-gradient-to-br ${item.gradient} p-4 rounded-3xl shadow-md dark:shadow-xl ${item.glow} hover:-translate-y-1 active:scale-95 transition-all text-white relative overflow-hidden group flex flex-col justify-between min-h-[145px]`}
                 >
                   <div className="absolute top-0 right-0 w-24 h-24 bg-white/15 rounded-full blur-xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
@@ -565,6 +566,7 @@ export default function AdminDashboard() {
                     <Link
                       key={i}
                       href={item.href}
+                      prefetch={true}
                       className={`bg-gradient-to-br ${item.bg} rounded-3xl p-4 sm:p-5 flex flex-col justify-between shadow-md dark:shadow-lg ${item.glow} hover:-translate-y-1 active:scale-95 transition-all text-white relative overflow-hidden group min-h-[145px] border border-white/20 dark:border-white/10`}
                     >
                       <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full blur-xl pointer-events-none -translate-y-1/2 translate-x-1/2" />

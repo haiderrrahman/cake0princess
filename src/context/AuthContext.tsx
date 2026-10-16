@@ -28,8 +28,27 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return localStorage.getItem("auth_cached_isAdmin") === "true";
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
+  });
   const [loading, setLoading] = useState(true);
+
+  const setAndCacheAdmin = (val: boolean) => {
+    setIsAdmin(val);
+    if (typeof window !== "undefined") {
+      try {
+        if (val) localStorage.setItem("auth_cached_isAdmin", "true");
+        else localStorage.removeItem("auth_cached_isAdmin");
+      } catch (e) {}
+    }
+  };
 
   const withTimeout = <T,>(promise: Promise<T>, ms: number = 8000): Promise<T> => {
     return Promise.race([
@@ -45,22 +64,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (currentUser) {
         // Check if admin
         if (currentUser.email === "ontheway.princess@gmail.com" || currentUser.email === "haider.rahman@gmail.com" || currentUser.email === "haiderr.rahman@gmail.com" || currentUser.email === "test.user.12345@gmail.com") {
-          setIsAdmin(true);
+          setAndCacheAdmin(true);
         } else {
           try {
             const userDoc = await withTimeout(getDoc(doc(db, "users", currentUser.uid)));
             if (userDoc.exists() && userDoc.data().role === "admin") {
-              setIsAdmin(true);
+              setAndCacheAdmin(true);
             } else {
-              setIsAdmin(false);
+              setAndCacheAdmin(false);
             }
           } catch (error) {
             console.error("Error fetching user role:", error);
-            setIsAdmin(false);
+            setAndCacheAdmin(false);
           }
         }
       } else {
-        setIsAdmin(false);
+        setAndCacheAdmin(false);
       }
       
       setLoading(false);
@@ -118,6 +137,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const logout = async () => {
+    setAndCacheAdmin(false);
     await firebaseSignOut(auth);
   };
 

@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, MapPin, Navigation, Edit3, CheckCircle, Clock, Trash2, ShieldCheck, User, Loader2, ArrowRight, Smartphone, Camera, FileImage, Image as ImageIcon, Phone, Calendar, Calculator, RefreshCw, Sparkles } from 'lucide-react';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit, onSnapshot } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit, onSnapshot, startAfter } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import Image from "next/image";
@@ -95,16 +95,28 @@ export default function ExternalOrdersAdmin() {
   const [customers, setCustomers] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Progressive Pagination States
+  const PAGE_SIZE = 25;
+  const [lastVisibleDoc, setLastVisibleDoc] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
   const handleRefreshOrders = async () => {
     setIsRefreshing(true);
     try {
-      const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
+      const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(PAGE_SIZE));
       const snap = await getDocs(q);
       const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
       setOrders(fetchedOrders);
+      if (snap.docs.length > 0) {
+        setLastVisibleDoc(snap.docs[snap.docs.length - 1]);
+        setHasMore(snap.docs.length >= PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
       setLoading(false);
       try {
-        const cleanExt = fetchedOrders.slice(0, 50).map(o => ({
+        const cleanExt = fetchedOrders.slice(0, 25).map(o => ({
           ...o,
           imageUrl: o.imageUrl || o.tempImageUrl || "",
         }));
@@ -112,56 +124,77 @@ export default function ExternalOrdersAdmin() {
       } catch {}
       toast.success("تم تحديث الطلبات بنجاح 🔄");
     } catch (e) {
-      // Fallback
-      try {
-        const snap = await getDocs(collection(db, "external_orders"));
-        let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
-        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime());
-        setOrders(fetchedOrders.slice(0, 100));
-        setLoading(false);
-        toast.success("تم تحديث الطلبات بنجاح 🔄");
-      } catch (err) {
-        toast.error("فشل تحديث البيانات، يرجى المحاولة لاحقاً");
-      }
+      toast.error("فشل تحديث البيانات، يرجى المحاولة لاحقاً");
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    // 1. Fast parallel network query for instant fresh display
-    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
-    
-    getDocs(q).then((snap) => {
-      if (!snap.empty) {
-        const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-        setOrders(fetchedOrders);
-        setLoading(false);
+  const handleLoadMoreOrders = async () => {
+    if (!lastVisibleDoc || isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    try {
+      const qNext = query(
+        collection(db, "external_orders"),
+        orderBy("createdAt", "desc"),
+        startAfter(lastVisibleDoc),
+        limit(PAGE_SIZE)
+      );
+      const snap = await getDocs(qNext);
+      if (snap.empty) {
+        setHasMore(false);
+      } else {
+        const nextOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+        setOrders(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const uniqueNew = nextOrders.filter(n => !existingIds.has(n.id));
+          return [...prev, ...uniqueNew];
+        });
+        setLastVisibleDoc(snap.docs[snap.docs.length - 1]);
+        if (snap.docs.length < PAGE_SIZE) {
+          setHasMore(false);
+        }
       }
-    }).catch(() => {});
+    } catch (err) {
+      console.error("Error loading more orders:", err);
+      toast.error("حدث خطأ أثناء تحميل المزيد");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    // Fast initial query limited to PAGE_SIZE (25)
+    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(PAGE_SIZE));
 
     const unsubscribe = onSnapshot(q, (snap) => {
       const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-      setOrders(fetchedOrders);
+      setOrders(prev => {
+        // Preserve any previously loaded pages
+        if (prev.length > PAGE_SIZE) {
+          const freshIds = new Set(fetchedOrders.map(f => f.id));
+          const olderTail = prev.slice(PAGE_SIZE).filter(p => !freshIds.has(p.id));
+          return [...fetchedOrders, ...olderTail];
+        }
+        return fetchedOrders;
+      });
+      if (snap.docs.length > 0) {
+        setLastVisibleDoc(snap.docs[snap.docs.length - 1]);
+        setHasMore(snap.docs.length >= PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
       setLoading(false);
       try {
-        const cleanExt = fetchedOrders.slice(0, 50).map(o => ({
+        const cleanExt = fetchedOrders.slice(0, 25).map(o => ({
           ...o,
           imageUrl: o.imageUrl || o.tempImageUrl || "",
         }));
         setFreshCache("cache_external_orders_v2", cleanExt);
-      } catch (e) {
-        console.error("Cache error:", e);
-      }
+      } catch (e) {}
     }, (error) => {
       console.error("Error fetching external orders:", error);
-      getDocs(collection(db, "external_orders")).then(snap => {
-        let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
-        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime());
-        fetchedOrders = fetchedOrders.slice(0, 100);
-        setOrders(fetchedOrders);
-        setLoading(false);
-      });
+      setLoading(false);
     });
 
     // 2. Fetch customers in the background
@@ -734,8 +767,7 @@ export default function ExternalOrdersAdmin() {
                           <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                             {(order.imageUrl || order.tempImageUrl || order.image) ? (
                               <img 
-                                fetchPriority="high" 
-                                loading="eager" 
+                                loading="lazy" 
                                 decoding="async"
                                 src={order.imageUrl || order.tempImageUrl || order.image} 
                                 alt={order.cakeName} 
@@ -815,8 +847,7 @@ export default function ExternalOrdersAdmin() {
               <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                 {(order.imageUrl || order.tempImageUrl || order.image) ? (
                   <img 
-                    fetchPriority="high" 
-                    loading="eager" 
+                    loading="lazy" 
                     decoding="async"
                     src={order.imageUrl || order.tempImageUrl || order.image} 
                     alt={order.cakeName} 
@@ -925,6 +956,21 @@ export default function ExternalOrdersAdmin() {
             </div>
           ))}
                 </div>
+
+                {/* Progressive Pagination: Load More */}
+                {hasMore && (
+                  <div className="pt-4 pb-2 text-center">
+                    <button
+                      type="button"
+                      onClick={handleLoadMoreOrders}
+                      disabled={isLoadingMore}
+                      className="px-6 py-2.5 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 text-gray-700 dark:text-gray-200 font-bold text-xs hover:bg-gray-50 dark:hover:bg-zinc-800 shadow-sm active:scale-95 transition flex items-center justify-center gap-2 mx-auto disabled:opacity-50"
+                    >
+                      {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin text-pink-500" /> : <RefreshCw className="w-4 h-4 text-pink-500" />}
+                      <span>تحميل المزيد من الطلبات (25 إضافية)</span>
+                    </button>
+                  </div>
+                )}
               </>
             );
           })()}

@@ -1,13 +1,14 @@
 "use client";
 import { customConfirm } from '@/lib/customConfirm';
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { ArrowRight, Receipt, Plus, Trash2, Loader2, DollarSign, BarChart3, Wallet, TrendingUp, Calendar, AlertCircle, Edit, Sparkles, Clock, Package, Store, ChevronLeft, X, Copy, Tag, Search, Check } from "lucide-react";
 import { collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, query, orderBy, onSnapshot, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
-import ScanCakeInvoiceModal from "@/components/ScanCakeInvoiceModal";
+const ScanCakeInvoiceModal = dynamic(() => import("@/components/ScanCakeInvoiceModal"), { ssr: false });
 
 import { getCachedFinancesStats, persistFinancesStats } from "@/lib/financesSync";
 
@@ -80,23 +81,21 @@ export default function FinancesAdmin() {
   const [cakeInventoryItems, setCakeInventoryItems] = useState<any[]>([]);
 
   useEffect(() => {
-    // Load cake inventory items for matching in AI scan modal
-    getDocs(collection(db, "cake_inventory")).then((snap) => {
-      setCakeInventoryItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    }).catch(console.error);
-  }, []);
-
-  useEffect(() => {
     if (!isAdmin) return;
-    // 1. Fetch revenue data once (orders rarely change from this page)
+    // 1. Fetch revenue data & cake inventory once in parallel (rarely change from this page)
     const fetchRevenue = async () => {
       setLoading(true);
       try {
-        const [ordersSnap, extSnap, storeSnap] = await Promise.all([
+        const [ordersSnap, extSnap, storeSnap, cakeInvSnap] = await Promise.all([
           getDocs(collection(db, "orders")),
           getDocs(collection(db, "external_orders")),
           getDocs(collection(db, "store_sales")),
+          getDocs(collection(db, "cake_inventory")),
         ]);
+
+        if (cakeInvSnap && !cakeInvSnap.empty) {
+          setCakeInventoryItems(cakeInvSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        }
 
         let totalRevenue = 0;
         let totalProfit = 0;
@@ -194,8 +193,8 @@ export default function FinancesAdmin() {
     return () => unsub();
   }, [isAdmin]);
 
-  // Recalculate stats whenever expenses or revenue data changes
-  useEffect(() => {
+  // Recalculate stats whenever expenses or revenue data changes with useMemo
+  const calculatedStats = useMemo(() => {
     const totalExpenses = expenses.filter(e => !e.isDebt).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const totalSalaryDebt = expenses.filter(e => e.isDebt).reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const cakeMaterialsExpense = expenses.filter(e => {
@@ -206,7 +205,7 @@ export default function FinancesAdmin() {
     }).reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const netProfit = revenueData.totalRevenue - totalExpenses - Math.max(0, totalSalaryDebt); // Profit based on Revenue - Expenses - Debt (only subtracts unpaid material liabilities)
     
-    const newStats = {
+    return {
       totalRevenue: revenueData.totalRevenue,
       totalExpenses,
       netProfit,
@@ -218,10 +217,12 @@ export default function FinancesAdmin() {
       todaySales: 0,
       weekSales: 0,
     };
-
-    setStats(newStats);
-    persistFinancesStats(newStats);
   }, [expenses, revenueData]);
+
+  useEffect(() => {
+    setStats(calculatedStats);
+    persistFinancesStats(calculatedStats);
+  }, [calculatedStats]);
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();

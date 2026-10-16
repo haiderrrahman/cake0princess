@@ -253,12 +253,13 @@ export default function ProfilePage() {
 
       {isAdmin && (
         <div className="px-5 mt-4">
-          <button
-            onClick={() => router.push('/admin')}
+          <Link
+            href="/admin"
+            prefetch={true}
             className="w-full bg-gradient-to-l from-[#0D0A1A] to-[#1a0d2e] text-white py-4 rounded-[22px] font-black flex items-center justify-center gap-2.5 active:scale-[0.98] transition shadow-xl"
           >
             <Shield className="w-5 h-5" /> 🔐 مركز القيادة المركزي
-          </button>
+          </Link>
         </div>
       )}
 

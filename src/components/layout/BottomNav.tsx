@@ -88,6 +88,7 @@ export default function BottomNav() {
             <Link
               key={link.href}
               href={link.href}
+              prefetch={true}
               onMouseDown={() => setPressed(link.href)}
               onMouseUp={() => setPressed(null)}
               onTouchStart={() => setPressed(link.href)}

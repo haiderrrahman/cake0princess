@@ -14,13 +14,15 @@ import {
   Shield, ZoomIn, Download, Flower2
 } from "lucide-react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { customConfirm } from "@/lib/customConfirm";
 import { db, storage } from "@/lib/firebase";
-import FamilyCompetition from "./FamilyCompetition";
-import FamilyCompetitionOverview from "./FamilyCompetitionOverview";
-import LottoTracker from "./LottoTracker";
-import WomenCycleCare from "./WomenCycleCare";
+
+const FamilyCompetition = dynamic(() => import("./FamilyCompetition"), { ssr: false });
+const FamilyCompetitionOverview = dynamic(() => import("./FamilyCompetitionOverview"), { ssr: false });
+const LottoTracker = dynamic(() => import("./LottoTracker"), { ssr: false });
+const WomenCycleCare = dynamic(() => import("./WomenCycleCare"), { ssr: false });
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
@@ -993,27 +995,31 @@ export default function HomeFinanceDashboard() {
       setDataLoading(false);
     }, 1200);
 
-    const unsubscribers = keys.map(k => {
-      return onSnapshot(doc(db, "home_finance", k), (snap) => {
-        if (snap.exists() && snap.data()?.data) {
-          const val = snap.data().data;
-          setters[k](val);
-          if (typeof window !== "undefined") {
-            try {
-              localStorage.setItem(`cached_hf_${k}`, JSON.stringify(val));
-            } catch (e) {}
+    // Batch fetch all collections in parallel using Promise.all instead of 14 separate onSnapshot listeners
+    Promise.all(keys.map(k => getDoc(doc(db, "home_finance", k))))
+      .then((snaps) => {
+        snaps.forEach((snap, idx) => {
+          const k = keys[idx];
+          if (snap.exists() && snap.data()?.data) {
+            const val = snap.data().data;
+            setters[k](val);
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem(`cached_hf_${k}`, JSON.stringify(val));
+              } catch (e) {}
+            }
+          } else if (!snap.exists()) {
+            setters[k]([]);
           }
-        } else if (!snap.exists()) {
-          setters[k]([]);
-        }
-        loadedKeys.add(k);
+          loadedKeys.add(k);
+        });
         checkAllLoaded();
-      }, (error) => {
-        console.error(`Snapshot error for ${k}:`, error);
-        loadedKeys.add(k);
+      })
+      .catch((err) => {
+        console.error("Home finance batch fetch error:", err);
+        keys.forEach(k => loadedKeys.add(k));
         checkAllLoaded();
       });
-    });
 
     setMounted(true);
 
@@ -1088,7 +1094,6 @@ export default function HomeFinanceDashboard() {
 
     return () => {
       clearTimeout(safetyTimeout);
-      unsubscribers.forEach(unsub => unsub());
       unsubExpenses();
       unsubWallet();
     };

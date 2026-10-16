@@ -9,21 +9,23 @@ import {
   Calendar, ArrowRight, Search, Filter, Edit, ChevronDown, GraduationCap, PlayCircle, Image as ImageIcon, Check, MessageCircle, Sparkles, PackageCheck, Banknote,
   Trash2, ExternalLink, ShoppingCart, Store, ChevronUp, Layers, Copy, ChevronLeft, X, Camera
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, query, orderBy, limit, onSnapshot, increment, where } from "firebase/firestore";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
-import InventoryDeductModal from "@/components/InventoryDeductModal";
-import EditExternalOrderModal from "@/components/EditExternalOrderModal";
-import EditInventoryModal from "@/components/EditInventoryModal";
-import AdminQuickEntry from "@/components/AdminQuickEntry";
-import CustomerProfileModal from "@/components/CustomerProfileModal";
+
+const InventoryDeductModal = dynamic(() => import("@/components/InventoryDeductModal"), { ssr: false });
+const EditExternalOrderModal = dynamic(() => import("@/components/EditExternalOrderModal"), { ssr: false });
+const EditInventoryModal = dynamic(() => import("@/components/EditInventoryModal"), { ssr: false });
+const AdminQuickEntry = dynamic(() => import("@/components/AdminQuickEntry"), { ssr: false });
+const CustomerProfileModal = dynamic(() => import("@/components/CustomerProfileModal"), { ssr: false });
 import MapLink from "@/components/MapLink";
-import ScanCakeInvoiceModal from "@/components/ScanCakeInvoiceModal";
-import ManualCakePurchaseModal from "@/components/ManualCakePurchaseModal";
-import CakeMaterialTimelineModal from "@/components/CakeMaterialTimelineModal";
-import EditCakeInvoiceModal from "@/components/EditCakeInvoiceModal";
-import CakeCostBreakdownModal from "@/components/CakeCostBreakdownModal";
-import MaterialPurchaseHistoryModal from "@/components/MaterialPurchaseHistoryModal";
+const ScanCakeInvoiceModal = dynamic(() => import("@/components/ScanCakeInvoiceModal"), { ssr: false });
+const ManualCakePurchaseModal = dynamic(() => import("@/components/ManualCakePurchaseModal"), { ssr: false });
+const CakeMaterialTimelineModal = dynamic(() => import("@/components/CakeMaterialTimelineModal"), { ssr: false });
+const EditCakeInvoiceModal = dynamic(() => import("@/components/EditCakeInvoiceModal"), { ssr: false });
+const CakeCostBreakdownModal = dynamic(() => import("@/components/CakeCostBreakdownModal"), { ssr: false });
+const MaterialPurchaseHistoryModal = dynamic(() => import("@/components/MaterialPurchaseHistoryModal"), { ssr: false });
 import { CakeMaterialPurchase, calculateItemConsumption } from "@/lib/cakeMaterialPurchases";
 import { customConfirm } from '@/lib/customConfirm';
 
@@ -392,25 +394,7 @@ function AdminHubContent() {
 
   // Real-time listeners for orders, external_orders, and store_sales with limits
   useEffect(() => {
-    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
-
-    // Parallel instant fetch for zero delay on mount
-    getDocs(qExt).then((snap) => {
-      if (!snap.empty) {
-        const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-        setExternalOrders(allExt);
-        setExtOrdersLoaded(true);
-        setLoading(false);
-      }
-    }).catch(() => {
-      getDocs(collection(db, "external_orders")).then(snap => {
-        let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-        allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
-        setExternalOrders(allExt.slice(0, 100));
-        setExtOrdersLoaded(true);
-        setLoading(false);
-      }).catch(() => {});
-    });
+    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(30));
 
     const unsubExt = onSnapshot(qExt, (snap) => {
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
@@ -418,7 +402,7 @@ function AdminHubContent() {
       setExtOrdersLoaded(true);
       setLoading(false);
       try {
-        const cleanExt = allExt.slice(0, 50).map(o => ({
+        const cleanExt = allExt.slice(0, 30).map(o => ({
           ...o,
           imageUrl: o.imageUrl || o.tempImageUrl || "",
         }));
@@ -430,41 +414,34 @@ function AdminHubContent() {
       getDocs(collection(db, "external_orders")).then(snap => {
         const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
         allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
-        setExternalOrders(allExt.slice(0, 100));
+        setExternalOrders(allExt.slice(0, 30));
         setExtOrdersLoaded(true);
         setLoading(false);
-        try {
-          const cleanExt = allExt.slice(0, 50).map(o => ({
-            ...o,
-            imageUrl: o.imageUrl || o.tempImageUrl || "",
-          }));
-          setFreshCache("cache_external_orders_v2", cleanExt);
-        } catch {}
       }).catch(() => {
         setExtOrdersLoaded(true);
         setLoading(false);
       });
     });
 
-    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(100));
+    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(30));
     const unsubOrders = onSnapshot(qOrders, (snap) => {
       const allOrd = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setOrders(allOrd);
       setOrdersLoaded(true);
       try {
-        const cleanOrders = allOrd.slice(0, 50).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
+        const cleanOrders = allOrd.slice(0, 30).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
         setFreshCache("cache_orders_v2", cleanOrders);
       } catch {}
     }, (err) => {
       console.error("Orders listener error:", err);
     });
 
-    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100));
+    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(30));
     const unsubStore = onSnapshot(qStore, (snap) => {
       const allStore = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setStoreSales(allStore);
       try {
-        setFreshCache("cache_store_sales_v2", allStore.slice(0, 50));
+        setFreshCache("cache_store_sales_v2", allStore.slice(0, 30));
       } catch {}
     }, (err) => {
       console.error("Store sales listener error:", err);

@@ -9,7 +9,7 @@ import TheatricalSocialAlert from "@/components/TheatricalSocialAlert";
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
-  const [isChecking, setIsChecking] = useState(true);
+  const [isChecking, setIsChecking] = useState(() => !isAdmin);
 
   useEffect(() => {
     if (!loading) {
@@ -23,10 +23,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         // Logged in and is admin
         setIsChecking(false);
       }
+    } else if (isAdmin) {
+      // Cached as admin, render immediately
+      setIsChecking(false);
     }
   }, [user, isAdmin, loading, router]);
 
-  if (loading || isChecking) {
+  if ((loading && !isAdmin) || (isChecking && !isAdmin)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-zinc-950">
         <Loader2 className="w-10 h-10 animate-spin text-pink-500" />
