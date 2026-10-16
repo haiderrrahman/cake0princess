@@ -596,28 +596,74 @@ export function sortItemsByCategoryPriority<T extends { category?: string; name:
 }
 
 /**
- * كشف ما إذا كان المصروف متعلقاً بالسيارة
+ * كشف ما إذا كان المصروف متعلقاً بالسيارة حصراً (بنزين، صيانة، قطع غيار، غسيل)
+ * ويستثني تماماً الطلعات والجولات، الأقساط، السفر، ومصروف العائلة
  */
 export function isCarExpenseMatch(name?: string, category?: string, items?: { name?: string; category?: string }[]): boolean {
-  if (category === "السيارة والنقل" || category === "السيارة" || category === "سيارة" || category === "صيانة ووقود" || category === "صيانة سيارة") {
+  const normCat = normalizeArabicText(category || "");
+  const normN = normalizeArabicText(name || "");
+
+  // 1. استبعاد قاطع: الطلعات والجولات، السفر، الأقساط، المطاعم والكافيهات
+  if (
+    normCat.includes("طلعات") ||
+    normCat.includes("سفر") ||
+    normCat.includes("اقساط") ||
+    normCat.includes("سلف") ||
+    normCat.includes("مطاعم") ||
+    normCat.includes("كافيه") ||
+    normCat.includes("العاب") ||
+    normN.includes("طلعه") ||
+    normN.includes("طلعة") ||
+    normN.includes("جوله") ||
+    normN.includes("جولة") ||
+    normN.includes("مشوار") ||
+    normN.includes("سفره") ||
+    normN.includes("سفرة") ||
+    normN.startsWith("قسط") ||
+    normN.includes("كافيه") ||
+    normN.includes("مطعم")
+  ) {
+    return false;
+  }
+
+  // 2. الفئات المباشرة للسيارة
+  if (
+    normCat === "السياره والنقل" ||
+    normCat === "السياره" ||
+    normCat === "سياره" ||
+    normCat === "صيانه ووقود" ||
+    normCat === "صيانه سياره" ||
+    normCat === "بنزين ووقود"
+  ) {
     return true;
   }
+
+  // 3. كلمات السيارة الصريحة والمباشرة
   const CAR_KEYWORDS = [
     "سيار", "بنزين", "بانزين", "وقود", "دهن محرك", "تبديل دهن", "تبديل زيت", "غسيل سيار",
-    "فيتر", "بنشر", "بنجر", "تاير", "اطارات", "بطارية سيار", "صيانة سيار", "كراج", "سفايف", "بريك",
-    "فلتر هواء", "فلتر دهن", "كهربائي سيار", "سنوية", "فحص دوري", "قطع غيار سيار", "ميكانيك سيار",
-    "سفايف امامي", "سفايف خلفي", "تبريد سيار", "غاز تبريد سيار", "محطة وقود", "محطه وقود"
+    "فيتر", "بنشر", "بنجر", "تاير", "اطارات", "بطارية سيار", "بطاريه سيار", "صيانة سيار", "صيانه سيار",
+    "سفايف", "بريك", "فلتر هواء", "فلتر دهن", "كهربائي سيار", "سنوية", "سنويه", "فحص دوري",
+    "قطع غيار سيار", "ميكانيك سيار", "سفايف امامي", "سفايف خلفي", "تبريد سيار", "غاز تبريد سيار",
+    "محطة وقود", "محطه وقود", "تبديل بطاريه", "تبديل تاير"
   ];
-  const normN = normalizeArabicText(name || "");
+
   if (CAR_KEYWORDS.some(kw => normN.includes(normalizeArabicText(kw)))) return true;
-  
+
+  // كلمة "كراج" تعتبر سيارة فقط إذا كان المصروف مخصصاً للكراج كفاتورة مستقلة وليست طلعة
+  if (normN.startsWith("كراج") || normN === "كراج" || normN.includes("كراج سيار") || normN.includes("كراج غسيل")) {
+    return true;
+  }
+
+  // 4. فحص المواد الفرعية: فقط إذا كانت المادة نفسها تخص السيارة بصورة صريحة وليست ضمن طلعة
   if (items && items.length > 0) {
     return items.some(it => {
-      if (it.category === "السيارة والنقل" || it.category === "السيارة" || it.category === "سيارة") return true;
+      const itCat = normalizeArabicText(it.category || "");
+      if (itCat === "السياره والنقل" || itCat === "السياره" || itCat === "سياره" || itCat === "صيانه ووقود") return true;
       const itN = normalizeArabicText(it.name || "");
       return CAR_KEYWORDS.some(kw => itN.includes(normalizeArabicText(kw)));
     });
   }
+
   return false;
 }
 
@@ -655,8 +701,13 @@ export function detectFamilyMemberMatch(text?: string): "رقية" | "قنوت" 
  * كشف هل مصروف السيارة وقود وبنزين
  */
 export function isCarFuelExpense(exp: { name?: string; category?: string; items?: { name?: string }[] }): boolean {
-  const FUEL_WORDS = ["بنزين", "بانزين", "وقود", "محطة وقود", "محطه وقود"];
+  const normCat = normalizeArabicText(exp.category || "");
   const normN = normalizeArabicText(exp.name || "");
+  if (normCat.includes("طلعات") || normCat.includes("سفر") || normN.includes("طلعه") || normN.includes("جوله")) {
+    return false;
+  }
+
+  const FUEL_WORDS = ["بنزين", "بانزين", "وقود", "محطة وقود", "محطه وقود"];
   if (FUEL_WORDS.some(w => normN.includes(w))) return true;
   if (exp.items && exp.items.some(i => FUEL_WORDS.some(w => normalizeArabicText(i.name || "").includes(w)))) return true;
   return false;
@@ -666,11 +717,16 @@ export function isCarFuelExpense(exp: { name?: string; category?: string; items?
  * كشف هل مصروف السيارة صيانة وفيتر
  */
 export function isCarMaintenanceExpense(exp: { name?: string; category?: string; items?: { name?: string }[] }): boolean {
-  const MAINT_WORDS = [
-    "صيانة", "فيتر", "دهن", "تبديل دهن", "زيت", "بنشر", "تاير", "بطارية", "كراج",
-    "سفايف", "بريك", "فلتر", "كهربائي", "حدادية", "قطع غيار"
-  ];
+  const normCat = normalizeArabicText(exp.category || "");
   const normN = normalizeArabicText(exp.name || "");
+  if (normCat.includes("طلعات") || normCat.includes("سفر") || normN.includes("طلعه") || normN.includes("جوله")) {
+    return false;
+  }
+
+  const MAINT_WORDS = [
+    "صيانة", "صيانه", "فيتر", "دهن", "تبديل دهن", "زيت", "بنشر", "بنجر", "تاير", "بطارية", "بطاريه",
+    "سفايف", "بريك", "فلتر", "كهربائي", "حدادية", "حداديه", "قطع غيار", "ميكانيك", "تبريد سيار", "فحص دوري"
+  ];
   if (MAINT_WORDS.some(w => normN.includes(w))) return true;
   if (exp.items && exp.items.some(i => MAINT_WORDS.some(w => normalizeArabicText(i.name || "").includes(w)))) return true;
   return false;

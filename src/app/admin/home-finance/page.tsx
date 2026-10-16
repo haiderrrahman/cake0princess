@@ -401,11 +401,11 @@ const getExpenseOriginBadge = (exp: Expense) => {
   if (exp.id.startsWith("travel_") || normName.startsWith("سفره") || cat === "سفر ورحلات") {
     return { label: "سفرة ورحلة", icon: "✈️", bg: "bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800/40" };
   }
-  if (cat === "السيارة والنقل" || cat === "بنزين ووقود" || cat === "سيارة" || normName.includes("بنزين") || normName.includes("سيار")) {
-    return { label: "سيارة ووقود", icon: "🚗", bg: "bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/40" };
-  }
-  if (cat === "طلعات وجولات" || normName.includes("طلعه") || normName.includes("كافيه") || normName.includes("مطعم")) {
+  if (cat === "طلعات وجولات" || normName.includes("طلعه") || normName.includes("كافيه") || normName.includes("مطعم") || normName.includes("جوله") || normName.includes("مشوار")) {
     return { label: "مشوار وطلعة", icon: "🎡", bg: "bg-teal-100 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800/40" };
+  }
+  if (cat === "السيارة والنقل" || cat === "بنزين ووقود" || cat === "سيارة" || normName.includes("بنزين") || normName.includes("فيتر") || (normName.includes("سيار") && !normName.includes("قسط"))) {
+    return { label: "سيارة ووقود", icon: "🚗", bg: "bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/40" };
   }
   if (cat === "العائلة ومصروف شخصي" || cat === "العائلة" || cat === "عائلة") {
     return { label: "عائلة ومصروف شخصي", icon: "👨‍👩‍👧", bg: "bg-pink-100 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-800/40" };
@@ -1278,9 +1278,31 @@ export default function HomeFinanceDashboard() {
     });
   }, [categorySpendingMap]);
 
-  // Fast Car Expenses Cache
+  // Fast Car Expenses Cache: Strictly excludes outings, trips, and installments
   const carExpenses = useMemo(() => {
-    return expenses.filter(e => e.isCar || isCarExpenseMatch(e.name, e.category, e.items));
+    return expenses.filter(e => {
+      const normCat = normalizeArabicText(e.category || "");
+      const normN = normalizeArabicText(e.name || "");
+      if (
+        normCat.includes("طلعات") ||
+        normCat.includes("سفر") ||
+        normCat.includes("اقساط") ||
+        normCat.includes("سلف") ||
+        normCat.includes("مطاعم") ||
+        normCat.includes("كافيه") ||
+        normCat.includes("العاب") ||
+        normN.includes("طلعه") ||
+        normN.includes("جوله") ||
+        normN.includes("مشوار") ||
+        normN.includes("سفره") ||
+        normN.startsWith("قسط") ||
+        normN.includes("مطعم") ||
+        normN.includes("كافيه")
+      ) {
+        return false;
+      }
+      return e.isCar || isCarExpenseMatch(e.name, e.category, e.items);
+    });
   }, [expenses]);
 
   // Fast Memoized Insights Bar (0 recalculations during modal typing)
@@ -2290,7 +2312,14 @@ setEditFuturePlan(null);
       priority: vit.priority || detectProductPriority(vit.name || "", vit.category || category)
     }));
 
-    const isCarExpense = expBeneficiary === "السيارة" || isCarExpenseMatch(name, category, cleanedItems);
+    const normSaveCat = normalizeArabicText(category || "");
+    const normSaveName = normalizeArabicText(name || "");
+    const isOutingOrTrip = normSaveCat.includes("طلعات") || normSaveCat.includes("سفر") || normSaveCat.includes("اقساط") || normSaveCat.includes("سلف") ||
+      normSaveCat.includes("مطاعم") || normSaveCat.includes("كافيه") || normSaveCat.includes("العاب") ||
+      normSaveName.includes("طلعه") || normSaveName.includes("جوله") || normSaveName.includes("مشوار") ||
+      normSaveName.includes("سفره") || normSaveName.startsWith("قسط") || normSaveName.includes("مطعم") || normSaveName.includes("كافيه");
+
+    const isCarExpense = !isOutingOrTrip && (expBeneficiary === "السيارة" || isCarExpenseMatch(name, category, cleanedItems));
     const assignedMember = (expBeneficiary !== "عام للبيت" && expBeneficiary !== "السيارة") 
       ? expBeneficiary 
       : detectFamilyMemberMatch(name);
