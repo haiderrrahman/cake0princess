@@ -9328,7 +9328,7 @@ setEditTrip(null);
                       type="button" 
                       onClick={() => {
                         const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-                        const defaultPlace = selectedOutingPlace || (expCategoryInput === "طلعات وجولات" ? "هايبر ماركت" : expNameInput.trim() || "سوبر ماركت");
+                        const defaultPlace = selectedOutingPlace || (expCategoryInput === "طلعات وجولات" ? "سوق" : expNameInput.trim() || "");
                         const updated: ExpenseItem[] = [...expenseItems, { 
                           id: newId, 
                           name: "", 
@@ -9585,7 +9585,7 @@ setEditTrip(null);
                                     e.preventDefault();
                                     if (idx === expenseItems.length - 1) {
                                       const newId = `item-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-                                      const defaultPlace = selectedOutingPlace || (expCategoryInput === "طلعات وجولات" ? "هايبر ماركت" : expNameInput.trim() || "سوبر ماركت");
+                                      const defaultPlace = selectedOutingPlace || (expCategoryInput === "طلعات وجولات" ? "سوق" : expNameInput.trim() || "");
                                       const updated: ExpenseItem[] = [...expenseItems, { 
                                         id: newId, 
                                         name: "", 
@@ -9642,50 +9642,23 @@ setEditTrip(null);
                             </div>
                           </div>
 
-                          {/* Item Priority Classification Strip: مهم | مال داعي | تبذير */}
-                          <div className="w-full sm:col-span-12 flex flex-wrap items-center justify-between gap-1.5 pt-1.5 mt-0.5 border-t border-gray-100 dark:border-zinc-800/60">
-                            <div className="flex items-center gap-1.5 text-[11px]">
-                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500">تصنيف المادة:</span>
+                          {/* Item Priority Classification: تنبؤ ذكي تلقائي */}
+                          <div className="w-full sm:col-span-12 flex items-center justify-between gap-1.5 pt-1.5 mt-0.5 border-t border-gray-100 dark:border-zinc-800/60">
+                            <div className="flex items-center gap-2 text-[11px]">
+                              <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                <span>🧠 تصنيف المادة (تنبؤ ذكي تلقائي):</span>
+                              </span>
                               {(() => {
-                                const currentPriority = item.priority || detectProductPriority(item.name, item.category);
+                                const currentPriority = detectProductPriority(item.name, item.category);
                                 const pInfo = getProductPriorityInfo(currentPriority);
                                 return (
-                                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${pInfo.bgClass} ${pInfo.colorClass} ${pInfo.borderClass}`}>
+                                  <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border shadow-2xs flex items-center gap-1 ${pInfo.bgClass} ${pInfo.colorClass} ${pInfo.borderClass}`}>
                                     {pInfo.badge}
                                   </span>
                                 );
                               })()}
                             </div>
-
-                            <div className="flex items-center gap-1 bg-gray-100 dark:bg-zinc-900 p-0.5 rounded-lg border border-gray-200/80 dark:border-zinc-800">
-                              {(["مهم", "مال داعي", "تبذير"] as ProductPriority[]).map((pType) => {
-                                const currentPriority = item.priority || detectProductPriority(item.name, item.category);
-                                const isSelected = currentPriority === pType;
-                                return (
-                                  <button
-                                    key={pType}
-                                    type="button"
-                                    onClick={() => {
-                                      const newItems = [...expenseItems];
-                                      newItems[idx].priority = pType;
-                                      setExpenseItems(newItems);
-                                    }}
-                                    className={`px-2.5 py-0.5 rounded-md text-[10px] font-black transition flex items-center gap-1 ${
-                                      isSelected
-                                        ? pType === "مهم"
-                                          ? "bg-emerald-600 text-white shadow-xs"
-                                          : pType === "مال داعي"
-                                          ? "bg-amber-500 text-white shadow-xs"
-                                          : "bg-rose-600 text-white shadow-xs"
-                                        : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                                    }`}
-                                  >
-                                    <span>{pType === "مهم" ? "🟢" : pType === "مال داعي" ? "🟡" : "🔴"}</span>
-                                    <span>{pType}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            <span className="text-[9px] text-gray-400">يُحدد تلقائياً بالذكاء الاصطناعي</span>
                           </div>
                         </div>
                       ))}
