@@ -104,25 +104,13 @@ export default function ExternalOrdersAdmin() {
   const handleRefreshOrders = async () => {
     setIsRefreshing(true);
     try {
-      const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(PAGE_SIZE));
-      const snap = await getDocs(q);
-      const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+      const snap = await getDocs(collection(db, "external_orders"));
+      let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+      fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
       setOrders(fetchedOrders);
-      if (snap.docs.length > 0) {
-        setLastVisibleDoc(snap.docs[snap.docs.length - 1]);
-        setHasMore(snap.docs.length >= PAGE_SIZE);
-      } else {
-        setHasMore(false);
-      }
+      setHasMore(false);
       setLoading(false);
-      try {
-        const cleanExt = fetchedOrders.slice(0, 25).map(o => ({
-          ...o,
-          imageUrl: o.imageUrl || o.tempImageUrl || "",
-        }));
-        setFreshCache("cache_external_orders_v2", cleanExt);
-      } catch {}
-      toast.success("تم تحديث الطلبات بنجاح 🔄");
+      toast.success(`تم تحديث ${fetchedOrders.length} طلب بنجاح 🔄`);
     } catch (e) {
       toast.error("فشل تحديث البيانات، يرجى المحاولة لاحقاً");
     } finally {
@@ -131,70 +119,38 @@ export default function ExternalOrdersAdmin() {
   };
 
   const handleLoadMoreOrders = async () => {
-    if (!lastVisibleDoc || isLoadingMore || !hasMore) return;
-    setIsLoadingMore(true);
-    try {
-      const qNext = query(
-        collection(db, "external_orders"),
-        orderBy("createdAt", "desc"),
-        startAfter(lastVisibleDoc),
-        limit(PAGE_SIZE)
-      );
-      const snap = await getDocs(qNext);
-      if (snap.empty) {
-        setHasMore(false);
-      } else {
-        const nextOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-        setOrders(prev => {
-          const existingIds = new Set(prev.map(p => p.id));
-          const uniqueNew = nextOrders.filter(n => !existingIds.has(n.id));
-          return [...prev, ...uniqueNew];
-        });
-        setLastVisibleDoc(snap.docs[snap.docs.length - 1]);
-        if (snap.docs.length < PAGE_SIZE) {
-          setHasMore(false);
-        }
-      }
-    } catch (err) {
-      console.error("Error loading more orders:", err);
-      toast.error("حدث خطأ أثناء تحميل المزيد");
-    } finally {
-      setIsLoadingMore(false);
-    }
+    // All orders loaded
+    setHasMore(false);
   };
 
   useEffect(() => {
-    // Fast initial query limited to PAGE_SIZE (25)
-    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(PAGE_SIZE));
+    // 1. Parallel fast fetch on mount for all orders
+    getDocs(collection(db, "external_orders")).then((snap) => {
+      if (!snap.empty) {
+        let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
+        setOrders(fetchedOrders);
+        setHasMore(false);
+        setLoading(false);
+      }
+    }).catch(() => {});
 
+    // 2. Real-time snapshot of all orders
+    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snap) => {
       const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-      setOrders(prev => {
-        // Preserve any previously loaded pages
-        if (prev.length > PAGE_SIZE) {
-          const freshIds = new Set(fetchedOrders.map(f => f.id));
-          const olderTail = prev.slice(PAGE_SIZE).filter(p => !freshIds.has(p.id));
-          return [...fetchedOrders, ...olderTail];
-        }
-        return fetchedOrders;
-      });
-      if (snap.docs.length > 0) {
-        setLastVisibleDoc(snap.docs[snap.docs.length - 1]);
-        setHasMore(snap.docs.length >= PAGE_SIZE);
-      } else {
-        setHasMore(false);
-      }
+      setOrders(fetchedOrders);
+      setHasMore(false);
       setLoading(false);
-      try {
-        const cleanExt = fetchedOrders.slice(0, 25).map(o => ({
-          ...o,
-          imageUrl: o.imageUrl || o.tempImageUrl || "",
-        }));
-        setFreshCache("cache_external_orders_v2", cleanExt);
-      } catch (e) {}
     }, (error) => {
       console.error("Error fetching external orders:", error);
-      setLoading(false);
+      getDocs(collection(db, "external_orders")).then(snap => {
+        let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
+        setOrders(fetchedOrders);
+        setHasMore(false);
+        setLoading(false);
+      });
     });
 
     // 2. Fetch customers in the background
@@ -767,12 +723,13 @@ export default function ExternalOrdersAdmin() {
                           <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                             {(order.imageUrl || order.tempImageUrl || order.image) ? (
                               <img 
-                                loading="lazy" 
+                                loading="eager" 
+                                fetchPriority="high"
                                 decoding="async"
                                 src={order.imageUrl || order.tempImageUrl || order.image} 
                                 alt={order.cakeName} 
                                 onClick={() => window.open(order.imageUrl || order.tempImageUrl || order.image, '_blank')} 
-                                className="w-full h-full object-cover cursor-pointer" 
+                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-gray-300">
@@ -847,12 +804,13 @@ export default function ExternalOrdersAdmin() {
               <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
                 {(order.imageUrl || order.tempImageUrl || order.image) ? (
                   <img 
-                    loading="lazy" 
+                    loading="eager" 
+                    fetchPriority="high"
                     decoding="async"
                     src={order.imageUrl || order.tempImageUrl || order.image} 
                     alt={order.cakeName} 
                     onClick={() => window.open(order.imageUrl || order.tempImageUrl || order.image, '_blank')} 
-                    className="w-full h-full object-cover cursor-pointer" 
+                    className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-300">

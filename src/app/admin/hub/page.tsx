@@ -95,6 +95,52 @@ const getFreshCache = (key: string) => {
   }
 };
 
+const HUB_DB_NAME = "HubCacheDB";
+const HUB_STORE_NAME = "hub_data";
+
+function openHubDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined" || !window.indexedDB) {
+      return reject(new Error("IndexedDB not available"));
+    }
+    const request = indexedDB.open(HUB_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(HUB_STORE_NAME)) {
+        db.createObjectStore(HUB_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveHubCache(key: string, data: any): Promise<void> {
+  try {
+    const db = await openHubDB();
+    const tx = db.transaction(HUB_STORE_NAME, "readwrite");
+    const store = tx.objectStore(HUB_STORE_NAME);
+    store.put(data, key);
+  } catch (e) {
+    console.warn("saveHubCache warning:", e);
+  }
+}
+
+async function getHubCache(key: string): Promise<any | null> {
+  try {
+    const db = await openHubDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(HUB_STORE_NAME, "readonly");
+      const store = tx.objectStore(HUB_STORE_NAME);
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
 const setFreshCache = (key: string, data: any) => {
   if (typeof window === 'undefined') return;
   try {
@@ -104,7 +150,7 @@ const setFreshCache = (key: string, data: any) => {
     };
     localStorage.setItem(key, JSON.stringify(envelope));
   } catch (e) {
-    console.warn("Failed to set cache:", key, e);
+    // Quota exceeded fallback: don't crash
   }
 };
 
@@ -154,32 +200,16 @@ function AdminHubContent() {
   const handleRefreshExternal = async () => {
     setIsRefreshingExt(true);
     try {
-      const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(100));
-      const snap = await getDocs(qExt);
-      const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      const snap = await getDocs(collection(db, "external_orders"));
+      let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
       setExternalOrders(allExt);
       setExtOrdersLoaded(true);
-      try {
-        const cleanExt = allExt.slice(0, 50).map(o => ({
-          ...o,
-          imageUrl: o.imageUrl || o.tempImageUrl || "",
-        }));
-        setFreshCache("cache_external_orders_v2", cleanExt);
-      } catch {}
-      toast.success("تم تحديث طلبات السوشيال بنجاح 🔄");
+      saveHubCache("cache_external_orders_all", allExt);
+      toast.success(`تم تحديث ${allExt.length} طلب سوشيال بنجاح 🔄`);
     } catch (e) {
       console.error("Refresh error:", e);
-      // Fallback
-      try {
-        const snap = await getDocs(collection(db, "external_orders"));
-        let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-        allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
-        setExternalOrders(allExt.slice(0, 100));
-        setExtOrdersLoaded(true);
-        toast.success("تم تحديث طلبات السوشيال بنجاح 🔄");
-      } catch (err) {
-        toast.error("فشل تحديث البيانات، يرجى إعادة المحاولة");
-      }
+      toast.error("فشل تحديث البيانات، يرجى إعادة المحاولة");
     } finally {
       setIsRefreshingExt(false);
     }
@@ -279,11 +309,9 @@ function AdminHubContent() {
       const cleanOrders = orders.slice(0, 50).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
       setFreshCache("cache_orders_v2", cleanOrders);
       
-      const cleanExt = externalOrders.slice(0, 50).map(o => ({
-        ...o,
-        imageUrl: o.imageUrl || o.tempImageUrl || "",
-      }));
-      setFreshCache("cache_external_orders_v2", cleanExt);
+      if (externalOrders.length > 0) {
+        saveHubCache("cache_external_orders_all", externalOrders);
+      }
       
       const cleanSales = storeSales.slice(0, 50);
       setFreshCache("cache_store_sales_v2", cleanSales);
@@ -392,31 +420,46 @@ function AdminHubContent() {
     };
   }, [fetchAll, activeTab]);
 
-  // Real-time listeners for orders, external_orders, and store_sales with limits
+  // Real-time listeners for orders, external_orders, and store_sales
   useEffect(() => {
-    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(30));
+    // 1. Instant 0ms load from IndexedDB cache
+    getHubCache("cache_external_orders_all").then((cached) => {
+      if (Array.isArray(cached) && cached.length > 0) {
+        setExternalOrders((prev) => (prev.length === 0 ? cached : prev));
+        setExtOrdersLoaded(true);
+      }
+    });
 
+    // 2. Parallel fast fetch from Firestore with no limits (all orders loaded)
+    getDocs(collection(db, "external_orders")).then((snap) => {
+      if (!snap.empty) {
+        let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
+        setExternalOrders(allExt);
+        setExtOrdersLoaded(true);
+        setLoading(false);
+        saveHubCache("cache_external_orders_all", allExt);
+      }
+    }).catch(() => {});
+
+    // 3. Real-time snapshot listener
+    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
     const unsubExt = onSnapshot(qExt, (snap) => {
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setExternalOrders(allExt);
       setExtOrdersLoaded(true);
       setLoading(false);
-      try {
-        const cleanExt = allExt.slice(0, 30).map(o => ({
-          ...o,
-          imageUrl: o.imageUrl || o.tempImageUrl || "",
-        }));
-        setFreshCache("cache_external_orders_v2", cleanExt);
-      } catch {}
+      saveHubCache("cache_external_orders_all", allExt);
     }, (err) => {
       console.error("External orders listener error:", err);
-      // Fallback
+      // Fallback: full collection fetch
       getDocs(collection(db, "external_orders")).then(snap => {
-        const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
         allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
-        setExternalOrders(allExt.slice(0, 30));
+        setExternalOrders(allExt);
         setExtOrdersLoaded(true);
         setLoading(false);
+        saveHubCache("cache_external_orders_all", allExt);
       }).catch(() => {
         setExtOrdersLoaded(true);
         setLoading(false);
@@ -1873,7 +1916,7 @@ function AdminHubContent() {
                                 fetchPriority="high"
                                 decoding="async"
                                 onClick={() => window.open(order.imageUrl || order.tempImageUrl || order.image, '_blank')} 
-                                className="w-full h-full object-cover mix-blend-multiply dark:mix-blend-normal cursor-pointer" 
+                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">
