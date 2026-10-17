@@ -8854,7 +8854,7 @@ setEditTrip(null);
               {/* Main Fields */}
               <div className="relative w-full">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="label-sm mb-0">وصف المصروف / المتجر</label>
+                  <label className="label-sm mb-0">اسم الطلعة أو المصروف</label>
                   {expCategoryInput && (
                     <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800/40">
                       {expCategoryInput}
@@ -8888,7 +8888,7 @@ setEditTrip(null);
                   }}
                   onBlur={() => setTimeout(() => setShowExpSuggestions(false), 250)}
                   className="input-field" 
-                  placeholder="مثال: هايبرماركت البركات، بنزين السيارة، كراج، مطعم، صيانة..." 
+                  placeholder="مثال: طلعة عائلية، مجمع التحرير، هايبرماركت، مطعم، كراج، صيانة..." 
                 />
                 
                 {showExpSuggestions && expNameInput.trim().length >= 1 && (() => {
@@ -8948,65 +8948,6 @@ setEditTrip(null);
                     </div>
                   );
                 })()}
-
-                {/* Beneficiary / Allocation selector: عام للبيت | السيارة | رقية | قنوت | إيمان | إيڤا | حيدر */}
-                <div className="mt-2.5 pt-2 border-t border-gray-100 dark:border-zinc-800">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] font-black text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
-                      <span>🎯 تخصيص الوجهة / الفرد:</span>
-                      <span className="text-[10px] text-gray-400 font-normal">(نسخة تلقائية للقسم المختار)</span>
-                    </label>
-                    {expBeneficiary !== "عام للبيت" && (
-                      <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800/40">
-                        محدد: {expBeneficiary}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-                    {[
-                      { id: "عام للبيت", label: "🏠 عام للبيت", color: "text-gray-700 dark:text-gray-300" },
-                      { id: "السيارة", label: "🚗 السيارة", color: "text-blue-700 dark:text-blue-300" },
-                      { id: "رقية", label: "👧🏻 رقية", color: "text-pink-700 dark:text-pink-300" },
-                      { id: "قنوت", label: "👧🏻 قنوت", color: "text-purple-700 dark:text-purple-300" },
-                      { id: "إيمان", label: "👩🏻 إيمان", color: "text-rose-700 dark:text-rose-300" },
-                      { id: "إيڤا", label: "👶🏻 إيڤا", color: "text-amber-700 dark:text-amber-300" },
-                      { id: "حيدر", label: "👨🏻 حيدر", color: "text-indigo-700 dark:text-indigo-300" }
-                    ].map(b => {
-                      const isSelected = expBeneficiary === b.id;
-                      return (
-                        <button
-                          key={b.id}
-                          type="button"
-                          onClick={() => {
-                            setExpBeneficiary(b.id);
-                            if (b.id === "السيارة" && (!expCategoryInput || expCategoryInput === "سوبر ماركت")) {
-                              setExpCategoryInput("السيارة والنقل");
-                            }
-                          }}
-                          className={`px-2.5 py-1 rounded-xl text-[11px] font-black shrink-0 transition-all border active:scale-95 cursor-pointer flex items-center gap-1 ${
-                            isSelected
-                              ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-transparent shadow-sm scale-[1.03]"
-                              : `bg-gray-50/80 dark:bg-zinc-800/70 border-gray-200 dark:border-zinc-700 ${b.color} hover:bg-gray-100`
-                          }`}
-                        >
-                          {b.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {expBeneficiary === "السيارة" && (
-                    <div className="mt-1.5 text-[10px] font-black text-blue-700 dark:text-blue-300 bg-blue-50/70 dark:bg-blue-950/40 px-2.5 py-1 rounded-xl border border-blue-200/60 dark:border-blue-800/40 flex items-center gap-1.5 animate-fadeIn">
-                      <span>🚗</span>
-                      <span>سيتم حفظ نسخة تلقائياً في صفحة السيارة وسجل الصيانة والمصاريف</span>
-                    </div>
-                  )}
-                  {["رقية", "قنوت", "إيمان", "إيڤا", "حيدر"].includes(expBeneficiary) && (
-                    <div className="mt-1.5 text-[10px] font-black text-pink-700 dark:text-pink-300 bg-pink-50/70 dark:bg-pink-950/40 px-2.5 py-1 rounded-xl border border-pink-200/60 dark:border-pink-800/40 flex items-center gap-1.5 animate-fadeIn">
-                      <span>👧🏻</span>
-                      <span>سيتم حفظ نسخة تلقائياً في خانة ({expBeneficiary}) ضمن قسم العائلة والمشتريات</span>
-                    </div>
-                  )}
-                </div>
               </div>
 
               {(expCategoryInput === "ألعاب ويانصيب" || expNameInput.includes("لوتو")) && (
