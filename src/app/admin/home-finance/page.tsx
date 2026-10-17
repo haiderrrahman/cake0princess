@@ -458,66 +458,36 @@ const DetailsInput = ({ defaultValue, isRequired }: { defaultValue: string, isRe
   )
 }
 
+function getCachedHf<T>(key: string, fallback: T): T {
+  if (typeof window !== "undefined") {
+    try {
+      const c = localStorage.getItem(`cached_hf_${key}`);
+      if (c) return JSON.parse(c);
+    } catch (e) {}
+  }
+  return fallback;
+}
+
 export default function HomeFinanceDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "expenses" | "income" | "installments" | "needs" | "bills" | "debts" | "inventory" | "car" | "travel" | "familyNeeds" | "futurePlans">("overview");
 
-  // Data state
-  const [cakeSalaryDebt, setCakeSalaryDebt] = useState<number>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const c = localStorage.getItem("cached_hf_cakeSalaryDebt");
-        if (c) return JSON.parse(c);
-      } catch (e) {}
-    }
-    return 0;
-  });
-  const [cakeDebtExpenses, setCakeDebtExpenses] = useState<Expense[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const c = localStorage.getItem("cached_hf_cakeDebtExpenses");
-        if (c) return JSON.parse(c);
-      } catch (e) {}
-    }
-    return [];
-  });
-  const [cakeDebtIncomes, setCakeDebtIncomes] = useState<Income[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const c = localStorage.getItem("cached_hf_cakeDebtIncomes");
-        if (c) return JSON.parse(c);
-      } catch (e) {}
-    }
-    return [];
-  });
-  const [installments, setInstallments] = useState<Installment[]>([]);
-  const [bills, setBills] = useState<Bill[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const c = localStorage.getItem("cached_hf_expenses");
-        if (c) return JSON.parse(c);
-      } catch (e) {}
-    }
-    return [];
-  });
-  const [incomes, setIncomes] = useState<Income[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const c = localStorage.getItem("cached_hf_incomes");
-        if (c) return JSON.parse(c);
-      } catch (e) {}
-    }
-    return [];
-  });
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [carInventory, setCarInventory] = useState<InventoryItem[]>([]);
-  const [travelInventory, setTravelInventory] = useState<InventoryItem[]>([]);
-  const [needs, setNeeds] = useState<Need[]>([]);
-  const [debts, setDebts] = useState<Debt[]>([]);
-  const [familyNeeds, setFamilyNeeds] = useState<FamilyMemberNeed[]>([]);
-  const [travelTrips, setTravelTrips] = useState<TravelTrip[]>([]);
-  const [travelExpenses, setTravelExpenses] = useState<TravelExpense[]>([]);
-  const [futurePlans, setFuturePlans] = useState<FuturePlan[]>([]);
+  // Data state - Synchronous 0ms cached hydration on render #0
+  const [cakeSalaryDebt, setCakeSalaryDebt] = useState<number>(() => getCachedHf("cakeSalaryDebt", 0));
+  const [cakeDebtExpenses, setCakeDebtExpenses] = useState<Expense[]>(() => getCachedHf("cakeDebtExpenses", []));
+  const [cakeDebtIncomes, setCakeDebtIncomes] = useState<Income[]>(() => getCachedHf("cakeDebtIncomes", []));
+  const [installments, setInstallments] = useState<Installment[]>(() => getCachedHf("installments", []));
+  const [bills, setBills] = useState<Bill[]>(() => getCachedHf("bills", []));
+  const [expenses, setExpenses] = useState<Expense[]>(() => getCachedHf("expenses", []));
+  const [incomes, setIncomes] = useState<Income[]>(() => getCachedHf("incomes", []));
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => getCachedHf("inventory", []));
+  const [carInventory, setCarInventory] = useState<InventoryItem[]>(() => getCachedHf("carInventory", []));
+  const [travelInventory, setTravelInventory] = useState<InventoryItem[]>(() => getCachedHf("travelInventory", []));
+  const [needs, setNeeds] = useState<Need[]>(() => getCachedHf("needs", []));
+  const [debts, setDebts] = useState<Debt[]>(() => getCachedHf("debts", []));
+  const [familyNeeds, setFamilyNeeds] = useState<FamilyMemberNeed[]>(() => getCachedHf("familyNeeds", []));
+  const [travelTrips, setTravelTrips] = useState<TravelTrip[]>(() => getCachedHf("travelTrips", []));
+  const [travelExpenses, setTravelExpenses] = useState<TravelExpense[]>(() => getCachedHf("travelExpenses", []));
+  const [futurePlans, setFuturePlans] = useState<FuturePlan[]>(() => getCachedHf("futurePlans", []));
   const [showFuturePlanModal, setShowFuturePlanModal] = useState(false);
   const [editFuturePlan, setEditFuturePlan] = useState<FuturePlan | null>(null);
   const [futurePlanSteps, setFuturePlanSteps] = useState<{id: string; text: string; isCompleted: boolean; date?: string}[]>([]);
@@ -549,7 +519,7 @@ export default function HomeFinanceDashboard() {
   const [settings, setSettings] = useState<{ 
     manualCycleStarts?: string[],
     budgetLimits?: Record<string, number>
-  }>({ 
+  }>(() => getCachedHf("settings", { 
     manualCycleStarts: [],
     budgetLimits: {
       "سوبر ماركت": 450000,
@@ -558,7 +528,7 @@ export default function HomeFinanceDashboard() {
       "العائلة": 100000,
       "الفواتير": 130000,
     }
-  });
+  }));
   const [showBudgetSettingsModal, setShowBudgetSettingsModal] = useState(false);
 
 
@@ -955,29 +925,8 @@ export default function HomeFinanceDashboard() {
       settings: setSettings,
     };
 
-    // 1. Instantly hydrate from local cache on mount so user sees their saved lists and invoices immediately on refresh
-    if (typeof window !== "undefined") {
-      keys.forEach(k => {
-        try {
-          const cached = localStorage.getItem(`cached_hf_${k}`);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (parsed) {
-              setters[k](parsed);
-            }
-          }
-        } catch (e) {}
-      });
-
-      try {
-        const cachedCakeExps = localStorage.getItem("cached_hf_cakeDebtExpenses");
-        if (cachedCakeExps) setCakeDebtExpenses(JSON.parse(cachedCakeExps));
-        const cachedCakeIncs = localStorage.getItem("cached_hf_cakeDebtIncomes");
-        if (cachedCakeIncs) setCakeDebtIncomes(JSON.parse(cachedCakeIncs));
-        const cachedCakeDebt = localStorage.getItem("cached_hf_cakeSalaryDebt");
-        if (cachedCakeDebt) setCakeSalaryDebt(JSON.parse(cachedCakeDebt));
-      } catch (e) {}
-    }
+    // Note: State is already synchronously hydrated from local cache on render #0 (via getCachedHf),
+    // avoiding 14 sequential state setter dispatches on mount.
 
     const loadedKeys = new Set<string>();
     let cakeExpensesLoaded = false;

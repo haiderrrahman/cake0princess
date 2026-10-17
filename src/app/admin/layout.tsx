@@ -3,8 +3,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-
-import TheatricalSocialAlert from "@/components/TheatricalSocialAlert";
+import dynamic from "next/dynamic";
+const TheatricalSocialAlert = dynamic(() => import("@/components/TheatricalSocialAlert"), { ssr: false });
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, isAdmin, loading } = useAuth();

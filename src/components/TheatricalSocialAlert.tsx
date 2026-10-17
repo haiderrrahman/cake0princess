@@ -8,7 +8,7 @@ import {
   CheckCircle2, MessageSquare, AlertTriangle, ExternalLink,
   ShoppingBag, Coins
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
 
 // ══════════════════════════════════════════════════════════════
@@ -114,6 +114,7 @@ export interface SocialOrderAlertItem {
 
 export default function TheatricalSocialAlert() {
   const router = useRouter();
+  const pathname = usePathname();
   const [activeAlertOrder, setActiveAlertOrder] = useState<SocialOrderAlertItem | null>(null);
   const [dismissedOrderIds, setDismissedOrderIds] = useState<string[]>([]);
   const [isDelivering, setIsDelivering] = useState(false);
@@ -132,6 +133,7 @@ export default function TheatricalSocialAlert() {
 
   // الاستماع المباشر والحي للطلبات من Firestore
   useEffect(() => {
+    if (pathname?.includes("home-finance")) return;
     const q = query(collection(db, "orders"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const allOrders = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as SocialOrderAlertItem[];
@@ -206,7 +208,7 @@ export default function TheatricalSocialAlert() {
     router.push("/admin/hub?tab=external");
   };
 
-  if (!activeAlertOrder) return null;
+  if (!activeAlertOrder || pathname?.includes("home-finance")) return null;
 
   const platform = activeAlertOrder.platform || "واتساب";
   const platformEmoji = platform === "انستغرام" || platform === "إنستجرام" ? "📸" : platform === "واتساب" ? "💬" : "📱";

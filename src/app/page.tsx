@@ -122,6 +122,15 @@ export default function Home() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (isAdmin) {
+      try {
+        router.prefetch("/admin/home-finance");
+        router.prefetch("/admin");
+      } catch (e) {}
+    }
+  }, [isAdmin, router]);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) router.push(`/search?q=${searchQuery}`);
