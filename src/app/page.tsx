@@ -127,6 +127,9 @@ export default function Home() {
       try {
         router.prefetch("/admin/home-finance");
         router.prefetch("/admin");
+        setTimeout(() => {
+          import("@/app/admin/home-finance/HomeFinanceDashboard").catch(() => {});
+        }, 300);
       } catch (e) {}
     }
   }, [isAdmin, router]);
@@ -145,7 +148,7 @@ export default function Home() {
   );
 
   return (
-    <div className="flex flex-col min-h-screen pb-32 animate-slide-up">
+    <div className="flex flex-col min-h-screen pb-44 animate-slide-up">
 
       {/* ══════════════════════════════
           HEADER
@@ -244,21 +247,23 @@ export default function Home() {
       {/* ══════════════════════════════
           QUICK LINKS (4 GRID)
       ══════════════════════════════ */}
-      <section className="px-5 py-4">
-        <div className="grid grid-cols-4 gap-3">
-          {QUICK_LINKS.map((link, i) => (
-            <Link
-              key={i}
-              href={link.href}
-              className="flex flex-col items-center gap-1.5 active:scale-90 transition-all duration-200"
-            >
-              <div className={`w-14 h-14 rounded-[18px] bg-gradient-to-br ${link.gradient} flex items-center justify-center shadow-lg text-white cake-card`}>
-                <link.icon className="w-6 h-6" />
-              </div>
-              <span className="text-[10px] font-black text-gray-700 dark:text-gray-300">{link.name}</span>
-              <span className="text-[8px] text-gray-400">{link.desc}</span>
-            </Link>
-          ))}
+      <section className="px-5 py-3 mb-2">
+        <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md rounded-[28px] p-3.5 border border-white/60 dark:border-white/5 shadow-sm">
+          <div className="grid grid-cols-4 gap-2">
+            {QUICK_LINKS.map((link, i) => (
+              <Link
+                key={i}
+                href={link.href}
+                className="flex flex-col items-center gap-1.5 active:scale-95 transition-all duration-200 p-1 rounded-2xl hover:bg-white/40 dark:hover:bg-white/5"
+              >
+                <div className={`w-12 h-12 rounded-[18px] bg-gradient-to-br ${link.gradient} flex items-center justify-center shadow-md text-white cake-card group-hover:scale-105 transition-transform`}>
+                  <link.icon className="w-5 h-5" />
+                </div>
+                <span className="text-[10px] font-black text-gray-800 dark:text-gray-200 text-center leading-tight">{link.name}</span>
+                <span className="text-[8px] text-gray-400 font-medium text-center">{link.desc}</span>
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
 

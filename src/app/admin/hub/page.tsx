@@ -206,6 +206,7 @@ function AdminHubContent() {
       setExternalOrders(allExt);
       setExtOrdersLoaded(true);
       saveHubCache("cache_external_orders_all", allExt);
+      saveHubCache("cache_external_orders_v2", allExt);
       toast.success(`تم تحديث ${allExt.length} طلب سوشيال بنجاح 🔄`);
     } catch (e) {
       console.error("Refresh error:", e);
@@ -442,14 +443,15 @@ function AdminHubContent() {
       }
     }).catch(() => {});
 
-    // 3. Real-time snapshot listener
-    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
-    const unsubExt = onSnapshot(qExt, (snap) => {
+    // 3. Real-time snapshot listener on full collection (no orderBy to prevent dropping older docs)
+    const unsubExt = onSnapshot(collection(db, "external_orders"), (snap) => {
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
       setExternalOrders(allExt);
       setExtOrdersLoaded(true);
       setLoading(false);
       saveHubCache("cache_external_orders_all", allExt);
+      saveHubCache("cache_external_orders_v2", allExt);
     }, (err) => {
       console.error("External orders listener error:", err);
       // Fallback: full collection fetch
@@ -460,6 +462,7 @@ function AdminHubContent() {
         setExtOrdersLoaded(true);
         setLoading(false);
         saveHubCache("cache_external_orders_all", allExt);
+        saveHubCache("cache_external_orders_v2", allExt);
       }).catch(() => {
         setExtOrdersLoaded(true);
         setLoading(false);
@@ -1304,7 +1307,7 @@ function AdminHubContent() {
   const currentTabInfo = tabTitles[activeTab] || { title: "القسم", subtitle: "إدارة القسم" };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8] dark:bg-zinc-950 pb-28">
+    <div className="min-h-screen bg-[#f0f4f8] dark:bg-zinc-950 pb-40">
       {/* Luxury Gradient Header Banner (Matched to Finances Style) */}
       <div className={`bg-gradient-to-l ${
         activeTab === "orders" ? "from-pink-900 via-rose-900 to-purple-950" :

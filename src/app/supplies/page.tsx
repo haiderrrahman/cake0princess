@@ -35,33 +35,17 @@ function SparklesIcon(props: any) {
   return <StarIcon {...props} />;
 }
 
+import { useGlobalData } from "@/context/GlobalDataContext";
+
 function SuppliesContent() {
   const searchParams = useSearchParams();
+  const { supplies: globalSupplies, suppliesCategories: globalCategories, loading } = useGlobalData();
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get("category") || "الكل");
-  const [supplies, setSupplies] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [categories, setCategories] = useState<string[]>(["الكل"]);
   const [sortPrice, setSortPrice] = useState<"none" | "asc" | "desc">("none");
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [suppliesSnap, categoriesSnap] = await Promise.all([
-          getDocs(collection(db, "supplies")),
-          getDocs(collection(db, "supplies_categories"))
-        ]);
-        const items = suppliesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setSupplies(items);
-        const cats = categoriesSnap.docs.map(doc => doc.data().name);
-        setCategories(["الكل", ...cats]);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      }
-      setLoading(false);
-    };
-    fetchData();
-  }, []);
+  const supplies = (globalSupplies && globalSupplies.length > 0) ? globalSupplies : DEMO_SUPPLIES;
+  const categories = (globalCategories && globalCategories.length > 0) ? globalCategories : ["الكل"];
 
   let filteredSupplies = supplies
     .filter(s => selectedCategory === "الكل" || s.category === selectedCategory)

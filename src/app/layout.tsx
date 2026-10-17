@@ -71,6 +71,7 @@ import NetworkStatus from "@/components/NetworkStatus";
 
 
 import { Toaster } from 'sonner';
+import { GlobalDataProvider } from "@/context/GlobalDataContext";
 
 export default function RootLayout({
   children,
@@ -84,22 +85,24 @@ export default function RootLayout({
           <AuthProvider>
             <CartProvider>
               <FavoritesProvider>
-                <ContentProtection />
-                <Toaster 
-                  position="top-center" 
-                  toastOptions={{
-                    duration: 2500,
-                  }}
-                />
-                <InstallPrompt />
-                <SplashScreen />
-                <main className="max-w-md mx-auto min-h-screen bg-[#FFF8F0] dark:bg-[#0D0A1A] shadow-2xl relative overflow-hidden">
-                  <NetworkStatus />
-                  <GlobalActions />
-                  {children}
-                  <BottomNav />
-                </main>
-                <div id="root-portal"></div>
+                <GlobalDataProvider>
+                  <ContentProtection />
+                  <Toaster 
+                    position="top-center" 
+                    toastOptions={{
+                      duration: 2500,
+                    }}
+                  />
+                  <InstallPrompt />
+                  <SplashScreen />
+                  <main className="max-w-md mx-auto min-h-screen bg-[#FFF8F0] dark:bg-[#0D0A1A] shadow-2xl relative overflow-hidden">
+                    <NetworkStatus />
+                    <GlobalActions />
+                    {children}
+                    <BottomNav />
+                  </main>
+                  <div id="root-portal"></div>
+                </GlobalDataProvider>
               </FavoritesProvider>
             </CartProvider>
           </AuthProvider>

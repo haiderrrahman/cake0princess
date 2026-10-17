@@ -35,35 +35,19 @@ function SparklesIcon(props: any) {
   return <Star {...props} />;
 }
 
+import { useGlobalData } from "@/context/GlobalDataContext";
+
 function ShopContent() {
   const searchParams = useSearchParams();
+  const { products: globalProducts, categories: globalCategories, loading } = useGlobalData();
   const [activeTab, setActiveTab] = useState<"ready" | "custom">("ready");
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get("category") || "الكل");
-  const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<"none" | "low" | "high">("none");
-  const [categories, setCategories] = useState<string[]>(["الكل"]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [productsSnap, categoriesSnap] = await Promise.all([
-          getDocs(collection(db, "products")),
-          getDocs(collection(db, "categories"))
-        ]);
-        const items = productsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setProducts(items);
-        const cats = categoriesSnap.docs.map(doc => doc.data().name);
-        setCategories(["الكل", ...cats]);
-      } catch {
-        setProducts([]);
-      }
-      setLoading(false);
-    };
-    fetchData();
-  }, []);
+  const products = (globalProducts && globalProducts.length > 0) ? globalProducts : DEMO_PRODUCTS;
+  const categories = (globalCategories && globalCategories.length > 0) ? globalCategories : ["الكل"];
 
   let filteredProducts = products
     .filter(p => selectedCategory === "الكل" || p.category === selectedCategory)

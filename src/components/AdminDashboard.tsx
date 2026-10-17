@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { Home, Crown, ArrowLeft, Plus, Loader2 } from "lucide-react";
+import { Home, Crown, ArrowLeft, Plus } from "lucide-react";
 
 const HomeQuickEntry = dynamic(() => import("./HomeQuickEntry"), { ssr: false });
 const AdminQuickEntry = dynamic(() => import("./AdminQuickEntry"), { ssr: false });
@@ -12,8 +12,6 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [showHomeQuickEntry, setShowHomeQuickEntry] = useState(false);
   const [showAdminQuickEntry, setShowAdminQuickEntry] = useState(false);
-  const [isOpeningHome, setIsOpeningHome] = useState(false);
-  const [isOpeningAdmin, setIsOpeningAdmin] = useState(false);
 
   useEffect(() => {
     // Eagerly prefetch both admin routes in background as soon as panel mounts
@@ -21,6 +19,12 @@ export default function AdminDashboard() {
       router.prefetch("/admin/home-finance");
       router.prefetch("/admin");
     } catch (e) {}
+
+    // Preload heavy dashboard chunk in background idle so click navigates instantly in 0ms
+    const timer = setTimeout(() => {
+      import("@/app/admin/home-finance/HomeFinanceDashboard").catch(() => {});
+    }, 100);
+    return () => clearTimeout(timer);
   }, [router]);
 
   return (
@@ -31,30 +35,25 @@ export default function AdminDashboard() {
           <Link
             href="/admin/home-finance"
             prefetch={true}
-            onClick={() => setIsOpeningHome(true)}
-            onMouseEnter={() => router.prefetch("/admin/home-finance")}
-            onTouchStart={() => router.prefetch("/admin/home-finance")}
+            onMouseEnter={() => {
+              router.prefetch("/admin/home-finance");
+              import("@/app/admin/home-finance/HomeFinanceDashboard").catch(() => {});
+            }}
+            onTouchStart={() => {
+              router.prefetch("/admin/home-finance");
+              import("@/app/admin/home-finance/HomeFinanceDashboard").catch(() => {});
+            }}
             className="flex-1 min-w-0 group relative bg-gradient-to-r from-rose-500 via-pink-600 to-purple-600 hover:from-rose-600 hover:to-purple-700 text-white rounded-2xl p-3.5 sm:p-4 flex items-center justify-between shadow-lg shadow-pink-500/20 active:scale-98 transition-all border border-pink-400/30 overflow-hidden"
           >
             <div className="absolute right-0 top-0 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
             <div className="flex items-center gap-3 relative z-10">
               <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/25 shrink-0 group-hover:scale-105 transition-transform">
-                {isOpeningHome ? (
-                  <Loader2 className="w-5 h-5 text-white animate-spin" />
-                ) : (
-                  <Home className="w-5 h-5 text-white" />
-                )}
+                <Home className="w-5 h-5 text-white" />
               </div>
               <div className="text-right">
                 <div className="flex items-center gap-1.5">
                   <h3 className="font-black text-sm text-white">إدارة المنزل</h3>
-                  {isOpeningHome ? (
-                    <span className="text-[10px] bg-white/30 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">
-                      جاري الدخول...
-                    </span>
-                  ) : (
-                    <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold">VIP</span>
-                  )}
+                  <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold">VIP</span>
                 </div>
                 <p className="text-[11px] text-pink-100 font-medium mt-0.5">ميزانية، مصاريف، وواجبات العائلة</p>
               </div>
@@ -80,7 +79,6 @@ export default function AdminDashboard() {
           <Link
             href="/admin"
             prefetch={true}
-            onClick={() => setIsOpeningAdmin(true)}
             onMouseEnter={() => router.prefetch("/admin")}
             onTouchStart={() => router.prefetch("/admin")}
             className="flex-1 min-w-0 group relative bg-gradient-to-r from-indigo-600 via-purple-700 to-slate-900 hover:from-indigo-700 hover:to-black text-white rounded-2xl p-3.5 sm:p-4 flex items-center justify-between shadow-lg shadow-indigo-600/20 active:scale-98 transition-all border border-indigo-400/30 overflow-hidden"
@@ -88,22 +86,12 @@ export default function AdminDashboard() {
             <div className="absolute right-0 top-0 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
             <div className="flex items-center gap-3 relative z-10">
               <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/25 shrink-0 group-hover:scale-105 transition-transform">
-                {isOpeningAdmin ? (
-                  <Loader2 className="w-5 h-5 text-amber-300 animate-spin" />
-                ) : (
-                  <Crown className="w-5 h-5 text-amber-300" />
-                )}
+                <Crown className="w-5 h-5 text-amber-300" />
               </div>
               <div className="text-right">
                 <div className="flex items-center gap-1.5">
                   <h3 className="font-black text-sm text-white">مقر القيادة</h3>
-                  {isOpeningAdmin ? (
-                    <span className="text-[10px] bg-amber-400/30 text-amber-300 border border-amber-400/40 px-2 py-0.5 rounded-full font-bold animate-pulse">
-                      جاري الدخول...
-                    </span>
-                  ) : (
-                    <span className="text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-bold">المركزية</span>
-                  )}
+                  <span className="text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-bold">المركزية</span>
                 </div>
                 <p className="text-[11px] text-indigo-200 font-medium mt-0.5">لوحة التحكم وإدارة النظام الشاملة</p>
               </div>

@@ -108,6 +108,8 @@ export default function ExternalOrdersAdmin() {
       let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
       fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
       setOrders(fetchedOrders);
+      setFreshCache("cache_external_orders_v2", fetchedOrders);
+      setFreshCache("cache_external_orders_all", fetchedOrders);
       setHasMore(false);
       setLoading(false);
       toast.success(`تم تحديث ${fetchedOrders.length} طلب بنجاح 🔄`);
@@ -130,16 +132,20 @@ export default function ExternalOrdersAdmin() {
         let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
         fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
         setOrders(fetchedOrders);
+        setFreshCache("cache_external_orders_v2", fetchedOrders);
+        setFreshCache("cache_external_orders_all", fetchedOrders);
         setHasMore(false);
         setLoading(false);
       }
     }).catch(() => {});
 
-    // 2. Real-time snapshot of all orders
-    const q = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snap) => {
+    // 2. Real-time snapshot of ALL orders without orderBy so no documents are ever dropped by Firestore
+    const unsubscribe = onSnapshot(collection(db, "external_orders"), (snap) => {
       const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+      fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
       setOrders(fetchedOrders);
+      setFreshCache("cache_external_orders_v2", fetchedOrders);
+      setFreshCache("cache_external_orders_all", fetchedOrders);
       setHasMore(false);
       setLoading(false);
     }, (error) => {
@@ -148,12 +154,14 @@ export default function ExternalOrdersAdmin() {
         let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
         fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
         setOrders(fetchedOrders);
+        setFreshCache("cache_external_orders_v2", fetchedOrders);
+        setFreshCache("cache_external_orders_all", fetchedOrders);
         setHasMore(false);
         setLoading(false);
       });
     });
 
-    // 2. Fetch customers in the background
+    // 3. Fetch customers in the background
     getDocs(collection(db, "customers")).then(custSnap => {
       setCustomers(custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }).catch(e => console.error("Error fetching customers:", e));
@@ -486,7 +494,7 @@ export default function ExternalOrdersAdmin() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#0D0A1A] pb-24">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0D0A1A] pb-40">
       {/* ═══════════════ LUXURY EMERALD HEADER BANNER ═══════════════ */}
       <div className="bg-gradient-to-l from-emerald-900 via-teal-900 to-slate-950 pt-16 pb-8 px-5 rounded-b-[40px] shadow-lg relative overflow-hidden mb-6 text-white">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />

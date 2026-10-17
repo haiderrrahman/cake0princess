@@ -15,8 +15,24 @@ export default function ProfilePage() {
   const { user, loading, logout: authLogout, isAdmin } = useAuth();
   const router = useRouter();
   
-  const [profileStats, setProfileStats] = useState({ orders: 0, courses: 0, favorites: 0 });
-  const [userData, setUserData] = useState<any>(null);
+  const [profileStats, setProfileStats] = useState(() => {
+    if (typeof window === "undefined" || !user?.uid) return { orders: 0, courses: 0, favorites: 0 };
+    try {
+      const raw = localStorage.getItem(`cp_profile_stats_${user.uid}`);
+      return raw ? JSON.parse(raw) : { orders: 0, courses: 0, favorites: 0 };
+    } catch {
+      return { orders: 0, courses: 0, favorites: 0 };
+    }
+  });
+  const [userData, setUserData] = useState<any>(() => {
+    if (typeof window === "undefined" || !user?.uid) return null;
+    try {
+      const raw = localStorage.getItem(`cp_user_data_${user.uid}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
   const [statsLoading, setStatsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
@@ -29,7 +45,6 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!user) return;
     const fetchProfileStats = async () => {
-      setStatsLoading(true);
       try {
         const [ordersSnap, favSnap, userDocSnap] = await Promise.all([
           getDocs(query(collection(db, "orders"), where("userId", "==", user.uid))),
@@ -56,17 +71,24 @@ export default function ProfilePage() {
         else if (points >= 500) { rank = "فضي 🥈"; rankColor = "text-gray-400"; }
         else if (points >= 100) { rank = "برونزي 🥉"; rankColor = "text-amber-700"; }
 
-        setProfileStats({
+        const calculatedStats = {
           orders: ordersSnap.size,
           courses: coursesCount,
           favorites: favSnap.size,
-        });
+        };
+        setProfileStats(calculatedStats);
+        try {
+          localStorage.setItem(`cp_profile_stats_${user.uid}`, JSON.stringify(calculatedStats));
+        } catch {}
 
         const data = userDocSnap.exists() ? userDocSnap.data() : {};
         data.points = points;
         data.rank = rank;
         data.rankColor = rankColor;
         setUserData(data);
+        try {
+          localStorage.setItem(`cp_user_data_${user.uid}`, JSON.stringify(data));
+        } catch {}
 
         // Update rank in db asynchronously
         if (userDocSnap.exists() && (data.points !== points || data.rank !== rank)) {

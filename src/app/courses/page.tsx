@@ -6,6 +6,8 @@ import { PlayCircle, Clock, Star, Lock, Loader2, Users, Sparkles, Search, Chevro
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
+import { useGlobalData } from "@/context/GlobalDataContext";
+
 const DEMO_COURSES = [
   { id: "course-1", title: "ماستر كلاس صناعة الكيك الشاملة", price: 75000, image: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=400&q=80", rating: "4.9", students: "2.3k", duration: "8 ساعات", level: "احترافي", description: "دورة شاملة تأخذك من الصفر إلى الاحتراف في عالم صناعة الكيك", locked: false },
   { id: "course-2", title: "فن تزيين الكيك بالكريمة والفوندان", price: 55000, image: "https://images.unsplash.com/photo-1486427944781-dbf45f4823a0?w=400&q=80", rating: "4.8", students: "1.8k", duration: "6 ساعات", level: "متوسط", description: "تعلم أساليب وتقنيات التزيين الحديثة", locked: false },
@@ -23,37 +25,16 @@ const LEVEL_COLORS: Record<string, string> = {
 };
 
 export default function Courses() {
-  const [courses, setCourses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { courses: globalCourses, loading: globalLoading } = useGlobalData();
   const [activeFilter, setActiveFilter] = useState("الكل");
   const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, "courses"));
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setCourses(items);
-      } catch {
-        setCourses([]);
-      }
-      setLoading(false);
-    };
-    fetchCourses();
-  }, []);
+  const courses = (globalCourses && globalCourses.length > 0) ? globalCourses : DEMO_COURSES;
 
   const filters = ["الكل", "مبتدئ", "متوسط", "متقدم", "احترافي"];
   const filteredCourses = courses
     .filter(c => activeFilter === "الكل" || c.level === activeFilter)
     .filter(c => !searchQuery || c.title?.toLowerCase().includes(searchQuery.toLowerCase()));
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <GraduationCap className="w-10 h-10 animate-pulse text-[#FF3366]" />
-      </div>
-    );
-  }
 
   const featured = filteredCourses[0] || null;
 
