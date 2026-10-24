@@ -11,6 +11,7 @@ import { doc, getDoc, setDoc, addDoc, collection, serverTimestamp } from "fireba
 import { db } from "@/lib/firebase";
 import FormattedNumberInput from "@/components/FormattedNumberInput";
 import { toast } from "sonner";
+import { customConfirm } from "@/lib/customConfirm";
 import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
 import { cleanForFirestore, uploadImageResiliently } from "@/lib/hfImageStore";
 import {
@@ -195,6 +196,7 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
   const [quickPasteText, setQuickPasteText] = useState("");
   const [uniqueNames, setUniqueNames] = useState<string[]>([]);
   const [uniqueProductNames, setUniqueProductNames] = useState<string[]>([]);
+  const [uniquePlaces, setUniquePlaces] = useState<string[]>(() => OUTING_PLACES_SUGGESTIONS);
   const [showExpSuggestions, setShowExpSuggestions] = useState(false);
   const [focusedProductIdx, setFocusedProductIdx] = useState<number | null>(null);
 
@@ -204,25 +206,60 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
   useEffect(() => {
     const fetchSuggestions = async () => {
       try {
-        const snap = await getDoc(doc(db, "home_finance", "expenses"));
-        if (snap.exists() && Array.isArray(snap.data()?.data)) {
-          const list = snap.data().data;
+        let list: any[] = [];
+        if (typeof window !== "undefined") {
+          try {
+            const cached = localStorage.getItem("cached_hf_expenses");
+            if (cached) list = JSON.parse(cached);
+          } catch (e) {}
+        }
+        if (!list.length) {
+          const snap = await getDoc(doc(db, "home_finance", "expenses"));
+          if (snap.exists() && Array.isArray(snap.data()?.data)) {
+            list = snap.data().data;
+          }
+        }
+        if (list.length > 0) {
           const namesSet = new Set<string>();
           const productsSet = new Set<string>();
+          const placesMap = new Map<string, number>();
+
           list.forEach((e: any) => {
             if (e.name && typeof e.name === "string" && e.name.trim()) {
               namesSet.add(e.name.trim());
+            }
+            if (e.place && typeof e.place === "string" && e.place.trim()) {
+              const p = e.place.trim();
+              placesMap.set(p, (placesMap.get(p) || 0) + 3);
+            }
+            if (e.storeName && typeof e.storeName === "string" && e.storeName.trim()) {
+              const s = e.storeName.trim();
+              placesMap.set(s, (placesMap.get(s) || 0) + 3);
             }
             if (Array.isArray(e.items)) {
               e.items.forEach((it: any) => {
                 if (it.name && typeof it.name === "string" && it.name.trim()) {
                   productsSet.add(it.name.trim());
                 }
+                if (it.place && typeof it.place === "string" && it.place.trim()) {
+                  const ip = it.place.trim();
+                  placesMap.set(ip, (placesMap.get(ip) || 0) + 2);
+                }
               });
             }
           });
+
+          OUTING_PLACES_SUGGESTIONS.forEach(op => {
+            if (!placesMap.has(op)) placesMap.set(op, 1);
+          });
+
+          const sortedPlaces = Array.from(placesMap.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([pl]) => pl);
+
           setUniqueNames(Array.from(namesSet).slice(0, 30));
           setUniqueProductNames(Array.from(productsSet).slice(0, 50));
+          setUniquePlaces(sortedPlaces);
         }
       } catch (err) {
         console.warn("Could not load expense suggestions:", err);
@@ -1115,7 +1152,7 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
                             />
                             <datalist id={`quick-places-list-${idx}`}>
-                              {OUTING_PLACES_SUGGESTIONS.map((p, pIdx) => (
+                              {uniquePlaces.map((p, pIdx) => (
                                 <option key={pIdx} value={p} />
                               ))}
                             </datalist>
@@ -1181,14 +1218,16 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
 
                               <button 
                                 type="button" 
-                                onClick={() => {
-                                  const updated = expenseItems.filter(x => x.id !== item.id);
-                                  setExpenseItems(updated);
-                                  if (updated.length > 0) {
-                                    setExpAmount(updated.reduce((acc, curr) => acc + (curr.price || 0), 0).toString());
+                                onClick={async () => {
+                                  if (await customConfirm("هل تريد حذف هذه المادة من القائمة؟", { confirmText: "نعم", cancelText: "لا" })) {
+                                    const updated = expenseItems.filter(x => x.id !== item.id);
+                                    setExpenseItems(updated);
+                                    if (updated.length > 0) {
+                                      setExpAmount(updated.reduce((acc, curr) => acc + (curr.price || 0), 0).toString());
+                                    }
                                   }
                                 }} 
-                                className="text-red-500 hover:text-red-600 p-1 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 rounded-lg transition shrink-0"
+                                className="text-red-500 hover:text-red-600 p-1 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 rounded-lg transition shrink-0 cursor-pointer"
                                 title="حذف هذه المادة"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />

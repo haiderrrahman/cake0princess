@@ -23,6 +23,8 @@ const FamilyCompetition = dynamic(() => import("./FamilyCompetition"), { ssr: fa
 const FamilyCompetitionOverview = dynamic(() => import("./FamilyCompetitionOverview"), { ssr: false });
 const LottoTracker = dynamic(() => import("./LottoTracker"), { ssr: false });
 const WomenCycleCare = dynamic(() => import("./WomenCycleCare"), { ssr: false });
+const FamilySection = dynamic(() => import("./FamilySection"), { ssr: false });
+import { FamilyHealthRecord } from "./familyTypes";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
@@ -485,6 +487,7 @@ export default function HomeFinanceDashboard() {
   const [needs, setNeeds] = useState<Need[]>(() => getCachedHf("needs", []));
   const [debts, setDebts] = useState<Debt[]>(() => getCachedHf("debts", []));
   const [familyNeeds, setFamilyNeeds] = useState<FamilyMemberNeed[]>(() => getCachedHf("familyNeeds", []));
+  const [familyHealth, setFamilyHealth] = useState<FamilyHealthRecord[]>(() => getCachedHf("familyHealth", []));
   const [travelTrips, setTravelTrips] = useState<TravelTrip[]>(() => getCachedHf("travelTrips", []));
   const [travelExpenses, setTravelExpenses] = useState<TravelExpense[]>(() => getCachedHf("travelExpenses", []));
   const [futurePlans, setFuturePlans] = useState<FuturePlan[]>(() => getCachedHf("futurePlans", []));
@@ -699,7 +702,7 @@ export default function HomeFinanceDashboard() {
 
   // Auto-suggested shops and markets derived dynamically from previous expenses & items (sorted by usage frequency)
   const uniqueSuggestedPlaces = useMemo(() => {
-    if (!mounted || !showExpenseModal) return OUTING_PLACES_SUGGESTIONS;
+    if (!mounted) return OUTING_PLACES_SUGGESTIONS;
     const counts = new Map<string, number>();
 
     const STORE_KEYWORDS = [
@@ -740,7 +743,7 @@ export default function HomeFinanceDashboard() {
       .sort((a, b) => b[1] - a[1])
       .map(([place]) => place)
       .filter(Boolean);
-  }, [expenses, mounted, showExpenseModal]);
+  }, [expenses, mounted]);
 
   // Auto-suggest states - only computed when a modal is active (saves thousands of regex/loops on mount)
   const isAnyEntryModalOpen = showExpenseModal || showNeedModal || showInventoryModal || showDebtModal || showProductSearchModal;
@@ -787,13 +790,12 @@ export default function HomeFinanceDashboard() {
   }, [uniqueNames]);
 
   const normalizedUniquePlaces = useMemo(() => {
-    if (!showExpenseModal || !showExpSuggestions) return [];
     return uniqueSuggestedPlaces.map(place => ({
       raw: place,
       norm: normalizeArabicText(place),
       pred: detectProductCategory(place)
     }));
-  }, [uniqueSuggestedPlaces, showExpenseModal, showExpSuggestions]);
+  }, [uniqueSuggestedPlaces]);
 
   const normalizedProductPool = useMemo(() => {
     if (!uniqueProductNames.length) return [];
@@ -905,8 +907,8 @@ export default function HomeFinanceDashboard() {
   // LOAD / SAVE / FIREBASE SYNC
   // ──────────────────────────────────────────
   useEffect(() => {
-    const keys: ("installments" | "bills" | "expenses" | "incomes" | "inventory" | "carInventory" | "travelInventory" | "needs" | "debts" | "familyNeeds" | "travelTrips" | "travelExpenses" | "futurePlans" | "settings")[] = [
-      "installments", "bills", "expenses", "incomes", "inventory", "carInventory", "travelInventory", "needs", "debts", "familyNeeds", "travelTrips", "travelExpenses", "futurePlans", "settings"
+    const keys: ("installments" | "bills" | "expenses" | "incomes" | "inventory" | "carInventory" | "travelInventory" | "needs" | "debts" | "familyNeeds" | "familyHealth" | "travelTrips" | "travelExpenses" | "futurePlans" | "settings")[] = [
+      "installments", "bills", "expenses", "incomes", "inventory", "carInventory", "travelInventory", "needs", "debts", "familyNeeds", "familyHealth", "travelTrips", "travelExpenses", "futurePlans", "settings"
     ];
     const setters: any = {
       installments: setInstallments,
@@ -919,6 +921,7 @@ export default function HomeFinanceDashboard() {
       needs: setNeeds,
       debts: setDebts,
       familyNeeds: setFamilyNeeds,
+      familyHealth: setFamilyHealth,
       travelTrips: setTravelTrips,
       travelExpenses: setTravelExpenses,
       futurePlans: setFuturePlans,
@@ -2574,10 +2577,12 @@ setEditFuturePlan(null);
   };
 
   const handleDeleteExpense = async (id: string, originDocId?: string) => {
+    if (!(await customConfirm("هل تريد حذف هذا المصروف نهائياً؟", { confirmText: "نعم", cancelText: "لا" }))) return;
+
     // Check if this expense is from cake material debt
     const isCakeDebt = originDocId || cakeDebtExpenses.some(c => c.id === id);
     if (isCakeDebt) {
-      if (!(await customConfirm("هذا القيد مسجل في قسم الكيك كدين مستحق تم دفعه من راتبك الشخصي. هل أنت متأكد من حذفه نهائياً؟"))) return;
+      if (!(await customConfirm("هذا القيد مسجل في قسم الكيك كدين مستحق تم دفعه من راتبك الشخصي. هل أنت متأكد من حذفه نهائياً؟", { confirmText: "نعم", cancelText: "لا" }))) return;
       const docId = originDocId || id;
       try {
         await deleteDoc(doc(db, "expenses", docId));
@@ -2593,6 +2598,7 @@ setEditFuturePlan(null);
     const updated = expenses.filter(x => x.id !== id);
     setExpenses(updated);
     syncToFirebase("expenses", updated);
+    toast.success("تم حذف المصروف بنجاح 🗑️");
   };
 
   // ──────────────────────────────────────────
@@ -4175,22 +4181,22 @@ setEditTrip(null);
             <div className="flex gap-3 mt-4">
               <button
                 onClick={() => setConfirmConfig(null)}
-                className="flex-1 py-3 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-white rounded-xl font-bold transition"
+                className="flex-1 py-3 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-white rounded-xl font-bold transition cursor-pointer"
               >
-                {confirmConfig.cancelText || "إلغاء"}
+                {confirmConfig.cancelText || "لا"}
               </button>
               <button
                 onClick={() => {
                   confirmConfig.onConfirm();
                   setConfirmConfig(null);
                 }}
-                className={`flex-1 py-3 text-white rounded-xl font-bold shadow-lg transition ${
+                className={`flex-1 py-3 text-white rounded-xl font-bold shadow-lg transition cursor-pointer ${
                   confirmConfig.isDestructive 
                     ? "bg-gradient-to-r from-red-600 to-rose-500 hover:opacity-90"
                     : "bg-gradient-to-r from-purple-600 to-indigo-500 hover:opacity-90"
                 }`}
               >
-                {confirmConfig.confirmText || "تأكيد"}
+                {confirmConfig.confirmText || "نعم"}
               </button>
             </div>
           </div>
@@ -7715,495 +7721,17 @@ setEditTrip(null);
           );
         })()}
         {/* ═══════════════ FAMILY NEEDS TAB ═══════════════ */}
-        {activeTab === "familyNeeds" && (() => {
-          const FAMILY_MEMBERS_LIST = [
-            { name: "الكل", emoji: "👨‍👩‍👧‍👦", isAll: true },
-            { name: "حيدر", emoji: "👨🏻" },
-            { name: "إيمان", emoji: "👩🏻" },
-            { name: "رقية", emoji: "👧🏻" },
-            { name: "قنوت", emoji: "👧🏻" },
-            { name: "إيڤا", emoji: "👶🏻" },
-            { name: "العائلة", emoji: "🏠" },
-          ];
-
-          const isViewingAll = activeFamilyMember === "الكل";
-          const rawMemberItems = isViewingAll 
-            ? familyNeeds 
-            : familyNeeds.filter(n => n.member === activeFamilyMember);
-
-          const searchedItems = rawMemberItems.filter(item => {
-            if (!familySearch.trim()) return true;
-            const q = familySearch.toLowerCase();
-            return (item.title || "").toLowerCase().includes(q) ||
-                   (item.notes || "").toLowerCase().includes(q) ||
-                   (item.member || "").toLowerCase().includes(q) ||
-                   (item.category || "").toLowerCase().includes(q);
-          });
-
-          const pendingDuties = searchedItems.filter(n => n.type === "duty" && n.status === "pending");
-          const completedDuties = searchedItems.filter(n => n.type === "duty" && (n.status === "available" || n.status === "completed"));
-
-          const pendingNeeds = searchedItems.filter(n => n.type !== "duty" && n.type !== "expense" && n.status === "pending");
-          const completedNeeds = searchedItems.filter(n => n.type !== "duty" && n.type !== "expense" && (n.status === "available" || n.status === "completed"));
-
-          // All purchases and expenses for this member
-          const memberPurchases = searchedItems.filter(n => n.type === "expense" || (n.type !== "duty" && (n.status === "available" || n.status === "completed")));
-          const totalMemberPurchasesSpend = memberPurchases.reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
-
-          const activeItems = [...pendingNeeds, ...pendingDuties];
-          const completedItems = [...completedNeeds, ...completedDuties];
-
-          const totalPendingCost = pendingNeeds.reduce((s, n) => s + (Number(n.estimatedPrice) || 0), 0);
-
-          let displayItems: FamilyMemberNeed[] = [];
-          if (familyFilter === "all") {
-            displayItems = activeItems;
-          } else if (familyFilter === "needs") {
-            displayItems = pendingNeeds;
-          } else if (familyFilter === "duties") {
-            displayItems = pendingDuties;
-          } else if (familyFilter === "expenses") {
-            displayItems = memberPurchases;
-          } else if (familyFilter === "completed") {
-            displayItems = completedItems;
-          }
-
-          const renderItemRow = (need: FamilyMemberNeed, isCompleted: boolean) => {
-            const isDuty = need.type === "duty";
-            const isExpense = need.type === "expense";
-            const priorityColors: Record<string, string> = {
-              "عاجل": "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border-rose-300/50",
-              "مهم": "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border-amber-300/50",
-              "متوسط": "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border-blue-300/50",
-              "عادي": "bg-gray-100 text-gray-700 dark:bg-zinc-800 dark:text-gray-300 border-gray-300/50"
-            };
-
-            return (
-              <div 
-                key={need.id}
-                className={`p-3 sm:p-3.5 rounded-2xl transition-all duration-200 border flex items-center justify-between gap-3 ${
-                  isExpense
-                    ? "bg-gradient-to-r from-pink-50/40 via-white to-purple-50/30 dark:from-pink-950/20 dark:via-zinc-900 dark:to-purple-950/10 border-pink-200/70 dark:border-pink-900/30 shadow-xs"
-                    : isCompleted 
-                    ? "bg-gray-50/70 dark:bg-zinc-900/40 border-gray-200/60 dark:border-zinc-800/60 opacity-60 hover:opacity-100" 
-                    : "bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-600/60 shadow-xs hover:shadow-sm"
-                }`}
-              >
-                {/* Right side: Checkbox/Icon + Title + Meta */}
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  {/* Circular 1-tap Action Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleFamilyNeedStatus(need)}
-                    className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
-                      isExpense
-                        ? "bg-emerald-500 text-white shadow-xs"
-                        : isCompleted 
-                        ? "bg-emerald-500 text-white shadow-xs" 
-                        : isDuty 
-                          ? "border-2 border-violet-400 text-transparent hover:text-white hover:bg-violet-500 hover:border-violet-500" 
-                          : "border-2 border-pink-400 text-transparent hover:text-white hover:bg-pink-500 hover:border-pink-500"
-                    }`}
-                    title={isExpense ? "تم الشراء" : isCompleted ? "إعادة فتح" : isDuty ? "إنجاز الواجب" : "توفير وشراء الطلب"}
-                  >
-                    <Check className={`w-4 h-4 ${(isCompleted || isExpense) ? "stroke-[3]" : ""}`} />
-                  </button>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`font-black text-xs sm:text-sm text-gray-900 dark:text-white leading-tight ${isCompleted && !isExpense ? "line-through text-gray-400 dark:text-gray-500" : ""}`}>
-                        {need.title}
-                      </span>
-                      {need.quantity && need.quantity > 1 && (
-                        <span className="text-[10px] font-black bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded-md">
-                          ×{need.quantity}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Meta badges in a clean inline row */}
-                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                      {isViewingAll && need.member && (
-                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50">
-                          {need.member}
-                        </span>
-                      )}
-                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
-                        isExpense
-                          ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/50"
-                          : isDuty 
-                          ? "bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200/50" 
-                          : "bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border border-pink-200/50"
-                      }`}>
-                        {isExpense ? "💳 تم الشراء" : isDuty ? "🎯 واجب" : "🛍️ احتياج"}
-                      </span>
-                      {need.priority && (
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${priorityColors[need.priority] || priorityColors["متوسط"]}`}>
-                          {need.priority}
-                        </span>
-                      )}
-                      {need.notes && (
-                        <span className="text-[10px] text-gray-400 truncate max-w-[200px]" title={need.notes}>
-                          📝 {need.notes}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Left side: Price & Action Buttons */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {need.estimatedPrice && Number(need.estimatedPrice) > 0 ? (
-                    <span className={`font-black text-xs px-2.5 py-1 rounded-xl flex items-baseline gap-1 ${
-                      isExpense
-                        ? "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200/50 dark:border-rose-800/40"
-                        : isCompleted 
-                        ? "bg-gray-100 dark:bg-zinc-800 text-gray-400 line-through" 
-                        : "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/40"
-                    }`}>
-                      <span>{fmt(need.estimatedPrice)}</span>
-                      <span className="text-[9px] font-bold opacity-75">د.ع</span>
-                    </span>
-                  ) : null}
-
-                  <div className="flex items-center gap-1">
-                    {!isExpense && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditFamilyNeed(need);
-                          setFamilyNeedType(need.type === "duty" ? "duty" : "need");
-                          setShowFamilyNeedModal(true);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition cursor-pointer"
-                        title="تعديل"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteFamilyNeed(need.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition cursor-pointer"
-                      title="حذف"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          };
-
-          return (
-            <div className="space-y-4">
-              {/* 1. Header & Competition Banner */}
-              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-orange-500/10 border border-amber-500/20 shadow-xs hover:border-amber-500/40 transition">
-                <div className="flex items-center justify-between p-3 sm:p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl shadow-xs">
-                      🏆
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-black text-gray-900 dark:text-white text-sm sm:text-base">منافسة العائلة الأسبوعية</h3>
-                        <span className="text-[10px] font-black bg-amber-500/20 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">
-                          نقاط وتحديات ⭐
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 font-bold">
-                        تحفيز المهام والمطالعة لرقية وقنوت وإيڤا
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setShowFamilyCompetition(prev => !prev)}
-                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs transition shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <span>{showFamilyCompetition ? "إخفاء لوحة المنافسة ▲" : "عرض المنافسة والترتيب 🏆 ▼"}</span>
-                  </button>
-                </div>
-
-                {showFamilyCompetition && (
-                  <div className="p-4 pt-0 border-t border-amber-500/15 animate-fadeIn">
-                    <FamilyCompetition />
-                  </div>
-                )}
-              </div>
-
-              {/* 2. Family Members Ribbon */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 custom-scrollbar">
-                {FAMILY_MEMBERS_LIST.map(m => {
-                  const isSelected = activeFamilyMember === m.name;
-                  const memberDuties = familyNeeds.filter(n => (m.isAll || n.member === m.name) && n.type === "duty" && n.status === "pending").length;
-                  const memberNeedsCount = familyNeeds.filter(n => (m.isAll || n.member === m.name) && n.type !== "duty" && n.type !== "expense" && n.status === "pending").length;
-                  const memberPurchasesCount = familyNeeds.filter(n => (m.isAll || n.member === m.name) && (n.type === "expense" || (n.type !== "duty" && (n.status === "available" || n.status === "completed")))).length;
-                  const isCycleMember = m.name === "إيمان" || m.name === "رقية";
-
-                  return (
-                    <button
-                      key={m.name}
-                      type="button"
-                      onClick={() => setActiveFamilyMember(m.name)}
-                      className={`flex-shrink-0 px-4 py-2 rounded-2xl font-black text-xs transition-all flex items-center gap-2 active:scale-95 cursor-pointer ${
-                        isSelected 
-                          ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/25 scale-[1.02]" 
-                          : "bg-white dark:bg-zinc-900 text-gray-700 dark:text-gray-300 border border-gray-200/80 dark:border-zinc-800 hover:border-indigo-300"
-                      }`}
-                    >
-                      <span className="text-base">{m.emoji}</span>
-                      <span>{m.name}</span>
-                      {isCycleMember && (
-                        <span className="text-[10px]" title="مفعل لها ركن متابعة الدورة الشهرية">🌸</span>
-                      )}
-                      {(memberDuties > 0 || memberNeedsCount > 0 || memberPurchasesCount > 0) && (
-                        <div className="flex items-center gap-1">
-                          {memberNeedsCount > 0 && (
-                            <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300"}`}>
-                              {memberNeedsCount} 🛍️
-                            </span>
-                          )}
-                          {memberDuties > 0 && (
-                            <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"}`}>
-                              {memberDuties} 🎯
-                            </span>
-                          )}
-                          {memberPurchasesCount > 0 && (
-                            <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"}`}>
-                              {memberPurchasesCount} 💳
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* 2.5 Women Cycle Care Section for Iman & Ruqaya */}
-              {(activeFamilyMember === "إيمان" || activeFamilyMember === "رقية" || showWomenHealthSection) && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                  <WomenCycleCare
-                    currentMember={activeFamilyMember === "رقية" ? "رقية" : "إيمان"}
-                    onMemberChange={(member) => {
-                      setActiveFamilyMember(member);
-                      setShowWomenHealthSection(true);
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* 3. Action Buttons & Quick Metrics Ribbon */}
-              <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
-                {/* Action Buttons */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFamilyNeedType("duty");
-                      setEditFamilyNeed(null);
-                      setShowFamilyNeedModal(true);
-                    }}
-                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-95 text-white text-xs font-black shadow-sm active:scale-95 transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>إضافة واجب 🎯</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFamilyNeedType("need");
-                      setEditFamilyNeed(null);
-                      setShowFamilyNeedModal(true);
-                    }}
-                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:opacity-95 text-white text-xs font-black shadow-sm active:scale-95 transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>إضافة احتياج 🛍️</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowWomenHealthSection(prev => !prev);
-                      if (!["إيمان", "رقية"].includes(activeFamilyMember)) {
-                        setActiveFamilyMember("إيمان");
-                      }
-                    }}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-black shadow-xs active:scale-95 transition flex items-center gap-1.5 cursor-pointer ${
-                      showWomenHealthSection || ["إيمان", "رقية"].includes(activeFamilyMember)
-                        ? "bg-pink-100 dark:bg-pink-950/70 text-pink-700 dark:text-pink-300 border border-pink-300 dark:border-pink-800"
-                        : "bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 text-gray-700 dark:text-gray-300 hover:text-pink-600"
-                    }`}
-                  >
-                    <Flower2 className="w-3.5 h-3.5 text-pink-500" />
-                    <span>دورة إيمان ورقية 🌸</span>
-                  </button>
-                </div>
-
-                {/* Metrics ribbon */}
-                <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 font-bold border border-pink-200/60 dark:border-pink-800/40">
-                    <span>🛍️ نواقص:</span>
-                    <span className="font-black">{pendingNeeds.length}</span>
-                    {totalPendingCost > 0 && (
-                      <span className="text-[10px] opacity-80">({fmt(totalPendingCost)} د.ع)</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-bold border border-violet-200/60 dark:border-violet-800/40">
-                    <span>🎯 واجبات:</span>
-                    <span className="font-black">{pendingDuties.length}</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200/60 dark:border-emerald-800/40">
-                    <span>💳 مشتريات:</span>
-                    <span className="font-black text-rose-600 dark:text-rose-400">{fmt(totalMemberPurchasesSpend)} د.ع</span>
-                    <span className="text-[10px] opacity-75">({memberPurchases.length})</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 font-bold border border-gray-200/60 dark:border-zinc-700/60">
-                    <span>✅ منجز:</span>
-                    <span className="font-black">{completedItems.length}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. Filters & Search */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
-                <div className="flex bg-gray-100 dark:bg-zinc-900 p-1 rounded-2xl gap-1 flex-1 overflow-x-auto custom-scrollbar">
-                  <button
-                    type="button"
-                    onClick={() => setFamilyFilter("all")}
-                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer min-w-[70px] ${
-                      familyFilter === "all"
-                        ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                    }`}
-                  >
-                    النشطة ({activeItems.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFamilyFilter("needs")}
-                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer min-w-[70px] ${
-                      familyFilter === "needs"
-                        ? "bg-white dark:bg-zinc-800 text-pink-600 dark:text-pink-400 shadow-sm"
-                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                    }`}
-                  >
-                    النواقص ({pendingNeeds.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFamilyFilter("duties")}
-                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer min-w-[70px] ${
-                      familyFilter === "duties"
-                        ? "bg-white dark:bg-zinc-800 text-violet-600 dark:text-violet-400 shadow-sm"
-                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                    }`}
-                  >
-                    الواجبات ({pendingDuties.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFamilyFilter("expenses")}
-                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer min-w-[85px] ${
-                      familyFilter === "expenses"
-                        ? "bg-white dark:bg-zinc-800 text-rose-600 dark:text-rose-400 shadow-sm"
-                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                    }`}
-                  >
-                    💳 المشتريات ({memberPurchases.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFamilyFilter("completed")}
-                    className={`flex-1 py-1.5 text-xs font-black rounded-xl transition cursor-pointer min-w-[65px] ${
-                      familyFilter === "completed"
-                        ? "bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                        : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                    }`}
-                  >
-                    المنجز ({completedItems.length})
-                  </button>
-                </div>
-
-                {/* Instant Search */}
-                <div className="relative w-full sm:w-64">
-                  <input
-                    type="text"
-                    value={familySearch}
-                    onChange={e => setFamilySearch(e.target.value)}
-                    placeholder="ابحث في الطلبات والواجبات والمشتريات..."
-                    className="w-full bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl px-3.5 py-1.5 pr-8 text-xs font-bold text-gray-800 dark:text-white outline-none focus:border-indigo-400"
-                  />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
-                  {familySearch && (
-                    <button
-                      type="button"
-                      onClick={() => setFamilySearch("")}
-                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* 5. Items List */}
-              {displayItems.length === 0 ? (
-                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-100 dark:border-zinc-800/80">
-                  <span className="text-3xl block mb-2">🎉</span>
-                  <p className="text-gray-500 dark:text-gray-400 font-bold text-sm">
-                    {familyFilter === "completed" 
-                      ? "لا توجد عناصر منجزة حالياً"
-                      : familyFilter === "expenses"
-                        ? `لا توجد مشتريات ومصاريف مسجلة لـ ${activeFamilyMember} بعد`
-                        : familyFilter === "needs"
-                          ? `لا توجد نواقص معلقة لـ ${activeFamilyMember}`
-                          : familyFilter === "duties"
-                            ? `لا توجد واجبات معلقة على ${activeFamilyMember}`
-                            : `جميع الطلبات والواجبات لـ ${activeFamilyMember} مكتملة!`}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {displayItems.map(item => renderItemRow(item, false))}
-                </div>
-              )}
-
-              {/* 6. Completed Items Toggle at Bottom (When in "all" or "needs"/"duties") */}
-              {familyFilter !== "completed" && completedItems.length > 0 && (
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowCompletedFamilyItems(prev => !prev)}
-                    className="w-full py-2.5 px-4 rounded-2xl bg-gray-100/70 dark:bg-zinc-900/70 hover:bg-gray-200/80 dark:hover:bg-zinc-800/80 text-xs font-black text-gray-500 dark:text-gray-400 flex items-center justify-between transition border border-gray-200/60 dark:border-zinc-800/60 active:scale-[0.99] cursor-pointer"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <span>✅</span>
-                      <span>الطلبات والواجبات المنجزة سابقاً</span>
-                      <span className="text-[10px] bg-gray-200 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-bold">({completedItems.length})</span>
-                    </span>
-                    <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
-                      {showCompletedFamilyItems ? "إخفاء ▲" : "عرض بالأسفل (ظل خافت) ▼"}
-                    </span>
-                  </button>
-
-                  {showCompletedFamilyItems && (
-                    <div className="space-y-2 mt-2.5">
-                      {completedItems.map(item => renderItemRow(item, true))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })()}
+        {activeTab === "familyNeeds" && (
+          <FamilySection
+            familyNeeds={familyNeeds}
+            setFamilyNeeds={setFamilyNeeds}
+            expenses={expenses}
+            familyHealth={familyHealth}
+            setFamilyHealth={setFamilyHealth}
+            syncToFirebase={syncToFirebase}
+            fmt={fmt}
+          />
+        )}
 
         {/* ═══════════════ FUTURE PLANS TAB ═══════════════ */}
         {activeTab === "futurePlans" && (
@@ -9483,28 +9011,21 @@ setEditTrip(null);
                             </select>
                           </div>
 
-                          {/* Place / Shop Selector (Interactive Dropdown on First Letter) */}
+                          {/* Place / Shop Selector (Suggestions of past stores entered) */}
                           <div className="w-full sm:col-span-2 relative">
                             <input
                               type="text"
+                              list={`places-list-datalist-${idx}`}
                               placeholder="المحل (سوق، كراج، مطعم..)"
                               value={item.place || ""}
                               autoComplete="off"
-                              onFocus={() => {
-                                if ((item.place || "").trim().length >= 1) {
-                                  setFocusedPlaceIdx(idx);
-                                }
-                              }}
+                              onFocus={() => setFocusedPlaceIdx(idx)}
                               onBlur={() => setTimeout(() => setFocusedPlaceIdx(null), 250)}
                               onChange={e => {
                                 const val = e.target.value;
                                 const newItems = [...expenseItems];
                                 newItems[idx].place = val;
-                                if (val.trim().length >= 1) {
-                                  setFocusedPlaceIdx(idx);
-                                } else {
-                                  setFocusedPlaceIdx(null);
-                                }
+                                setFocusedPlaceIdx(idx);
                                 const pred = detectProductCategory(val);
                                 if (pred && !newItems[idx].category) {
                                   newItems[idx].category = pred;
@@ -9513,15 +9034,24 @@ setEditTrip(null);
                               }}
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
                             />
+                            <datalist id={`places-list-datalist-${idx}`}>
+                              {uniqueSuggestedPlaces.slice(0, 30).map((pl, plIdx) => (
+                                <option key={plIdx} value={pl} />
+                              ))}
+                            </datalist>
+
                             {focusedPlaceIdx === idx && (() => {
                               const pQuery = normalizeArabicText(item.place || "").trim();
-                              if (pQuery.length === 0) return null;
-                              const matching = normalizedUniquePlaces.filter(p => p.norm.includes(pQuery)).slice(0, 8);
+                              const matching = pQuery.length === 0
+                                ? normalizedUniquePlaces.slice(0, 10)
+                                : normalizedUniquePlaces.filter(p => p.norm.includes(pQuery)).slice(0, 10);
+
                               if (matching.length === 0) return null;
+
                               return (
-                                <div className="absolute z-30 w-full min-w-[170px] mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-44 overflow-y-auto">
-                                  <div className="px-2 py-1 text-[9px] font-black text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-700/60">
-                                    🔍 نتائج المحلات والكراجات:
+                                <div className="absolute z-30 w-full min-w-[190px] mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                                  <div className="px-2.5 py-1 text-[9px] font-black text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-700/60 flex items-center justify-between">
+                                    <span>{pQuery.length === 0 ? "🏪 المحلات السابقة الأكثر استخداماً:" : "🔍 نتائج المحلات السابقة المطابقة:"}</span>
                                   </div>
                                   {matching.map((pObj, sIdx) => {
                                     const pName = pObj.raw;
@@ -9633,8 +9163,12 @@ setEditTrip(null);
 
                               <button 
                                 type="button" 
-                                onClick={() => setExpenseItems(expenseItems.filter(x => x.id !== item.id))} 
-                                className="text-red-500 hover:text-red-600 p-1.5 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 rounded-lg transition shrink-0"
+                                onClick={async () => {
+                                  if (await customConfirm("هل تريد حذف هذه المادة من القائمة؟", { confirmText: "نعم", cancelText: "لا" })) {
+                                    setExpenseItems(expenseItems.filter(x => x.id !== item.id));
+                                  }
+                                }} 
+                                className="text-red-500 hover:text-red-600 p-1.5 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 rounded-lg transition shrink-0 cursor-pointer"
                                 title="حذف هذه المادة"
                               >
                                 <Trash2 className="w-4 h-4" />

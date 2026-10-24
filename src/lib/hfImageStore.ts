@@ -119,7 +119,7 @@ export async function compressToTinyThumbnail(
 // local IndexedDB so the user NEVER loses their attached photos.
 // ─────────────────────────────────────────────────────────────
 export async function uploadImageResiliently(
-  folder: "receipts" | "needs" | "inventory",
+  folder: "receipts" | "needs" | "inventory" | "health",
   id: string,
   dataUrlOrFile: string | File
 ): Promise<string> {
