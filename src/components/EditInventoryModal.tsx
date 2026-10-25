@@ -1,10 +1,11 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
-import { X, Image as ImageIcon, Loader2, Check } from "lucide-react";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { X, Image as ImageIcon, Loader2, Check, Trash2 } from "lucide-react";
+import { doc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { toast } from "sonner";
+import { customConfirm } from "@/lib/customConfirm";
 
 const INVENTORY_UNITS = ["كغم", "لتر", "قطعة", "كيس", "سطل", "علبة", "ورقة", "رول"];
 const INVENTORY_CATEGORIES = ["طحين وسكر", "كريمات", "حشوات", "شوكولاتة وكاكاو", "ألوان وإضافات", "منكهات وعطور", "عجينة سكر", "فواكه ومكسرات", "تغليف وزينة", "مستهلكات", "قوالب وصواني", "أدوات", "أخرى"];
@@ -267,10 +268,36 @@ export default function EditInventoryModal({ isOpen, onClose, item, onEditSucces
               )}
             </div>
 
-            <button disabled={loading} type="submit"
-              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl py-3.5 font-bold flex justify-center items-center gap-2 mt-4 transition">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> حفظ التعديلات</>}
-            </button>
+            <div className="flex gap-2 mt-4">
+              <button disabled={loading} type="submit"
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl py-3.5 font-bold flex justify-center items-center gap-2 transition active:scale-95 shadow-md">
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> حفظ التعديلات</>}
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={async () => {
+                  const confirmed = await customConfirm(`هل تريد بالتأكيد حذف مادة "${name}" نهائياً من المخزن؟`);
+                  if (!confirmed) return;
+                  setLoading(true);
+                  try {
+                    await deleteDoc(doc(db, "cake_inventory", item.id));
+                    toast.success(`تم حذف "${name}" من المخزن بنجاح`);
+                    if (onEditSuccess) onEditSuccess({ id: item.id, _deleted: true });
+                    onClose();
+                  } catch (err) {
+                    console.error(err);
+                    toast.error("فشل حذف المادة من المخزن");
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 px-4 rounded-xl font-bold flex items-center justify-center transition active:scale-95 border border-rose-200 dark:border-rose-900/40"
+                title="حذف المادة من المخزن"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
           </form>
         </div>
       </div>

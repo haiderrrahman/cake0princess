@@ -1137,11 +1137,11 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                             </select>
                           </div>
 
-                          {/* Place / Shop Selector */}
+                          {/* Place / Shop Selector (Only suggests when user writes >= 1 character) */}
                           <div className="w-full sm:col-span-2">
                             <input
                               type="text"
-                              list={`quick-places-list-${idx}`}
+                              list={(item.place || "").trim().length >= 1 ? `quick-places-list-${idx}` : undefined}
                               placeholder="المحل (سوق، كراج، مطعم..)"
                               value={item.place || ""}
                               onChange={e => {
@@ -1151,11 +1151,15 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                               }}
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
                             />
-                            <datalist id={`quick-places-list-${idx}`}>
-                              {uniquePlaces.map((p, pIdx) => (
-                                <option key={pIdx} value={p} />
-                              ))}
-                            </datalist>
+                            {(item.place || "").trim().length >= 1 && (
+                              <datalist id={`quick-places-list-${idx}`}>
+                                {uniquePlaces
+                                  .filter(p => p.toLowerCase().includes((item.place || "").toLowerCase().trim()))
+                                  .map((p, pIdx) => (
+                                    <option key={pIdx} value={p} />
+                                  ))}
+                              </datalist>
+                            )}
                           </div>
 
                           {/* Quantity & Price */}

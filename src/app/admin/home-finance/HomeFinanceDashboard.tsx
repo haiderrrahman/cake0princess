@@ -8656,7 +8656,7 @@ setEditTrip(null);
                             <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 border border-teal-300 rounded-xl px-1.5 py-0.5">
                               <input
                                 type="text"
-                                list="outing-new-place-datalist"
+                                list={newPlaceInput.trim().length >= 1 ? "outing-new-place-datalist" : undefined}
                                 placeholder="اسم المكان / المحل..."
                                 value={newPlaceInput}
                                 onChange={e => setNewPlaceInput(e.target.value)}
@@ -8680,11 +8680,15 @@ setEditTrip(null);
                                 className="w-28 text-[11px] font-bold outline-none bg-transparent"
                                 autoFocus
                               />
-                              <datalist id="outing-new-place-datalist">
-                                {uniqueSuggestedPlaces.map((pl, plIdx) => (
-                                  <option key={plIdx} value={pl} />
-                                ))}
-                              </datalist>
+                              {newPlaceInput.trim().length >= 1 && (
+                                <datalist id="outing-new-place-datalist">
+                                  {uniqueSuggestedPlaces
+                                    .filter(pl => normalizeArabicText(pl).includes(normalizeArabicText(newPlaceInput)))
+                                    .map((pl, plIdx) => (
+                                      <option key={plIdx} value={pl} />
+                                    ))}
+                                </datalist>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -9011,21 +9015,31 @@ setEditTrip(null);
                             </select>
                           </div>
 
-                          {/* Place / Shop Selector (Suggestions of past stores entered) */}
+                          {/* Place / Shop Selector (Suggestions of past stores entered - only when typing >= 1 character) */}
                           <div className="w-full sm:col-span-2 relative">
                             <input
                               type="text"
-                              list={`places-list-datalist-${idx}`}
+                              list={(item.place || "").trim().length >= 1 ? `places-list-datalist-${idx}` : undefined}
                               placeholder="المحل (سوق، كراج، مطعم..)"
                               value={item.place || ""}
                               autoComplete="off"
-                              onFocus={() => setFocusedPlaceIdx(idx)}
+                              onFocus={() => {
+                                if ((item.place || "").trim().length >= 1) {
+                                  setFocusedPlaceIdx(idx);
+                                } else {
+                                  setFocusedPlaceIdx(null);
+                                }
+                              }}
                               onBlur={() => setTimeout(() => setFocusedPlaceIdx(null), 250)}
                               onChange={e => {
                                 const val = e.target.value;
                                 const newItems = [...expenseItems];
                                 newItems[idx].place = val;
-                                setFocusedPlaceIdx(idx);
+                                if (val.trim().length >= 1) {
+                                  setFocusedPlaceIdx(idx);
+                                } else {
+                                  setFocusedPlaceIdx(null);
+                                }
                                 const pred = detectProductCategory(val);
                                 if (pred && !newItems[idx].category) {
                                   newItems[idx].category = pred;
@@ -9034,24 +9048,27 @@ setEditTrip(null);
                               }}
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
                             />
-                            <datalist id={`places-list-datalist-${idx}`}>
-                              {uniqueSuggestedPlaces.slice(0, 30).map((pl, plIdx) => (
-                                <option key={plIdx} value={pl} />
-                              ))}
-                            </datalist>
+                            {(item.place || "").trim().length >= 1 && (
+                              <datalist id={`places-list-datalist-${idx}`}>
+                                {uniqueSuggestedPlaces
+                                  .filter(pl => normalizeArabicText(pl).includes(normalizeArabicText(item.place || "")))
+                                  .slice(0, 30)
+                                  .map((pl, plIdx) => (
+                                    <option key={plIdx} value={pl} />
+                                  ))}
+                              </datalist>
+                            )}
 
-                            {focusedPlaceIdx === idx && (() => {
+                            {focusedPlaceIdx === idx && (item.place || "").trim().length >= 1 && (() => {
                               const pQuery = normalizeArabicText(item.place || "").trim();
-                              const matching = pQuery.length === 0
-                                ? normalizedUniquePlaces.slice(0, 10)
-                                : normalizedUniquePlaces.filter(p => p.norm.includes(pQuery)).slice(0, 10);
+                              const matching = normalizedUniquePlaces.filter(p => p.norm.includes(pQuery)).slice(0, 10);
 
                               if (matching.length === 0) return null;
 
                               return (
                                 <div className="absolute z-30 w-full min-w-[190px] mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-48 overflow-y-auto">
                                   <div className="px-2.5 py-1 text-[9px] font-black text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-700/60 flex items-center justify-between">
-                                    <span>{pQuery.length === 0 ? "🏪 المحلات السابقة الأكثر استخداماً:" : "🔍 نتائج المحلات السابقة المطابقة:"}</span>
+                                    <span>🔍 نتائج المحلات السابقة المطابقة:</span>
                                   </div>
                                   {matching.map((pObj, sIdx) => {
                                     const pName = pObj.raw;

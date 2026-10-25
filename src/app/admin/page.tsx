@@ -41,7 +41,7 @@ export default function AdminDashboard() {
   const [activeOperationalCounts, setActiveOperationalCounts] = useState(() => {
     if (typeof window !== "undefined") {
       try {
-        const raw = localStorage.getItem("admin_dashboard_counts_v2");
+        const raw = localStorage.getItem("admin_dashboard_counts_v3");
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed?._timestamp && (Date.now() - parsed._timestamp < 15 * 60 * 1000)) {
@@ -53,6 +53,7 @@ export default function AdminDashboard() {
     return {
       pendingExternal: 0,
       pendingApp: 0,
+      pendingSupplies: 0,
       todayDeliveries: 0,
       totalExpensesCount: 0,
     };
@@ -93,9 +94,18 @@ export default function AdminDashboard() {
       });
 
       let pApp = 0;
+      let pSupplies = 0;
       currentOrders.forEach((o) => {
-        if (["pending", "processing", "delivering"].includes(o.status)) {
-          pApp++;
+        const isActive = ["pending", "processing", "delivering"].includes(o.status);
+        if (isActive) {
+          const hasSupplies = o.items && Array.isArray(o.items) && o.items.some((i: any) =>
+            i.type === "supply" || i.isSupply || i.category === "supplies" || i.id?.includes("supply")
+          );
+          if (hasSupplies) {
+            pSupplies++;
+          } else {
+            pApp++;
+          }
         }
       });
 
@@ -111,6 +121,7 @@ export default function AdminDashboard() {
       const counts = {
         pendingExternal: pExt,
         pendingApp: pApp,
+        pendingSupplies: pSupplies,
         todayDeliveries: todayDlv,
         totalExpensesCount: currentExpenses.length,
       };
@@ -119,7 +130,7 @@ export default function AdminDashboard() {
       persistFinancesStats(result);
       try {
         localStorage.setItem(
-          "admin_dashboard_counts_v2",
+          "admin_dashboard_counts_v3",
           JSON.stringify({ _timestamp: Date.now(), data: counts })
         );
       } catch {}
@@ -261,13 +272,13 @@ export default function AdminDashboard() {
       border: "border-cyan-500/40",
     },
     {
-      title: "فواتير ومواد الكيك",
-      subtitle: "المشتريات وتتبع النفاد",
+      title: "طلبات مواد الكيك",
+      subtitle: "مبيعات المواد أونلاين",
       icon: "🧂",
       href: "/admin/hub?tab=supplies_orders",
-      label: "المصروفات",
-      amount: statsLoading ? "…" : `${fmt(realStats?.totalExpenses)} د.ع`,
-      badge: activeOperationalCounts.totalExpensesCount > 0 ? `${activeOperationalCounts.totalExpensesCount} فواتير` : null,
+      label: "المبيعات",
+      amount: statsLoading ? "…" : `${fmt(realStats?.breakdown?.appSupplies || 0)} د.ع`,
+      badge: activeOperationalCounts.pendingSupplies > 0 ? `${activeOperationalCounts.pendingSupplies} طلب نشط` : null,
       gradient: "from-amber-500 to-orange-700",
       glow: "shadow-amber-500/25",
       border: "border-amber-500/40",
