@@ -199,6 +199,7 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
   const [uniquePlaces, setUniquePlaces] = useState<string[]>(() => OUTING_PLACES_SUGGESTIONS);
   const [showExpSuggestions, setShowExpSuggestions] = useState(false);
   const [focusedProductIdx, setFocusedProductIdx] = useState<number | null>(null);
+  const [focusedPlaceIdx, setFocusedPlaceIdx] = useState<number | null>(null);
 
   const receiptCameraInputRef = useRef<HTMLInputElement>(null);
   const receiptGalleryInputRef = useRef<HTMLInputElement>(null);
@@ -1138,28 +1139,61 @@ export default function HomeQuickEntry({ onClose, onSuccess, initialTab = "expen
                           </div>
 
                           {/* Place / Shop Selector (Only suggests when user writes >= 1 character) */}
-                          <div className="w-full sm:col-span-2">
+                          <div className="w-full sm:col-span-2 relative">
                             <input
                               type="text"
-                              list={(item.place || "").trim().length >= 1 ? `quick-places-list-${idx}` : undefined}
                               placeholder="المحل (سوق، كراج، مطعم..)"
                               value={item.place || ""}
+                              autoComplete="new-password"
+                              data-lpignore="true"
+                              data-form-type="other"
+                              autoCorrect="off"
+                              spellCheck={false}
+                              onFocus={() => {
+                                if ((item.place || "").trim().length >= 1) {
+                                  setFocusedPlaceIdx(idx);
+                                } else {
+                                  setFocusedPlaceIdx(null);
+                                }
+                              }}
+                              onBlur={() => setTimeout(() => setFocusedPlaceIdx(null), 250)}
                               onChange={e => {
+                                const val = e.target.value;
                                 const newItems = [...expenseItems];
-                                newItems[idx].place = e.target.value;
+                                newItems[idx].place = val;
                                 setExpenseItems(newItems);
+                                if (val.trim().length >= 1) {
+                                  setFocusedPlaceIdx(idx);
+                                } else {
+                                  setFocusedPlaceIdx(null);
+                                }
                               }}
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
                             />
-                            {(item.place || "").trim().length >= 1 && (
-                              <datalist id={`quick-places-list-${idx}`}>
-                                {uniquePlaces
-                                  .filter(p => p.toLowerCase().includes((item.place || "").toLowerCase().trim()))
-                                  .map((p, pIdx) => (
-                                    <option key={pIdx} value={p} />
+                            {focusedPlaceIdx === idx && (item.place || "").trim().length >= 1 && (() => {
+                              const q = (item.place || "").toLowerCase().trim();
+                              const matched = uniquePlaces.filter(p => p.toLowerCase().includes(q)).slice(0, 8);
+                              if (matched.length === 0) return null;
+                              return (
+                                <div className="absolute z-30 w-full min-w-[160px] mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-40 overflow-y-auto">
+                                  {matched.map((p, pIdx) => (
+                                    <div
+                                      key={pIdx}
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        const newItems = [...expenseItems];
+                                        newItems[idx].place = p;
+                                        setExpenseItems(newItems);
+                                        setFocusedPlaceIdx(null);
+                                      }}
+                                      className="px-2.5 py-1.5 hover:bg-indigo-50 dark:hover:bg-zinc-700 cursor-pointer text-xs font-bold text-gray-800 dark:text-gray-200"
+                                    >
+                                      📍 {p}
+                                    </div>
                                   ))}
-                              </datalist>
-                            )}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Quantity & Price */}

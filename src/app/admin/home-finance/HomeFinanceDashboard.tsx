@@ -8626,37 +8626,14 @@ setEditTrip(null);
                             );
                           })}
 
-                          {/* Quick Place Presets (Dynamic from previously added shops/markets) */}
-                          {uniqueSuggestedPlaces.slice(0, 14).map(preset => {
-                            if (visitedPlaces.includes(preset)) return null;
-                            return (
-                              <button
-                                key={preset}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedOutingPlace(preset);
-                                  setExpenseItems(prev => [...prev, {
-                                    id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-                                    name: "",
-                                    quantity: 1,
-                                    price: 0,
-                                    category: detectProductCategory(preset) || (preset.includes("خضار") ? "الفواكه والخضار" : preset.includes("لحوم") ? "لحوم ودواجن وأسماك" : preset.includes("صيدلية") ? "صيدلية وعلاج" : preset.includes("مطعم") ? "مطاعم وكافيهات" : "سوبر ماركت"),
-                                    place: preset
-                                  }]);
-                                }}
-                                className="px-2 py-0.5 rounded-lg bg-teal-50/70 dark:bg-zinc-800/60 border border-dashed border-teal-300 dark:border-zinc-700 text-teal-700 dark:text-teal-300 text-[10px] font-bold hover:bg-teal-100 transition active:scale-95"
-                              >
-                                + {preset}
-                              </button>
-                            );
-                          })}
-
-                          {/* Custom New Place Button / Input */}
+                          {/* Custom New Place Button / Input (No presets shown when empty; suggestions only when typing >= 1 char) */}
                           {showAddPlaceInput ? (
-                            <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 border border-teal-300 rounded-xl px-1.5 py-0.5">
+                            <div className="relative flex items-center gap-1 bg-white dark:bg-zinc-800 border border-teal-300 rounded-xl px-1.5 py-0.5">
                               <input
                                 type="text"
-                                list={newPlaceInput.trim().length >= 1 ? "outing-new-place-datalist" : undefined}
+                                autoComplete="new-password"
+                                data-lpignore="true"
+                                data-form-type="other"
                                 placeholder="اسم المكان / المحل..."
                                 value={newPlaceInput}
                                 onChange={e => setNewPlaceInput(e.target.value)}
@@ -8680,15 +8657,38 @@ setEditTrip(null);
                                 className="w-28 text-[11px] font-bold outline-none bg-transparent"
                                 autoFocus
                               />
-                              {newPlaceInput.trim().length >= 1 && (
-                                <datalist id="outing-new-place-datalist">
-                                  {uniqueSuggestedPlaces
-                                    .filter(pl => normalizeArabicText(pl).includes(normalizeArabicText(newPlaceInput)))
-                                    .map((pl, plIdx) => (
-                                      <option key={plIdx} value={pl} />
+                              {newPlaceInput.trim().length >= 1 && (() => {
+                                const q = normalizeArabicText(newPlaceInput.trim());
+                                const matched = uniqueSuggestedPlaces.filter(pl => normalizeArabicText(pl).includes(q)).slice(0, 6);
+                                if (matched.length === 0) return null;
+                                return (
+                                  <div className="absolute top-full mt-1 right-0 z-30 w-44 bg-white dark:bg-zinc-800 border border-teal-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden text-right">
+                                    {matched.map((pl, plIdx) => (
+                                      <button
+                                        key={plIdx}
+                                        type="button"
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          setSelectedOutingPlace(pl);
+                                          setExpenseItems(prev => [...prev, {
+                                            id: `item-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                                            name: "",
+                                            quantity: 1,
+                                            price: 0,
+                                            category: "",
+                                            place: pl
+                                          }]);
+                                          setNewPlaceInput("");
+                                          setShowAddPlaceInput(false);
+                                        }}
+                                        className="w-full text-right px-3 py-1.5 hover:bg-teal-50 dark:hover:bg-zinc-700 text-[11px] font-bold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-zinc-700/50 last:border-0"
+                                      >
+                                        📍 {pl}
+                                      </button>
                                     ))}
-                                </datalist>
-                              )}
+                                  </div>
+                                );
+                              })()}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -9019,10 +9019,13 @@ setEditTrip(null);
                           <div className="w-full sm:col-span-2 relative">
                             <input
                               type="text"
-                              list={(item.place || "").trim().length >= 1 ? `places-list-datalist-${idx}` : undefined}
                               placeholder="المحل (سوق، كراج، مطعم..)"
                               value={item.place || ""}
-                              autoComplete="off"
+                              autoComplete="new-password"
+                              data-lpignore="true"
+                              data-form-type="other"
+                              autoCorrect="off"
+                              spellCheck={false}
                               onFocus={() => {
                                 if ((item.place || "").trim().length >= 1) {
                                   setFocusedPlaceIdx(idx);
@@ -9048,16 +9051,6 @@ setEditTrip(null);
                               }}
                               className="w-full bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700/80 rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 text-gray-800 dark:text-gray-200"
                             />
-                            {(item.place || "").trim().length >= 1 && (
-                              <datalist id={`places-list-datalist-${idx}`}>
-                                {uniqueSuggestedPlaces
-                                  .filter(pl => normalizeArabicText(pl).includes(normalizeArabicText(item.place || "")))
-                                  .slice(0, 30)
-                                  .map((pl, plIdx) => (
-                                    <option key={plIdx} value={pl} />
-                                  ))}
-                              </datalist>
-                            )}
 
                             {focusedPlaceIdx === idx && (item.place || "").trim().length >= 1 && (() => {
                               const pQuery = normalizeArabicText(item.place || "").trim();

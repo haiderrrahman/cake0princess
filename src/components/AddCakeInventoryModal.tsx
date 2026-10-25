@@ -540,7 +540,11 @@ export default function AddCakeInventoryModal({
                 </label>
                 <input
                   type="text"
-                  list={(mode === "single" ? singleStore : invoiceStoreName).trim().length >= 1 ? "cake-store-datalist" : undefined}
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  autoCorrect="off"
+                  spellCheck={false}
                   placeholder="مثال: مستلزمات الشورجة، معرض الحلواني..."
                   value={mode === "single" ? singleStore : invoiceStoreName}
                   onChange={e => {
@@ -558,17 +562,6 @@ export default function AddCakeInventoryModal({
                   onBlur={() => setTimeout(() => setIsStoreFocused(false), 250)}
                   className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
                 />
-
-                {/* Suggestions Datalist (Only populated when length >= 1) */}
-                {(mode === "single" ? singleStore : invoiceStoreName).trim().length >= 1 && (
-                  <datalist id="cake-store-datalist">
-                    {uniqueStoreNames
-                      .filter(s => s.toLowerCase().includes((mode === "single" ? singleStore : invoiceStoreName).toLowerCase().trim()))
-                      .map((s, idx) => (
-                        <option key={idx} value={s} />
-                      ))}
-                  </datalist>
-                )}
 
                 {/* Custom Floating Store Suggestions (Only when typing >= 1 character) */}
                 {isStoreFocused && (mode === "single" ? singleStore : invoiceStoreName).trim().length >= 1 && (() => {

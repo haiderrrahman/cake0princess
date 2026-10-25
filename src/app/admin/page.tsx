@@ -136,17 +136,26 @@ export default function AdminDashboard() {
       } catch {}
     };
 
-    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"));
-    const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"));
-    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"));
+    let debounceTimer: NodeJS.Timeout | null = null;
+    const scheduleCalculateStats = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        calculateStats();
+      }, 80);
+    };
+
+    const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200));
+    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(200));
+    const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(150));
+    const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100));
 
     const unsubOrders = onSnapshot(qOrders, (snap) => {
       currentOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      calculateStats();
+      scheduleCalculateStats();
     });
     const unsubExt = onSnapshot(qExt, (snap) => {
       currentExtOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      scheduleCalculateStats();
 
         // Notifications Logic: Only check ACTIVE, un-delivered orders
         const now = new Date();
@@ -187,15 +196,15 @@ export default function AdminDashboard() {
           }
         });
 
-        calculateStats();
+        scheduleCalculateStats();
       });
       const unsubExp = onSnapshot(qExp, (snap) => {
         currentExpenses = snap.docs.map((d) => d.data());
-        calculateStats();
+        scheduleCalculateStats();
       });
       const unsubStore = onSnapshot(qStore, (snap) => {
         currentStoreSales = snap.docs.map((d) => d.data());
-        calculateStats();
+        scheduleCalculateStats();
       });
 
     return () => {

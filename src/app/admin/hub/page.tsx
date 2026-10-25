@@ -202,7 +202,7 @@ function AdminHubContent() {
   const handleRefreshExternal = async () => {
     setIsRefreshingExt(true);
     try {
-      const snap = await getDocs(collection(db, "external_orders"));
+      const snap = await getDocs(query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(250)));
       let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
       setExternalOrders(allExt);
@@ -433,22 +433,10 @@ function AdminHubContent() {
       }
     });
 
-    // 2. Parallel fast fetch from Firestore with no limits (all orders loaded)
-    getDocs(collection(db, "external_orders")).then((snap) => {
-      if (!snap.empty) {
-        let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-        allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
-        setExternalOrders(allExt);
-        setExtOrdersLoaded(true);
-        setLoading(false);
-        saveHubCache("cache_external_orders_all", allExt);
-      }
-    }).catch(() => {});
-
-    // 3. Real-time snapshot listener on full collection (no orderBy to prevent dropping older docs)
-    const unsubExt = onSnapshot(collection(db, "external_orders"), (snap) => {
+    // 2. Real-time snapshot listener with limit to ensure maximum speed and zero lag
+    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(250));
+    const unsubExt = onSnapshot(qExt, (snap) => {
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-      allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
       setExternalOrders(allExt);
       setExtOrdersLoaded(true);
       setLoading(false);
@@ -456,10 +444,9 @@ function AdminHubContent() {
       saveHubCache("cache_external_orders_v2", allExt);
     }, (err) => {
       console.error("External orders listener error:", err);
-      // Fallback: full collection fetch
-      getDocs(collection(db, "external_orders")).then(snap => {
+      // Fallback
+      getDocs(qExt).then(snap => {
         let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-        allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
         setExternalOrders(allExt);
         setExtOrdersLoaded(true);
         setLoading(false);

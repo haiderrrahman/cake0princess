@@ -3,12 +3,14 @@ import { customConfirm } from '@/lib/customConfirm';
 import { toast } from "sonner";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { ArrowRight, Receipt, Plus, Trash2, Loader2, DollarSign, BarChart3, Wallet, TrendingUp, Calendar, AlertCircle, Edit, Sparkles, Clock, Package, Store, ChevronLeft, X, Copy, Tag, Search, Check } from "lucide-react";
-import { collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, query, orderBy, onSnapshot, updateDoc } from "firebase/firestore";
+import { ArrowRight, Receipt, Plus, Trash2, Loader2, DollarSign, BarChart3, Wallet, TrendingUp, Calendar, AlertCircle, Edit, Sparkles, Clock, Package, Store, ChevronLeft, X, Copy, Tag, Search, Check, List, Grid3X3, Camera, FileText } from "lucide-react";
+import { collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, query, orderBy, onSnapshot, updateDoc, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 const ScanCakeInvoiceModal = dynamic(() => import("@/components/ScanCakeInvoiceModal"), { ssr: false });
+const AddCakeInventoryModal = dynamic(() => import("@/components/AddCakeInventoryModal"), { ssr: false });
+const EditCakeInvoiceModal = dynamic(() => import("@/components/EditCakeInvoiceModal"), { ssr: false });
 
 import { getCachedFinancesStats, persistFinancesStats } from "@/lib/financesSync";
 
@@ -19,6 +21,16 @@ const EXPENSE_CATEGORIES = [
   "الرواتب والأجور",
   "الإعلانات والتسويق",
   "أخرى"
+];
+
+const CATEGORY_TABS = [
+  { id: "الكل", label: "الكل", icon: "📊" },
+  { id: "المواد الأولية (كيك وكريمة)", label: "المواد الأولية", icon: "🎂" },
+  { id: "أدوات التغليف والزينة", label: "التغليف والعلب", icon: "🎀" },
+  { id: "الرواتب والأجور", label: "الرواتب والأجور", icon: "👥" },
+  { id: "الكهرباء والإنترنت", label: "الكهرباء والإنترنت", icon: "⚡" },
+  { id: "الإعلانات والتسويق", label: "الإعلانات", icon: "📢" },
+  { id: "أخرى", label: "أخرى ومصروفات", icon: "📦" }
 ];
 
 export default function FinancesAdmin() {
@@ -76,20 +88,28 @@ export default function FinancesAdmin() {
   const [settleAmount, setSettleAmount] = useState("");
   const [settleMode, setSettleMode] = useState<"settle" | "repay" | "withdraw">("settle");
 
+  // Rich Filter & View Mode States (matching Home Finance System)
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("الكل");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "cake" | "salary">("all");
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [isAddInventoryOpen, setIsAddInventoryOpen] = useState(false);
+  const [editingCakeInvoice, setEditingCakeInvoice] = useState<any>(null);
+
   // Cake Materials scan state
   const [isScanCakeInvoiceOpen, setIsScanCakeInvoiceOpen] = useState(false);
   const [cakeInventoryItems, setCakeInventoryItems] = useState<any[]>([]);
 
   useEffect(() => {
     if (!isAdmin) return;
-    // 1. Fetch revenue data & cake inventory once in parallel (rarely change from this page)
+    // 1. Fetch revenue data & cake inventory once in parallel (with limit for ultra-fast load)
     const fetchRevenue = async () => {
       setLoading(true);
       try {
         const [ordersSnap, extSnap, storeSnap, cakeInvSnap] = await Promise.all([
-          getDocs(collection(db, "orders")),
-          getDocs(collection(db, "external_orders")),
-          getDocs(collection(db, "store_sales")),
+          getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200))),
+          getDocs(query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(200))),
+          getDocs(query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(150))),
           getDocs(collection(db, "cake_inventory")),
         ]);
 
@@ -183,8 +203,8 @@ export default function FinancesAdmin() {
     };
     fetchRevenue();
 
-    // 2. Real-time sync for expenses — يتحدث تلقائياً من أي صفحة
-    const q = query(collection(db, "expenses"), orderBy("createdAt", "desc"));
+    // 2. Real-time sync for expenses bounded to prevent delay
+    const q = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(200));
     const unsub = onSnapshot(q, (snap) => {
       const exps = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       setExpenses(exps);
@@ -192,6 +212,64 @@ export default function FinancesAdmin() {
 
     return () => unsub();
   }, [isAdmin]);
+
+  // Category Metrics for filter pills (individual count and sum)
+  const categoryMetrics = useMemo(() => {
+    const metrics: Record<string, { count: number; total: number }> = {
+      "الكل": { count: expenses.length, total: expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0) }
+    };
+
+    CATEGORY_TABS.forEach(tab => {
+      if (tab.id === "الكل") return;
+      const matching = expenses.filter(e => {
+        const cat = e.category || "";
+        if (tab.id === "المواد الأولية (كيك وكريمة)") {
+          return cat === "المواد الأولية (كيك وكريمة)" || cat === "مشتريات مخزنية" || cat === "مواد الكيك" || cat === "مواد كيك";
+        }
+        return cat === tab.id;
+      });
+      metrics[tab.id] = {
+        count: matching.length,
+        total: matching.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+      };
+    });
+
+    return metrics;
+  }, [expenses]);
+
+  // Filtered Expenses according to Search, Category Pill, and Payment Source
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(exp => {
+      // 1. Search Query
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase().trim();
+        const matchStore = exp.storeName?.toLowerCase().includes(q);
+        const matchTitle = exp.title?.toLowerCase().includes(q);
+        const matchDesc = exp.description?.toLowerCase().includes(q);
+        const matchInv = exp.invoiceNumber?.toString().includes(q);
+        const matchAmt = exp.amount?.toString().includes(q);
+        const matchItem = exp.items?.some((it: any) => it.name?.toLowerCase().includes(q) || it.itemName?.toLowerCase().includes(q));
+        if (!matchStore && !matchTitle && !matchDesc && !matchInv && !matchAmt && !matchItem) return false;
+      }
+
+      // 2. Category Filter
+      if (selectedCategoryFilter !== "الكل") {
+        const cat = exp.category || "";
+        if (selectedCategoryFilter === "المواد الأولية (كيك وكريمة)") {
+          const isMat = cat === "المواد الأولية (كيك وكريمة)" || cat === "مشتريات مخزنية" || cat === "مواد الكيك" || cat === "مواد كيك";
+          if (!isMat) return false;
+        } else if (cat !== selectedCategoryFilter) {
+          return false;
+        }
+      }
+
+      // 3. Payment Source Filter
+      if (sourceFilter === "cake" && exp.isDebt) return false;
+      if (sourceFilter === "salary" && !exp.isDebt) return false;
+
+      return true;
+    });
+  }, [expenses, searchTerm, selectedCategoryFilter, sourceFilter]);
 
   // Recalculate stats whenever expenses or revenue data changes with useMemo
   const calculatedStats = useMemo(() => {
@@ -586,21 +664,311 @@ export default function FinancesAdmin() {
         </div>
       </div>
 
+      {/* ═══════════════ EXPENSES CONTROLS & FILTER SYSTEM (MATCHING HOME FINANCE) ═══════════════ */}
       <div className="px-5 mt-6 relative z-10 space-y-4">
-        <h2 className="text-sm font-black text-gray-800 dark:text-gray-200 pt-2 flex items-center gap-2">
-          <Receipt className="w-4 h-4 text-purple-500" /> سجل المصروفات العام
-        </h2>
+        {/* Section Header & Main Actions */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-2 border-b border-gray-200/60 dark:border-zinc-800">
+          <div>
+            <h2 className="text-base sm:text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-purple-600" />
+              <span>سجل المصروفات وفواتير المشتريات</span>
+              <span className="text-xs font-bold text-gray-400 bg-gray-100 dark:bg-zinc-800 px-2.5 py-0.5 rounded-full">
+                {filteredExpenses.length} من {expenses.length}
+              </span>
+            </h2>
+            <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 mt-0.5">
+              نظام جرد مالي وفواتير متقدم، يتيح تصنيف المصروفات، فحص المواد، وجدولة المشتريات
+            </p>
+          </div>
 
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Add Multi-Item Invoice / Materials List Button */}
+            <button
+              type="button"
+              onClick={() => setIsAddInventoryOpen(true)}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs px-3.5 py-2.5 rounded-2xl flex items-center gap-1.5 shadow-md shadow-blue-500/20 active:scale-95 transition"
+            >
+              <Package className="w-4 h-4" />
+              <span>إضافة قائمة مواد / فاتورة 📦</span>
+            </button>
+
+            {/* Quick Expense Button */}
+            <button
+              type="button"
+              onClick={() => { setEditingExpense(null); setIsModalOpen(true); }}
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-black text-xs px-3.5 py-2.5 rounded-2xl flex items-center gap-1.5 shadow-md shadow-purple-500/20 active:scale-95 transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span>إضافة مصروف سريع ⚡</span>
+            </button>
+
+            {/* AI Invoice Camera Scan */}
+            <button
+              type="button"
+              onClick={() => setIsScanCakeInvoiceOpen(true)}
+              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs px-3 py-2.5 rounded-2xl flex items-center gap-1.5 shadow-xs active:scale-95 transition"
+              title="مسح فاتورة كيك بالكاميرا أو الاستوديو"
+            >
+              <Camera className="w-4 h-4" />
+              <span>مسح فاتورة 📸</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ─── Category Filter Pills with Individual Counts & Sums (Home Finance Model) ─── */}
+        <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar scroll-smooth">
+          {CATEGORY_TABS.map(tab => {
+            const isSelected = selectedCategoryFilter === tab.id;
+            const metric = categoryMetrics[tab.id] || { count: 0, total: 0 };
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSelectedCategoryFilter(tab.id)}
+                className={`shrink-0 px-3.5 py-2 rounded-2xl text-xs font-black transition flex items-center gap-2 border ${
+                  isSelected
+                    ? "bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/25 ring-2 ring-purple-400/40"
+                    : "bg-white dark:bg-zinc-900 text-gray-700 dark:text-gray-300 border-gray-200/80 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800"
+                }`}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  isSelected ? "bg-white/20 text-white" : "bg-gray-100 dark:bg-zinc-800 text-gray-500"
+                }`}>
+                  {metric.count}
+                </span>
+                <span className={`text-[11px] font-mono ${isSelected ? "text-amber-200" : "text-purple-600 dark:text-purple-400"}`}>
+                  {metric.total.toLocaleString()} د.ع
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ─── Search Bar & View Mode Toggle & Source Filter ─── */}
+        <div className="bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-gray-200/80 dark:border-zinc-800 flex flex-col md:flex-row items-center justify-between gap-3 shadow-xs">
+          {/* Search Box */}
+          <div className="relative w-full md:w-80">
+            <input
+              type="text"
+              placeholder="ابحث بالمحل، اسم المادة، الوصف، رقم الفاتورة..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 pr-9 text-xs font-bold outline-none focus:ring-2 focus:ring-purple-500/30 text-gray-900 dark:text-white"
+            />
+            <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between w-full md:w-auto gap-2">
+            {/* Payment Source Filter */}
+            <div className="flex items-center bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl border border-gray-200/80 dark:border-zinc-700/60 text-[11px] font-black">
+              <button
+                type="button"
+                onClick={() => setSourceFilter("all")}
+                className={`px-2.5 py-1 rounded-lg transition ${
+                  sourceFilter === "all" ? "bg-white dark:bg-zinc-900 text-purple-700 dark:text-purple-300 shadow-xs" : "text-gray-500"
+                }`}
+              >
+                الكل
+              </button>
+              <button
+                type="button"
+                onClick={() => setSourceFilter("cake")}
+                className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
+                  sourceFilter === "cake" ? "bg-emerald-600 text-white shadow-xs" : "text-gray-500"
+                }`}
+              >
+                <span>🎂 أموال الكيك</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSourceFilter("salary")}
+                className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
+                  sourceFilter === "salary" ? "bg-amber-600 text-white shadow-xs" : "text-gray-500"
+                }`}
+              >
+                <span>💳 دين من الراتب</span>
+              </button>
+            </div>
+
+            {/* View Mode Switcher: Cards vs Table */}
+            <div className="flex items-center bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl border border-gray-200/80 dark:border-zinc-700/60">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={`p-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                  viewMode === "cards" ? "bg-white dark:bg-zinc-900 text-purple-600 dark:text-purple-300 shadow-xs" : "text-gray-500"
+                }`}
+                title="عرض البطاقات الفاخرة"
+              >
+                <Grid3X3 className="w-4 h-4" />
+                <span className="hidden sm:inline text-[11px]">بطاقات</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`p-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                  viewMode === "table" ? "bg-white dark:bg-zinc-900 text-purple-600 dark:text-purple-300 shadow-xs" : "text-gray-500"
+                }`}
+                title="عرض الجدول المنظم"
+              >
+                <List className="w-4 h-4" />
+                <span className="hidden sm:inline text-[11px]">جدول منظم</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── DATA RENDERING: LOADING / EMPTY / TABLE / CARDS ─── */}
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-purple-500" /></div>
-        ) : expenses.length === 0 ? (
+        ) : filteredExpenses.length === 0 ? (
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-10 text-center shadow-sm border border-gray-100 dark:border-zinc-800">
             <Receipt className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-bold text-sm">لم يتم تسجيل أي مصروفات بعد.</p>
+            <p className="text-gray-500 font-bold text-sm">
+              {searchTerm || selectedCategoryFilter !== "الكل" || sourceFilter !== "all"
+                ? "لا توجد مصروفات أو فواتير مطابقة للبحث أو الفلتر المحدد"
+                : "لم يتم تسجيل أي مصروفات بعد."}
+            </p>
+            {(searchTerm || selectedCategoryFilter !== "الكل" || sourceFilter !== "all") && (
+              <button
+                type="button"
+                onClick={() => { setSearchTerm(""); setSelectedCategoryFilter("الكل"); setSourceFilter("all"); }}
+                className="mt-3 text-xs text-purple-600 font-bold underline"
+              >
+                إعادة ضبط جميع الفلاتر ↩
+              </button>
+            )}
+          </div>
+        ) : viewMode === "table" ? (
+          /* ═══════════ VIEW MODE 1: ORGANIZED RESPONSIVE TABLE ═══════════ */
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-zinc-800/80 border-b border-gray-200 dark:border-zinc-700 text-gray-500 font-black text-[11px]">
+                    <th className="py-3 px-3 text-center w-10">#</th>
+                    <th className="py-3 px-3">التاريخ والوقت</th>
+                    <th className="py-3 px-3">المحل / البيان</th>
+                    <th className="py-3 px-3">التصنيف</th>
+                    <th className="py-3 px-3">مصدر الدفع</th>
+                    <th className="py-3 px-3 text-center">المواد</th>
+                    <th className="py-3 px-3 text-left">المبلغ</th>
+                    <th className="py-3 px-3 text-center w-24">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-zinc-800 font-bold">
+                  {filteredExpenses.map((exp, idx) => {
+                    const isInv = exp.isInventoryExpense || exp.category === "مشتريات مخزنية" || !!exp.invoiceId || (exp.items && exp.items.length > 0);
+                    const itemsCount = exp.items?.length || exp.itemCount || 0;
+                    const dateStr = exp.createdAt?.toDate ? exp.createdAt.toDate().toLocaleDateString('en-GB') : (exp.date || '');
+                    const timeStr = exp.createdAt?.toDate ? exp.createdAt.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+
+                    return (
+                      <tr key={exp.id} className="hover:bg-purple-50/40 dark:hover:bg-zinc-800/40 transition">
+                        <td className="py-3 px-3 text-center text-gray-400 font-mono text-[11px]">{idx + 1}</td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
+                            <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                            <span>{dateStr}</span>
+                          </div>
+                          {timeStr && <span className="text-[10px] text-gray-400 font-normal">{timeStr}</span>}
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1.5">
+                            {exp.storeName ? (
+                              <span className="font-black text-gray-900 dark:text-white flex items-center gap-1">
+                                <Store className="w-3.5 h-3.5 text-purple-600" />
+                                {exp.storeName}
+                              </span>
+                            ) : null}
+                            {exp.invoiceNumber && (
+                              <span className="text-[10px] font-mono bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
+                                #{exp.invoiceNumber}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate max-w-xs mt-0.5">
+                            {exp.title && exp.storeName ? exp.title : exp.description}
+                          </p>
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded-lg text-[11px] font-bold">
+                            <Tag className="w-3 h-3 text-gray-400" />
+                            {exp.category}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          {exp.isDebt ? (
+                            <span className="text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-800 px-2 py-0.5 rounded-lg text-[10px] font-black">
+                              💳 دين من الراتب
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200/60 dark:border-emerald-800 px-2 py-0.5 rounded-lg text-[10px] font-black">
+                              🎂 أموال الكيك
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          {itemsCount > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
+                              className="px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[10px] font-black hover:bg-indigo-100 transition"
+                            >
+                              📋 {itemsCount} مواد
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 text-[11px]">-</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-left whitespace-nowrap font-mono">
+                          <span className={`font-black text-sm ${exp.isDebt ? 'text-amber-600' : 'text-rose-600'}`}>
+                            {Number(exp.amount).toLocaleString()}
+                          </span>
+                          <span className="text-[10px] text-gray-400 mr-1">د.ع</span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(exp)}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition"
+                              title="تعديل"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteExpense(exp.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition"
+                              title="حذف"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
+          /* ═══════════ VIEW MODE 2: LUXURY CARDS GRID ═══════════ */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pb-4">
-            {expenses.map(exp => {
+            {filteredExpenses.map(exp => {
               const isInv = exp.isInventoryExpense || exp.category === "مشتريات مخزنية" || !!exp.invoiceId || (exp.items && exp.items.length > 0);
               const itemsCount = exp.items?.length || exp.itemCount || 0;
 
@@ -696,7 +1064,7 @@ export default function FinancesAdmin() {
                   <div className="mt-auto pt-3 border-t border-gray-100 dark:border-zinc-800 flex justify-between items-end">
                     <div>
                       <p className="text-[11px] text-gray-400 font-bold mb-0.5">المبلغ المسجل</p>
-                      <span className={`font-black text-xl sm:text-2xl ${exp.isDebt ? 'text-orange-500' : 'text-red-500'}`}>
+                      <span className={`font-black text-xl sm:text-2xl ${exp.isDebt ? 'text-amber-600' : 'text-rose-600'}`}>
                         {Number(exp.amount).toLocaleString()} <span className="text-xs font-normal">د.ع</span>
                       </span>
                     </div>
@@ -894,6 +1262,30 @@ export default function FinancesAdmin() {
           toast.success("تم مسح الفاتورة وتسجيل المصروف وتحديث المخزن بنجاح!");
         }}
       />
+
+      {/* Add Cake Inventory / Multi-item Invoice Modal */}
+      {isAddInventoryOpen && (
+        <AddCakeInventoryModal
+          isOpen={isAddInventoryOpen}
+          onClose={() => setIsAddInventoryOpen(false)}
+          onSuccess={() => {
+            toast.success("تمت إضافة قائمة المواد / الفاتورة بنجاح!");
+          }}
+        />
+      )}
+
+      {/* Edit Cake Invoice Modal */}
+      {editingCakeInvoice && (
+        <EditCakeInvoiceModal
+          isOpen={!!editingCakeInvoice}
+          onClose={() => setEditingCakeInvoice(null)}
+          invoice={editingCakeInvoice}
+          onSuccess={() => {
+            setEditingCakeInvoice(null);
+            toast.success("تم تحديث الفاتورة بنجاح!");
+          }}
+        />
+      )}
 
       {/* ─── Receipt Items Modal (matching Home Finance) ─── */}
       {viewingReceiptExpense && (

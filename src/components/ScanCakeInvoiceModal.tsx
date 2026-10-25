@@ -78,6 +78,7 @@ export default function ScanCakeInvoiceModal({
   const [paymentSource, setPaymentSource] = useState<"none" | "cake" | "salary" | "split">("cake");
   const [splitDebtAmount, setSplitDebtAmount] = useState("");
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([]);
+  const [isStoreFocused, setIsStoreFocused] = useState(false);
 
   // Input refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -753,33 +754,50 @@ export default function ScanCakeInvoiceModal({
                   <div className="relative">
                     <input
                       type="text"
-                      list="scan-purchase-store-suggestions"
                       required
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-form-type="other"
+                      autoCorrect="off"
+                      spellCheck={false}
                       value={storeName}
-                      onChange={(e) => setStoreName(e.target.value)}
+                      onFocus={() => {
+                        if (storeName.trim().length >= 1) setIsStoreFocused(true);
+                      }}
+                      onBlur={() => setTimeout(() => setIsStoreFocused(false), 250)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setStoreName(val);
+                        if (val.trim().length >= 1) setIsStoreFocused(true);
+                        else setIsStoreFocused(false);
+                      }}
                       placeholder="مثال: معرض البركة، سوق الشورجة..."
                       className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold focus:border-blue-500 focus:outline-none"
                     />
-                    <datalist id="scan-purchase-store-suggestions">
-                      {storeSuggestions.map((st, idx) => (
-                        <option key={idx} value={st} />
-                      ))}
-                    </datalist>
+                    {isStoreFocused && storeName.trim().length >= 1 && (() => {
+                      const q = storeName.toLowerCase().trim();
+                      const matched = storeSuggestions.filter(st => st.toLowerCase().includes(q)).slice(0, 6);
+                      if (matched.length === 0) return null;
+                      return (
+                        <div className="absolute top-full mt-1 right-0 z-30 w-full bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden text-right">
+                          {matched.map((st, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setStoreName(st);
+                                setIsStoreFocused(false);
+                              }}
+                              className="w-full text-right px-3 py-2 hover:bg-blue-50 dark:hover:bg-zinc-700 text-xs font-bold text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-zinc-700/50 last:border-0"
+                            >
+                              🏬 {st}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
-                  {storeSuggestions.length > 0 && !storeName && (
-                    <div className="flex flex-wrap gap-1 mt-1 max-h-12 overflow-y-auto">
-                      {storeSuggestions.slice(0, 4).map((st, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setStoreName(st)}
-                          className="text-[9px] bg-gray-100 hover:bg-blue-50 dark:bg-zinc-800 dark:hover:bg-blue-950/40 text-gray-700 dark:text-gray-300 hover:text-blue-700 px-1.5 py-0.5 rounded border border-gray-200 dark:border-zinc-700 transition"
-                        >
-                          🏬 {st}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 <div>
