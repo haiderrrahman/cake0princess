@@ -1373,15 +1373,17 @@ export default function HomeFinanceDashboard() {
   const filteredExpenses = useMemo(() => {
     const query = expenseSearch.trim();
     const normQuery = normalizeArabicText(query);
+    const queryTokens = normQuery.split(/\s+/).filter(Boolean);
 
     return allExpenses.filter(exp => {
       const isDateValid = (expenseStartDate || expenseEndDate)
         ? isExpenseInDateRange(exp.date)
-        : (showAllDates || query.length > 0 ? true : isInCycle(exp.date));
+        : (showAllDates || queryTokens.length > 0 ? true : isInCycle(exp.date));
 
       if (!isDateValid) return false;
 
-      if (expenseCategoryFilter) {
+      // Filter by category only when not actively searching, so search can find items across all categories
+      if (expenseCategoryFilter && queryTokens.length === 0) {
         const matchesMain = exp.category === expenseCategoryFilter;
         const matchesItems = exp.items && exp.items.some(it => (it.category || detectProductCategory(it.name)) === expenseCategoryFilter);
         if (!matchesMain && !matchesItems) return false;
@@ -1392,16 +1394,41 @@ export default function HomeFinanceDashboard() {
         if (!hasW) return false;
       }
 
-      if (!query) return true;
+      if (queryTokens.length === 0) return true;
 
-      if (normalizeArabicText(exp.name).includes(normQuery)) return true;
-      if (normalizeArabicText(exp.category).includes(normQuery)) return true;
-      if (exp.amount.toString().includes(query)) return true;
-      if (exp.items && exp.items.some(item => normalizeArabicText(item.name).includes(normQuery))) {
-        return true;
+      // Build complete searchable corpus across store names, material names, categories, notes, prices, warranty
+      const itemTexts: string[] = [];
+      if (exp.items && Array.isArray(exp.items)) {
+        for (const it of exp.items) {
+          if (it.name) itemTexts.push(it.name);
+          if (it.place) itemTexts.push(it.place);
+          if (it.category) itemTexts.push(it.category);
+          if (it.warrantyNotes) itemTexts.push(it.warrantyNotes);
+          if (it.warrantyPeriod) itemTexts.push(it.warrantyPeriod);
+          if (it.price != null) itemTexts.push(it.price.toString());
+          if (it.quantity != null) itemTexts.push(it.quantity.toString());
+        }
       }
 
-      return false;
+      const expCorpus = [
+        exp.name,
+        exp.category,
+        exp.amount?.toString(),
+        exp.targetMember,
+        exp.date,
+        (exp as any).place,
+        (exp as any).store,
+        (exp as any).storeName,
+        (exp as any).notes,
+        (exp as any).description,
+        (exp as any).details,
+        (exp as any).invoiceNumber,
+        ...itemTexts
+      ].filter(Boolean).join(" ");
+
+      const normCorpus = normalizeArabicText(expCorpus);
+
+      return queryTokens.every(token => normCorpus.includes(token));
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [allExpenses, expenseSearch, expenseStartDate, expenseEndDate, showAllDates, selectedCycleId, expenseCategoryFilter, onlyWarrantyFilter]);
 
@@ -4967,7 +4994,7 @@ setEditTrip(null);
               <div className="relative flex-1">
                 <input
                   type="text"
-                  placeholder="ابحث في المصاريف..."
+                  placeholder="ابحث بالمحل، اسم المادة، المصروف، أو القسم..."
                   value={expenseSearch}
                   onChange={e => setExpenseSearch(e.target.value)}
                   className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl px-4 py-2.5 pr-10 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition"
@@ -9925,12 +9952,20 @@ setEditTrip(null);
 
               <div className="divide-y divide-gray-100 dark:divide-zinc-800/80 max-h-[350px] overflow-y-auto custom-scrollbar">
                 {(() => {
-                  const filtered = (viewingReceiptExpense.items || []).filter(item => 
-                    !receiptItemFilter || 
-                    item.name.toLowerCase().includes(receiptItemFilter.toLowerCase()) ||
-                    (item.category && item.category.toLowerCase().includes(receiptItemFilter.toLowerCase())) ||
-                    (item.place && item.place.toLowerCase().includes(receiptItemFilter.toLowerCase()))
-                  );
+                  const normItemFilter = normalizeArabicText(receiptItemFilter.trim());
+                  const itemTokens = normItemFilter.split(/\s+/).filter(Boolean);
+                  const filtered = (viewingReceiptExpense.items || []).filter(item => {
+                    if (itemTokens.length === 0) return true;
+                    const corpus = normalizeArabicText([
+                      item.name,
+                      item.category,
+                      item.place,
+                      item.warrantyNotes,
+                      item.price?.toString(),
+                      item.quantity?.toString()
+                    ].filter(Boolean).join(" "));
+                    return itemTokens.every(tok => corpus.includes(tok));
+                  });
 
                   // Apply view grouping mode
                   let itemsToRender = [...filtered];

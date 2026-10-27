@@ -13,6 +13,7 @@ const AddCakeInventoryModal = dynamic(() => import("@/components/AddCakeInventor
 const EditCakeInvoiceModal = dynamic(() => import("@/components/EditCakeInvoiceModal"), { ssr: false });
 
 import { getCachedFinancesStats, persistFinancesStats } from "@/lib/financesSync";
+import { normalizeArabicText } from "@/app/admin/home-finance/productCategories";
 
 const EXPENSE_CATEGORIES = [
   "المواد الأولية (كيك وكريمة)",
@@ -239,21 +240,56 @@ export default function FinancesAdmin() {
 
   // Filtered Expenses according to Search, Category Pill, and Payment Source
   const filteredExpenses = useMemo(() => {
+    const query = searchTerm.trim();
+    const normQuery = normalizeArabicText(query);
+    const queryTokens = normQuery.split(/\s+/).filter(Boolean);
+
     return expenses.filter(exp => {
-      // 1. Search Query
-      if (searchTerm.trim()) {
-        const q = searchTerm.toLowerCase().trim();
-        const matchStore = exp.storeName?.toLowerCase().includes(q);
-        const matchTitle = exp.title?.toLowerCase().includes(q);
-        const matchDesc = exp.description?.toLowerCase().includes(q);
-        const matchInv = exp.invoiceNumber?.toString().includes(q);
-        const matchAmt = exp.amount?.toString().includes(q);
-        const matchItem = exp.items?.some((it: any) => it.name?.toLowerCase().includes(q) || it.itemName?.toLowerCase().includes(q));
-        if (!matchStore && !matchTitle && !matchDesc && !matchInv && !matchAmt && !matchItem) return false;
+      // 1. Search Query (Multi-token, Arabic normalized, checks stores, materials, items, descriptions, invoice numbers, amounts, notes)
+      if (queryTokens.length > 0) {
+        const itemTexts: string[] = [];
+        if (exp.items && Array.isArray(exp.items)) {
+          for (const it of exp.items) {
+            if (it.name) itemTexts.push(it.name);
+            if (it.itemName) itemTexts.push(it.itemName);
+            if (it.place) itemTexts.push(it.place);
+            if (it.storeName) itemTexts.push(it.storeName);
+            if (it.category) itemTexts.push(it.category);
+            if (it.notes) itemTexts.push(it.notes);
+            if (it.unit) itemTexts.push(it.unit);
+            if (it.quantity != null) itemTexts.push(it.quantity.toString());
+            if (it.price != null) itemTexts.push(it.price.toString());
+            if (it.unitPrice != null) itemTexts.push(it.unitPrice.toString());
+            if (it.totalPrice != null) itemTexts.push(it.totalPrice.toString());
+          }
+        }
+
+        const expCorpus = [
+          exp.storeName,
+          exp.place,
+          exp.title,
+          exp.description,
+          exp.invoiceNumber?.toString(),
+          exp.amount?.toString(),
+          exp.category,
+          exp.supplierName,
+          exp.seller,
+          exp.notes,
+          exp.date,
+          exp.paidBy,
+          exp.paymentSource,
+          ...itemTexts
+        ].filter(Boolean).join(" ");
+
+        const normCorpus = normalizeArabicText(expCorpus);
+
+        // Every token typed by the user must match the corpus
+        const matchesAll = queryTokens.every(token => normCorpus.includes(token));
+        if (!matchesAll) return false;
       }
 
-      // 2. Category Filter
-      if (selectedCategoryFilter !== "الكل") {
+      // 2. Category Filter (Active when no search query is typed, so search can find items across all categories)
+      if (selectedCategoryFilter !== "الكل" && queryTokens.length === 0) {
         const cat = exp.category || "";
         if (selectedCategoryFilter === "المواد الأولية (كيك وكريمة)") {
           const isMat = cat === "المواد الأولية (كيك وكريمة)" || cat === "مشتريات مخزنية" || cat === "مواد الكيك" || cat === "مواد كيك";
@@ -1352,9 +1388,25 @@ export default function FinancesAdmin() {
               <div className="divide-y divide-gray-100 dark:divide-zinc-800/80 max-h-[350px] overflow-y-auto custom-scrollbar">
                 {(() => {
                   const rawItems = viewingReceiptExpense.items || [];
-                  const filtered = rawItems.filter((item: any) => 
-                    !receiptItemFilter || (item.name || "").toLowerCase().includes(receiptItemFilter.toLowerCase())
-                  );
+                  const normItemFilter = normalizeArabicText(receiptItemFilter.trim());
+                  const itemTokens = normItemFilter.split(/\s+/).filter(Boolean);
+                  const filtered = rawItems.filter((item: any) => {
+                    if (itemTokens.length === 0) return true;
+                    const corpus = normalizeArabicText([
+                      item.name,
+                      item.itemName,
+                      item.place,
+                      item.storeName,
+                      item.category,
+                      item.notes,
+                      item.unit,
+                      item.quantity?.toString(),
+                      item.price?.toString(),
+                      item.unitPrice?.toString(),
+                      item.totalPrice?.toString()
+                    ].filter(Boolean).join(" "));
+                    return itemTokens.every(tok => corpus.includes(tok));
+                  });
 
                   if (filtered.length === 0) {
                     return (

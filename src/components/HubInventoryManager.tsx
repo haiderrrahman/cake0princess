@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { customConfirm } from "@/lib/customConfirm";
 import { CakeMaterialPurchase } from "@/lib/cakeMaterialPurchases";
 import { CAKE_INVENTORY_CATEGORIES } from "@/lib/scanCakeInvoiceClient";
+import { normalizeArabicText } from "@/app/admin/home-finance/productCategories";
 
 interface HubInventoryManagerProps {
   inventory: any[];
@@ -147,11 +148,18 @@ export default function HubInventoryManager({
     return inventory.filter(item => {
       // 1. Text Search
       if (search.trim()) {
-        const q = search.trim().toLowerCase();
-        const matchName = item.name?.toLowerCase().includes(q);
-        const matchCat = item.category?.toLowerCase().includes(q);
-        const matchStore = item.lastStoreName?.toLowerCase().includes(q);
-        if (!matchName && !matchCat && !matchStore) return false;
+        const normSearch = normalizeArabicText(search.trim());
+        const tokens = normSearch.split(/\s+/).filter(Boolean);
+        const corpus = normalizeArabicText([
+          item.name,
+          item.category,
+          item.lastStoreName,
+          item.place,
+          item.storeName,
+          item.notes,
+          item.unit
+        ].filter(Boolean).join(" "));
+        if (!tokens.every(tok => corpus.includes(tok))) return false;
       }
 
       // 2. Status Filter
@@ -1202,14 +1210,44 @@ export default function HubInventoryManager({
 
           {/* Filter Invoices */}
           {(() => {
+            const query = purchasesSearch.trim();
+            const normQuery = normalizeArabicText(query);
+            const queryTokens = normQuery.split(/\s+/).filter(Boolean);
+
             const list = (groupedInvoices || []).filter(inv => {
-              if (!purchasesSearch.trim()) return true;
-              const q = purchasesSearch.toLowerCase().trim();
-              return (
-                inv.storeName?.toLowerCase().includes(q) ||
-                inv.date?.toLowerCase().includes(q) ||
-                inv.items?.some((i: any) => i.itemName?.toLowerCase().includes(q))
-              );
+              if (queryTokens.length === 0) return true;
+
+              const itemTexts: string[] = [];
+              if (inv.items && Array.isArray(inv.items)) {
+                for (const i of inv.items) {
+                  if (i.itemName) itemTexts.push(i.itemName);
+                  if (i.name) itemTexts.push(i.name);
+                  if (i.place) itemTexts.push(i.place);
+                  if (i.storeName) itemTexts.push(i.storeName);
+                  if (i.category) itemTexts.push(i.category);
+                  if (i.notes) itemTexts.push(i.notes);
+                  if (i.unit) itemTexts.push(i.unit);
+                  if (i.quantity != null) itemTexts.push(i.quantity.toString());
+                  if (i.unitPrice != null) itemTexts.push(i.unitPrice.toString());
+                  if (i.price != null) itemTexts.push(i.price.toString());
+                  if (i.totalPrice != null) itemTexts.push(i.totalPrice.toString());
+                }
+              }
+
+              const corpus = [
+                inv.storeName,
+                inv.place,
+                inv.invoiceNumber?.toString(),
+                inv.date,
+                inv.totalAmount?.toString(),
+                inv.notes,
+                inv.source,
+                inv.category,
+                ...itemTexts
+              ].filter(Boolean).join(" ");
+
+              const normCorpus = normalizeArabicText(corpus);
+              return queryTokens.every(token => normCorpus.includes(token));
             });
 
             if (list.length === 0) {

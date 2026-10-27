@@ -538,13 +538,15 @@ export const PRODUCT_CATEGORIES: ProductCategoryDef[] = [
 
 export function normalizeArabicText(str?: string): string {
   if (!str) return "";
+  const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
   return str
-    .replace(/[\u064B-\u065F\u0670]/g, "") // remove tashkeel
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "") // remove tashkeel and tatweel
     .replace(/[أإآ]/g, "ا")
     .replace(/ة/g, "ه")
     .replace(/ى/g, "ي")
     .replace(/ؤ/g, "و")
     .replace(/ئ/g, "ي")
+    .replace(/[٠-٩]/g, d => arabicDigits.indexOf(d).toString())
     .toLowerCase()
     .trim();
 }

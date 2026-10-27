@@ -1,12 +1,13 @@
 "use client";
 import { customConfirm } from '@/lib/customConfirm';
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { ArrowRight, Search, Plus, Loader2, Trash2, Calendar, Receipt, DollarSign, Tag } from "lucide-react";
 import { collection, addDoc, deleteDoc, doc, serverTimestamp, orderBy, query, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import FormattedNumberInput from "@/components/FormattedNumberInput";
+import { normalizeArabicText } from "@/app/admin/home-finance/productCategories";
 
 export default function ExpensesAdmin() {
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -88,10 +89,47 @@ export default function ExpensesAdmin() {
     }
   };
 
-  const filteredExpenses = expenses.filter(e => 
-    e.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    e.category?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredExpenses = useMemo(() => {
+    const query = searchQuery.trim();
+    if (!query) return expenses;
+
+    const normQuery = normalizeArabicText(query);
+    const queryTokens = normQuery.split(/\s+/).filter(Boolean);
+
+    return expenses.filter(e => {
+      const itemTexts: string[] = [];
+      if (e.items && Array.isArray(e.items)) {
+        for (const it of e.items) {
+          if (it.name) itemTexts.push(it.name);
+          if (it.itemName) itemTexts.push(it.itemName);
+          if (it.place) itemTexts.push(it.place);
+          if (it.storeName) itemTexts.push(it.storeName);
+          if (it.category) itemTexts.push(it.category);
+          if (it.notes) itemTexts.push(it.notes);
+          if (it.unit) itemTexts.push(it.unit);
+          if (it.quantity != null) itemTexts.push(it.quantity.toString());
+          if (it.price != null) itemTexts.push(it.price.toString());
+        }
+      }
+
+      const corpus = [
+        e.title,
+        e.category,
+        e.storeName,
+        e.place,
+        e.description,
+        e.notes,
+        e.amount?.toString(),
+        e.invoiceNumber?.toString(),
+        e.date,
+        e.paidBy,
+        ...itemTexts
+      ].filter(Boolean).join(" ");
+
+      const normCorpus = normalizeArabicText(corpus);
+      return queryTokens.every(token => normCorpus.includes(token));
+    });
+  }, [expenses, searchQuery]);
 
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
   const totalHaider = filteredExpenses.filter(e => e.paidBy === 'haider').reduce((s, e) => s + Number(e.amount), 0);
@@ -121,7 +159,7 @@ export default function ExpensesAdmin() {
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-300" />
               <input 
                 type="text" 
-                placeholder="بحث بالمصروف أو التصنيف..." 
+                placeholder="بحث بالمحل، اسم المادة، المصروف، أو التصنيف..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-white/10 border border-white/20 text-white placeholder-purple-300 rounded-xl py-2.5 pr-10 pl-4 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 backdrop-blur-md transition"
