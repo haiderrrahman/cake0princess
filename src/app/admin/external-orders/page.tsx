@@ -19,6 +19,7 @@ import CustomerProfileModal from "@/components/CustomerProfileModal";
 import MapLink from "@/components/MapLink";
 import CakeCostBreakdownModal from "@/components/CakeCostBreakdownModal";
 import { CakeCostBreakdown } from "@/lib/cakeCostCalculator";
+import Pagination from "@/components/Pagination";
 
 // Stale-While-Revalidate cache helper: ensures instant 0ms display on navigation
 // while real-time Firestore listeners immediately refresh in background
@@ -95,11 +96,14 @@ export default function ExternalOrdersAdmin() {
   const [customers, setCustomers] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Progressive Pagination States
-  const PAGE_SIZE = 25;
-  const [lastVisibleDoc, setLastVisibleDoc] = useState<any>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  // Pagination States (10 orders per page)
+  const PAGE_SIZE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset to first page when search query or status filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter]);
 
   const handleRefreshOrders = async () => {
     setIsRefreshing(true);
@@ -110,7 +114,6 @@ export default function ExternalOrdersAdmin() {
       setOrders(fetchedOrders);
       setFreshCache("cache_external_orders_v2", fetchedOrders);
       setFreshCache("cache_external_orders_all", fetchedOrders);
-      setHasMore(false);
       setLoading(false);
       toast.success(`تم تحديث ${fetchedOrders.length} طلب بنجاح 🔄`);
     } catch (e) {
@@ -118,11 +121,6 @@ export default function ExternalOrdersAdmin() {
     } finally {
       setIsRefreshing(false);
     }
-  };
-
-  const handleLoadMoreOrders = async () => {
-    // All orders loaded
-    setHasMore(false);
   };
 
   useEffect(() => {
@@ -134,7 +132,6 @@ export default function ExternalOrdersAdmin() {
         setOrders(fetchedOrders);
         setFreshCache("cache_external_orders_v2", fetchedOrders);
         setFreshCache("cache_external_orders_all", fetchedOrders);
-        setHasMore(false);
         setLoading(false);
       }
     }).catch(() => {});
@@ -146,7 +143,6 @@ export default function ExternalOrdersAdmin() {
       setOrders(fetchedOrders);
       setFreshCache("cache_external_orders_v2", fetchedOrders);
       setFreshCache("cache_external_orders_all", fetchedOrders);
-      setHasMore(false);
       setLoading(false);
     }, (error) => {
       console.error("Error fetching external orders:", error);
@@ -156,7 +152,6 @@ export default function ExternalOrdersAdmin() {
         setOrders(fetchedOrders);
         setFreshCache("cache_external_orders_v2", fetchedOrders);
         setFreshCache("cache_external_orders_all", fetchedOrders);
-        setHasMore(false);
         setLoading(false);
       });
     });
@@ -703,9 +698,13 @@ export default function ExternalOrdersAdmin() {
           {(() => {
             const debts = filteredOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled);
             const normals = filteredOrders.filter(o => !(o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled));
+            const totalPages = Math.max(1, Math.ceil(normals.length / PAGE_SIZE));
+            const safeCurrentPage = Math.min(currentPage, totalPages);
+            const paginatedNormals = normals.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+
             return (
               <>
-                {debts.length > 0 && (
+                {safeCurrentPage === 1 && debts.length > 0 && (
                   <div className="mb-6 space-y-3">
                     <div className="flex flex-col gap-2 mb-4">
                       <h3 className="font-black text-rose-600 dark:text-rose-400 flex items-center gap-2">
@@ -804,8 +803,8 @@ export default function ExternalOrdersAdmin() {
                     })}
                   </div>
                 )}
-                <div className="space-y-3">
-                  {normals.map(order => (
+                <div id="external-orders-list-anchor" className="space-y-3 scroll-mt-24">
+                  {paginatedNormals.map(order => (
                     <div key={order.id} className="bg-white dark:bg-zinc-900 rounded-[24px] p-4 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition">
 
               {/* Image / Icon */}
@@ -923,20 +922,26 @@ export default function ExternalOrdersAdmin() {
           ))}
                 </div>
 
-                {/* Progressive Pagination: Load More */}
-                {hasMore && (
-                  <div className="pt-4 pb-2 text-center">
-                    <button
-                      type="button"
-                      onClick={handleLoadMoreOrders}
-                      disabled={isLoadingMore}
-                      className="px-6 py-2.5 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 text-gray-700 dark:text-gray-200 font-bold text-xs hover:bg-gray-50 dark:hover:bg-zinc-800 shadow-sm active:scale-95 transition flex items-center justify-center gap-2 mx-auto disabled:opacity-50"
-                    >
-                      {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin text-pink-500" /> : <RefreshCw className="w-4 h-4 text-pink-500" />}
-                      <span>تحميل المزيد من الطلبات (25 إضافية)</span>
-                    </button>
-                  </div>
-                )}
+                {/* Numbered Pagination (10 per page) */}
+                <Pagination
+                  currentPage={safeCurrentPage}
+                  totalPages={totalPages}
+                  totalItems={normals.length}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={(page) => {
+                    setCurrentPage(page);
+                    if (typeof window !== "undefined") {
+                      const el = document.getElementById("external-orders-list-anchor");
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "start" });
+                      } else {
+                        window.scrollTo({ top: 350, behavior: "smooth" });
+                      }
+                    }
+                  }}
+                  itemName="طلب"
+                  className="mt-6 bg-white dark:bg-zinc-900 p-3 sm:p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm"
+                />
               </>
             );
           })()}

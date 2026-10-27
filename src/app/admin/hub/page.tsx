@@ -30,6 +30,7 @@ const CakeCostBreakdownModal = dynamic(() => import("@/components/CakeCostBreakd
 const MaterialPurchaseHistoryModal = dynamic(() => import("@/components/MaterialPurchaseHistoryModal"), { ssr: false });
 import { CakeMaterialPurchase, calculateItemConsumption } from "@/lib/cakeMaterialPurchases";
 import { customConfirm } from '@/lib/customConfirm';
+import Pagination from "@/components/Pagination";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   pending:    { label: "بانتظار الدفع", color: "text-gray-500", bg: "bg-gray-100 dark:bg-zinc-800" },
@@ -223,9 +224,16 @@ function AdminHubContent() {
   };
   const [orderFilter, setOrderFilter] = useState<"all" | "pending" | "processing" | "delivering">("all");
   
-  // External Orders filter and sort state
+  // External Orders filter, sort and pagination state (10 orders per page)
   const [extSearch, setExtSearch] = useState("");
   const [extSort, setExtSort] = useState<"newest" | "oldest" | "delivery_asc" | "delivery_desc">("delivery_asc");
+  const [extPage, setExtPage] = useState(1);
+  const EXT_PAGE_SIZE = 10;
+
+  // Reset to first page when search or sort changes
+  useEffect(() => {
+    setExtPage(1);
+  }, [extSearch, extSort]);
 
   const [showInventoryDeduct, setShowInventoryDeduct] = useState<string | null>(null); // orderId
   const [showEditExternal, setShowEditExternal] = useState<any | null>(null); // order object
@@ -1880,8 +1888,20 @@ function AdminHubContent() {
                     <p className="text-gray-500 font-bold">لا توجد طلبات تطابق بحثك</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 max-w-4xl mx-auto w-full">
-                    {filteredExternalOrders.map(order => {
+                  <>
+                    <div id="external-orders-list-anchor" className="scroll-mt-24" />
+                    {(() => {
+                      const totalExtPages = Math.max(1, Math.ceil(filteredExternalOrders.length / EXT_PAGE_SIZE));
+                      const safeExtPage = Math.min(extPage, totalExtPages);
+                      const paginatedExternalOrders = filteredExternalOrders.slice(
+                        (safeExtPage - 1) * EXT_PAGE_SIZE,
+                        safeExtPage * EXT_PAGE_SIZE
+                      );
+
+                      return (
+                        <>
+                          <div className="grid grid-cols-2 gap-2 max-w-4xl mx-auto w-full">
+                            {paginatedExternalOrders.map(order => {
                       const statusKey = order.status || "pending";
                       const extCfg = EXTERNAL_STATUS_CONFIG[statusKey] || EXTERNAL_STATUS_CONFIG["pending"];
                       const isUpdating = updatingOrder === order.id;
@@ -2051,7 +2071,31 @@ function AdminHubContent() {
                         </div>
                       );
                     })}
-                  </div>
+                          </div>
+
+                          <Pagination
+                            currentPage={safeExtPage}
+                            totalPages={totalExtPages}
+                            totalItems={filteredExternalOrders.length}
+                            pageSize={EXT_PAGE_SIZE}
+                            onPageChange={(page) => {
+                              setExtPage(page);
+                              if (typeof window !== "undefined") {
+                                const el = document.getElementById("external-orders-list-anchor");
+                                if (el) {
+                                  el.scrollIntoView({ behavior: "smooth", block: "start" });
+                                } else {
+                                  window.scrollTo({ top: 380, behavior: "smooth" });
+                                }
+                              }
+                            }}
+                            itemName="طلب سوشيال"
+                            className="max-w-4xl mx-auto w-full mt-4 bg-white dark:bg-zinc-900 p-3 sm:p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm"
+                          />
+                        </>
+                      );
+                    })()}
+                  </>
                 )}
               </div>
             )}
