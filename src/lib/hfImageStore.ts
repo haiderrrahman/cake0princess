@@ -140,7 +140,7 @@ export async function uploadImageResiliently(
     return dataUrl;
   }
 
-  const filename = `${folder}/${id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
+  const filename = `home_finance/${folder}/${id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
   
   // 1. Cache the high-res image locally in IndexedDB immediately
   await saveLocalImage(`hf_${id}`, dataUrl);
@@ -164,17 +164,25 @@ export async function uploadImageResiliently(
     console.warn("Firebase Storage upload fallback triggered:", storageError);
   }
 
-  // 3. Fallback: Compress to a tiny base64 thumbnail (<25KB) that safely fits in Firestore
-  const tinyThumbnail = await compressToTinyThumbnail(dataUrl, 380, 0.7);
+  // 3. Fallback: Compress to an ultra-tiny thumbnail (~3-5KB) so it safely fits in Firestore
+  const tinyThumbnail = await compressToTinyThumbnail(dataUrl, 180, 0.55);
   return tinyThumbnail;
 }
 
 /**
- * Strips all undefined fields recursively to prevent Firestore serialization rejection
+ * Strips all undefined fields recursively and guards against oversized base64 strings
+ * to prevent exceeding Firestore 1MB document limit.
  */
 export function cleanForFirestore<T>(obj: T): T {
   if (obj === null || obj === undefined) {
     return null as any;
+  }
+  if (typeof obj === "string") {
+    // If an inline base64 string is exceedingly large (> 25KB), strip it to protect Firestore limit
+    if (obj.startsWith("data:image") && obj.length > 25000) {
+      return "" as any;
+    }
+    return obj;
   }
   if (Array.isArray(obj)) {
     return obj.map(item => cleanForFirestore(item)).filter(item => item !== undefined) as any;

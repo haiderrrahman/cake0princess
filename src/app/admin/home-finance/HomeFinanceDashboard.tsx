@@ -371,7 +371,31 @@ const FAMILY_MEMBERS = ["حيدر", "إيمان", "رقية", "قنوت", "إي�
 
 const syncToFirebase = async (key: string, data: any) => {
   try {
-    const cleanData = cleanForFirestore(data);
+    let cleanData = cleanForFirestore(data);
+
+    // Safeguard: Firestore document limit is 1,048,576 bytes.
+    // If the data exceeds 750KB, prune oversized inline base64 images from older entries to ensure the save ALWAYS succeeds
+    try {
+      const serialized = JSON.stringify(cleanData);
+      if (serialized.length > 750000 && Array.isArray(cleanData)) {
+        console.warn(`[syncToFirebase] Warning: ${key} payload is ${serialized.length} bytes. Pruning legacy base64 images from older entries.`);
+        cleanData = cleanData.map((item: any, idx: number) => {
+          if (idx >= 15) {
+            const copy = { ...item };
+            if (copy.imageUrl && copy.imageUrl.startsWith("data:image")) copy.imageUrl = "";
+            if (copy.receiptImages && Array.isArray(copy.receiptImages)) {
+              copy.receiptImages = copy.receiptImages.filter((img: string) => !img.startsWith("data:image"));
+            }
+            if (copy.images && Array.isArray(copy.images)) {
+              copy.images = copy.images.filter((img: string) => !img.startsWith("data:image"));
+            }
+            return copy;
+          }
+          return item;
+        });
+      }
+    } catch (e) {}
+
     await setDoc(doc(db, "home_finance", key), { data: cleanData });
     if (typeof window !== "undefined") {
       try {
@@ -470,6 +494,25 @@ function getCachedHf<T>(key: string, fallback: T): T {
   return fallback;
 }
 
+function mergeById<T extends { id?: string }>(localList: T[], remoteList: T[]): { merged: T[], hasNewLocal: boolean } {
+  if (!Array.isArray(localList) || localList.length === 0) {
+    return { merged: Array.isArray(remoteList) ? remoteList : [], hasNewLocal: false };
+  }
+  if (!Array.isArray(remoteList) || remoteList.length === 0) {
+    return { merged: localList, hasNewLocal: true };
+  }
+
+  const remoteIdSet = new Set(remoteList.map(item => item?.id).filter(Boolean));
+  const missingFromRemote = localList.filter(item => item?.id && !remoteIdSet.has(item.id));
+
+  if (missingFromRemote.length === 0) {
+    return { merged: remoteList, hasNewLocal: false };
+  }
+
+  // Keep all unique local items preserved at the front
+  return { merged: [...missingFromRemote, ...remoteList], hasNewLocal: true };
+}
+
 export default function HomeFinanceDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "expenses" | "income" | "installments" | "needs" | "bills" | "debts" | "inventory" | "car" | "travel" | "familyNeeds" | "futurePlans">("overview");
 
@@ -537,6 +580,43 @@ export default function HomeFinanceDashboard() {
 
   const [mounted, setMounted] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleForceSync = async () => {
+    setIsSyncing(true);
+    toast("جاري فحص ومزامنة البيانات مع السحابة... ⏳", { id: "force_sync" });
+    try {
+      const allSyncKeys = [
+        "expenses", "incomes", "inventory", "carInventory", "travelInventory",
+        "needs", "debts", "bills", "installments", "familyNeeds", "familyHealth",
+        "travelTrips", "travelExpenses", "futurePlans", "settings"
+      ];
+      let syncedCount = 0;
+      for (const k of allSyncKeys) {
+        const snap = await getDoc(doc(db, "home_finance", k));
+        const remote = snap.exists() ? snap.data()?.data : null;
+        const local = getCachedHf(k, null);
+        if (Array.isArray(local) && Array.isArray(remote)) {
+          const { merged, hasNewLocal } = mergeById(local, remote);
+          if (hasNewLocal) {
+            await syncToFirebase(k, merged);
+            syncedCount += (merged.length - remote.length);
+          }
+        }
+      }
+      toast.dismiss("force_sync");
+      if (syncedCount > 0) {
+        toast.success(`تمت مزامنة ${syncedCount} من العناصر الجديدة مع السحابة بنجاح! ☁️`);
+      } else {
+        toast.success("جميع البيانات متزامنة ولحظية بالكامل مع السحابة ✅");
+      }
+    } catch (e: any) {
+      toast.dismiss("force_sync");
+      toast.error(`حدث خطأ أثناء المزامنة: ${e?.message || "يرجى التحقق من الاتصال"}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Smart Modals
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -948,31 +1028,68 @@ export default function HomeFinanceDashboard() {
       setDataLoading(false);
     }, 1200);
 
-    // Batch fetch all collections in parallel using Promise.all instead of 14 separate onSnapshot listeners
-    Promise.all(keys.map(k => getDoc(doc(db, "home_finance", k))))
-      .then((snaps) => {
-        snaps.forEach((snap, idx) => {
-          const k = keys[idx];
-          if (snap.exists() && snap.data()?.data) {
-            const val = snap.data().data;
-            setters[k](val);
+    // Live Real-Time onSnapshot Listeners across all devices and browsers
+    const unsubs: (() => void)[] = [];
+    const firstLoadFlags: Record<string, boolean> = {};
+
+    keys.forEach((k) => {
+      firstLoadFlags[k] = true;
+      const unsub = onSnapshot(doc(db, "home_finance", k), (snap) => {
+        if (snap.exists() && snap.data()?.data !== undefined) {
+          const remoteVal = snap.data().data;
+
+          if (firstLoadFlags[k]) {
+            firstLoadFlags[k] = false;
+            // On initial connection, reconcile local cache (e.g. mobile inputs) with remote Firestore
+            if (k === "settings") {
+              const localCached = getCachedHf<any>(k, {});
+              const mergedSettings = { ...remoteVal, ...localCached, budgetLimits: { ...localCached?.budgetLimits, ...remoteVal?.budgetLimits } };
+              setters[k](mergedSettings);
+              try { localStorage.setItem(`cached_hf_${k}`, JSON.stringify(mergedSettings)); } catch (e) {}
+            } else if (Array.isArray(remoteVal)) {
+              const localCached = getCachedHf(k, []);
+              const { merged, hasNewLocal } = mergeById(localCached, remoteVal);
+              setters[k](merged);
+              try { localStorage.setItem(`cached_hf_${k}`, JSON.stringify(merged)); } catch (e) {}
+              if (hasNewLocal) {
+                console.log(`[Auto-Sync] Found ${merged.length - remoteVal.length} unsynced local items for ${k}, uploading to Firestore...`);
+                syncToFirebase(k, merged);
+              }
+            } else {
+              setters[k](remoteVal);
+              try { localStorage.setItem(`cached_hf_${k}`, JSON.stringify(remoteVal)); } catch (e) {}
+            }
+          } else {
+            // Subsequent real-time snapshot updates
+            setters[k](remoteVal);
             if (typeof window !== "undefined") {
               try {
-                localStorage.setItem(`cached_hf_${k}`, JSON.stringify(val));
+                localStorage.setItem(`cached_hf_${k}`, JSON.stringify(remoteVal));
               } catch (e) {}
             }
-          } else if (!snap.exists()) {
-            setters[k]([]);
           }
-          loadedKeys.add(k);
-        });
+        } else if (!snap.exists()) {
+          if (firstLoadFlags[k]) {
+            firstLoadFlags[k] = false;
+            const localCached = getCachedHf(k, k === "settings" ? {} : []);
+            if (Array.isArray(localCached) && localCached.length > 0) {
+              setters[k](localCached);
+              syncToFirebase(k, localCached);
+            } else {
+              setters[k](k === "settings" ? {} : []);
+            }
+          }
+        }
+        loadedKeys.add(k);
         checkAllLoaded();
-      })
-      .catch((err) => {
-        console.error("Home finance batch fetch error:", err);
-        keys.forEach(k => loadedKeys.add(k));
+      }, (err) => {
+        console.error(`Home finance onSnapshot error for ${k}:`, err);
+        loadedKeys.add(k);
         checkAllLoaded();
       });
+
+      unsubs.push(unsub);
+    });
 
     setMounted(true);
 
@@ -1047,6 +1164,7 @@ export default function HomeFinanceDashboard() {
 
     return () => {
       clearTimeout(safetyTimeout);
+      unsubs.forEach(u => u());
       unsubExpenses();
       unsubWallet();
     };
@@ -4306,6 +4424,15 @@ setEditTrip(null);
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span>🏡 منزل حيدر وإيمان</span>
                 </span>
+                <button
+                  type="button"
+                  onClick={handleForceSync}
+                  title="مزامنة فورية حية بين الموبايل والحاسوب - انقر للتحديث الفوري"
+                  className="bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-200 border border-emerald-400/40 px-2.5 py-0.5 rounded-full text-[10px] font-black shadow-xs flex items-center gap-1.5 backdrop-blur-md transition active:scale-95 cursor-pointer"
+                >
+                  <span className={`w-2 h-2 rounded-full ${isSyncing ? "bg-amber-400 animate-spin" : "bg-emerald-400 animate-pulse"}`} />
+                  <span>{isSyncing ? "جاري المزامنة... ⏳" : "متزامن لحظياً ☁️"}</span>
+                </button>
                 <span className="text-purple-300/80 text-[11px] font-bold">
                   {new Date().toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
                 </span>

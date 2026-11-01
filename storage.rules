@@ -12,6 +12,22 @@ service firebase.storage {
       allow read, write: if true;
     }
 
+    match /receipts/{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    match /needs/{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    match /inventory/{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    match /health/{allPaths=**} {
+      allow read, write: if true;
+    }
+
     match /products/{imageId} {
       allow read: if true;
       allow write: if isAdmin();
