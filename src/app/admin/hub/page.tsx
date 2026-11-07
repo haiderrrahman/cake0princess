@@ -210,6 +210,13 @@ function AdminHubContent() {
       setExtOrdersLoaded(true);
       saveHubCache("cache_external_orders_all", allExt);
       saveHubCache("cache_external_orders_v2", allExt);
+      try {
+        const cleanExt = allExt.slice(0, 50).map(o => ({
+          ...o,
+          image: o.image && o.image.startsWith("data:") ? undefined : o.image
+        }));
+        setFreshCache("cache_external_orders_v2", cleanExt);
+      } catch {}
       toast.success(`تم تحديث ${allExt.length} طلب سوشيال بنجاح 🔄`);
     } catch (e) {
       console.error("Refresh error:", e);
@@ -440,13 +447,20 @@ function AdminHubContent() {
     // 2. Real-time snapshot listener with limit to ensure maximum speed and zero lag
     const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(250));
     const unsubExt = onSnapshot(qExt, (snap) => {
-      if (snap.metadata.fromCache) return;
+      
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setExternalOrders(allExt);
       setExtOrdersLoaded(true);
       setLoading(false);
       saveHubCache("cache_external_orders_all", allExt);
       saveHubCache("cache_external_orders_v2", allExt);
+      try {
+        const cleanExt = allExt.slice(0, 50).map(o => ({
+          ...o,
+          image: o.image && o.image.startsWith("data:") ? undefined : o.image
+        }));
+        setFreshCache("cache_external_orders_v2", cleanExt);
+      } catch {}
     }, (err) => {
       console.error("External orders listener error:", err);
       // Fallback
@@ -457,6 +471,13 @@ function AdminHubContent() {
         setLoading(false);
         saveHubCache("cache_external_orders_all", allExt);
         saveHubCache("cache_external_orders_v2", allExt);
+      try {
+        const cleanExt = allExt.slice(0, 50).map(o => ({
+          ...o,
+          image: o.image && o.image.startsWith("data:") ? undefined : o.image
+        }));
+        setFreshCache("cache_external_orders_v2", cleanExt);
+      } catch {}
       }).catch(() => {
         setExtOrdersLoaded(true);
         setLoading(false);
