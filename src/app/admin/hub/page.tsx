@@ -434,16 +434,13 @@ function AdminHubContent() {
   // Real-time listeners for orders, external_orders, and store_sales
   useEffect(() => {
     // 1. Instant 0ms load from IndexedDB cache
-    getHubCache("cache_external_orders_all").then((cached) => {
-      if (Array.isArray(cached) && cached.length > 0) {
-        setExternalOrders((prev) => (prev.length === 0 ? cached : prev));
-        setExtOrdersLoaded(true);
-      }
-    });
+    // Instant load disabled to prevent stale data flash
+    // getHubCache disabled
 
     // 2. Real-time snapshot listener with limit to ensure maximum speed and zero lag
     const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(250));
     const unsubExt = onSnapshot(qExt, (snap) => {
+      if (snap.metadata.fromCache) return;
       const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setExternalOrders(allExt);
       setExtOrdersLoaded(true);
