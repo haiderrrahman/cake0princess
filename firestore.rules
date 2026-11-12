@@ -59,6 +59,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Family cycle tracking settings and history
+    match /familyCycleSettings/{memberName} {
+      allow read, write: if true;
+    }
+
     // Cake Inventory, Material Purchases & Invoices
     match /cake_inventory/{itemId} {
       allow read, write: if true;

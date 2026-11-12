@@ -940,7 +940,7 @@ export default function FamilySection({
         return (
           <div className="space-y-3">
             {/* Sub-view switcher for Iman & Ruqaya (السجلات الطبية مقابل دورة المرأة) */}
-            {isWomenCycleEligible && (
+            {isWomenCycleEligible ? (
               <div className="flex items-center justify-between gap-2 p-1.5 bg-pink-50/60 dark:bg-pink-950/20 border border-pink-200/60 dark:border-pink-900/30 rounded-2xl">
                 <div className="flex items-center gap-2">
                   <Flower2 className="w-4 h-4 text-pink-500" />
@@ -973,14 +973,36 @@ export default function FamilySection({
                   </button>
                 </div>
               </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2 p-2 bg-pink-50/50 dark:bg-pink-950/20 border border-pink-200/50 dark:border-pink-900/30 rounded-2xl">
+                <div className="flex items-center gap-2">
+                  <Flower2 className="w-4 h-4 text-pink-500" />
+                  <span className="font-black text-xs text-pink-900 dark:text-pink-200">
+                    ركن العناية والدورة الشهرية (إيمان ورقية)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMember("إيمان");
+                    setHealthSubView("cycle");
+                  }}
+                  className="px-3 py-1 rounded-xl bg-pink-500 hover:bg-pink-600 text-white text-xs font-black shadow-xs transition cursor-pointer flex items-center gap-1"
+                >
+                  <span>🌸 فتح ركن العناية الشهرية</span>
+                </button>
+              </div>
             )}
 
             {/* If Women Cycle Sub-view is selected for Iman or Ruqaya */}
-            {isWomenCycleEligible && healthSubView === "cycle" ? (
+            {healthSubView === "cycle" ? (
               <div className="animate-in fade-in duration-300">
                 <WomenCycleCare
                   currentMember={activeMember === "رقية" ? "رقية" : "إيمان"}
-                  onMemberChange={m => setActiveMember(m)}
+                  onMemberChange={m => {
+                    setActiveMember(m);
+                    setHealthSubView("cycle");
+                  }}
                 />
               </div>
             ) : (
