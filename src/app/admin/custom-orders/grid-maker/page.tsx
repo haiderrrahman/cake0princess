@@ -20,6 +20,14 @@ type Tool = {
 
 const TOOLS: Tool[] = [
   {
+    title: "طباعة ورقة A4",
+    icon: Printer,
+    href: "/admin/custom-orders/grid-maker/a4-print",
+    bg: "bg-gradient-to-br from-[#00b4db] to-[#0083b0]",
+    shadow: "shadow-cyan-500/30",
+    badge: "A4 جاهز",
+  },
+  {
     title: "كولاج الصور",
     icon: Layout,
     href: "/admin/custom-orders/grid-maker/collage",

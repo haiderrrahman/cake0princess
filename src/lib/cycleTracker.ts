@@ -16,7 +16,7 @@ export interface PredictedCycle {
   cycleIndex: number;
   startDate: string;          // YYYY-MM-DD
   endDate: string;            // YYYY-MM-DD
-  daysUntilStart: number;     // calendar days relative to today
+  daysUntilStart: number;     // calendar days relative to reference date
   monthName: string;          // Arabic month + year
   ovulationDate: string;      // estimated peak ovulation date
   fertileWindowStart: string; // start of fertile days
@@ -94,7 +94,26 @@ const ARABIC_DAYS = [
   "السبت"
 ];
 
-// Default initial settings with smart recent dates
+/**
+ * Strictly normalize Arabic member name to either "إيمان" or "رقية"
+ */
+export function normalizeMemberName(name: string): "إيمان" | "رقية" {
+  if (!name) return "إيمان";
+  const s = name.trim().toLowerCase();
+  if (s.includes("رق") || s.includes("ruq") || s.includes("roq")) {
+    return "رقية";
+  }
+  return "إيمان";
+}
+
+/**
+ * Stable document key for Firestore home_finance
+ */
+export function getMemberDocKey(memberName: string): string {
+  return normalizeMemberName(memberName) === "رقية" ? "cycle_ruqayya" : "cycle_iman";
+}
+
+// Default initial settings with distinct dates for Iman and Ruqayya
 export const DEFAULT_CYCLE_SETTINGS: Record<string, CycleMemberSettings> = {
   "إيمان": {
     memberName: "إيمان",
@@ -112,18 +131,18 @@ export const DEFAULT_CYCLE_SETTINGS: Record<string, CycleMemberSettings> = {
     memberName: "رقية",
     periodDuration: 5,
     cycleLength: 28,
-    lastPeriodDate: "2026-10-25",
+    lastPeriodDate: "2026-11-01",
     customEmail: "",
     notes: "دورة رقية 5 أيام كل 28 يوماً",
     history: [
-      { id: "h-ruq-1", startDate: "2026-10-25", duration: 5, notes: "دورة تشرين الأول" },
-      { id: "h-ruq-2", startDate: "2026-09-27", duration: 5, notes: "دورة أيلول" }
+      { id: "h-ruq-1", startDate: "2026-11-01", duration: 5, notes: "دورة تشرين الثاني" },
+      { id: "h-ruq-2", startDate: "2026-10-04", duration: 5, notes: "دورة تشرين الأول" }
     ]
   }
 };
 
 /**
- * Format Date object to YYYY-MM-DD
+ * Format Date object to YYYY-MM-DD in local time
  */
 export function formatToDateString(d: Date): string {
   const year = d.getFullYear();
@@ -205,10 +224,9 @@ export function predictUpcomingCycles(
   // Find next cycle start based on lastStartDate
   let nextStart = addDaysToDateString(lastStartDate, cLength);
 
-  // If the last start is very old, find the first future or current expected start
-  let diffFromRef = diffInDays(referenceDateStr, nextStart);
-  if (diffFromRef < -30) {
-    // Bring it forward so the predictions reflect relevant upcoming cycles
+  // If the last start is very old, find the first relevant upcoming start
+  const diffFromRef = diffInDays(referenceDateStr, nextStart);
+  if (diffFromRef < -35) {
     const elapsedCycles = Math.ceil(Math.abs(diffFromRef) / cLength);
     nextStart = addDaysToDateString(lastStartDate, elapsedCycles * cLength);
   }
@@ -261,6 +279,7 @@ export function calculateCycleStatus(
   settings: CycleMemberSettings,
   referenceDateStr: string = formatToDateString(new Date())
 ): CycleStatusInsight {
+  const normalizedName = normalizeMemberName(settings.memberName);
   const periodDuration = Math.max(1, settings.periodDuration || 5);
   const cycleLength = Math.max(periodDuration + 1, settings.cycleLength || 28);
   const lastPeriodDate = settings.lastPeriodDate || referenceDateStr;
@@ -294,10 +313,6 @@ export function calculateCycleStatus(
   );
 
   // Biological Phases:
-  // 1. Menstrual: Days 1 to periodDuration
-  // 2. Follicular: After period until ovulation window (Day 6 to 11)
-  // 3. Ovulation: Days 12 to 16
-  // 4. Luteal: Day 17 to cycleLength
   let currentPhase: CycleStatusInsight["currentPhase"] = {
     key: "follicular",
     title: "المرحلة الجرابية (نشاط وتجدد)",
@@ -350,7 +365,7 @@ export function calculateCycleStatus(
   );
 
   return {
-    memberName: settings.memberName,
+    memberName: normalizedName,
     isConfigured: !!settings.lastPeriodDate,
     periodDuration,
     cycleLength,
@@ -388,7 +403,6 @@ export function isImanAccount(user: { email?: string | null; displayName?: strin
     return true;
   }
 
-  // Common keywords for Iman
   const emailMatch = email.includes("iman") || email.includes("eman") || email.includes("eiman");
   const nameMatch = name.includes("إيمان") || name.includes("ايمان") || name.toLowerCase().includes("iman") || name.toLowerCase().includes("eman");
 
@@ -396,7 +410,6 @@ export function isImanAccount(user: { email?: string | null; displayName?: strin
     return true;
   }
 
-  // Check local override
   if (typeof window !== "undefined") {
     const forced = localStorage.getItem("force_iman_account");
     if (forced === "true") return true;
@@ -405,54 +418,44 @@ export function isImanAccount(user: { email?: string | null; displayName?: strin
   return false;
 }
 
-// Helper to normalize member name key for collection safety
-function getMemberDocKey(memberName: string): string {
-  return memberName === "رقية" ? "ruqayya" : "iman";
-}
-
 /**
- * Fetch cycle settings from Firestore with dual collection lookup and local fallback
+ * Fetch cycle settings from Firestore with guaranteed home_finance document key and local fallback
  */
 export async function getMemberCycleSettings(memberName: "إيمان" | "رقية" | string): Promise<CycleMemberSettings> {
-  const defaultSetting = DEFAULT_CYCLE_SETTINGS[memberName] || {
-    memberName,
-    periodDuration: 5,
-    cycleLength: 28,
-    lastPeriodDate: formatToDateString(new Date()),
-    history: []
-  };
+  const normalizedName = normalizeMemberName(memberName);
+  const defaultSetting = DEFAULT_CYCLE_SETTINGS[normalizedName] || DEFAULT_CYCLE_SETTINGS["إيمان"];
 
-  // 1. Try familyCycleSettings
+  // 1. Primary: home_finance (always authorized in Firestore rules)
   try {
-    const docRef = doc(db, "familyCycleSettings", memberName);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const data = snap.data() as CycleMemberSettings;
-      return { ...defaultSetting, ...data };
-    }
-  } catch (err) {
-    // Will fallback below
-  }
-
-  // 2. Try home_finance collection fallback (doc: cycle_settings_iman / cycle_settings_ruqayya)
-  try {
-    const hfKey = `cycle_settings_${getMemberDocKey(memberName)}`;
+    const hfKey = getMemberDocKey(normalizedName);
     const hfRef = doc(db, "home_finance", hfKey);
     const hfSnap = await getDoc(hfRef);
     if (hfSnap.exists()) {
       const data = hfSnap.data() as CycleMemberSettings;
-      return { ...defaultSetting, ...data };
+      return { ...defaultSetting, ...data, memberName: normalizedName };
     }
   } catch (err) {
-    // Will fallback to localStorage
+    // Continue to fallback
+  }
+
+  // 2. Secondary: familyCycleSettings
+  try {
+    const docRef = doc(db, "familyCycleSettings", normalizedName);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data() as CycleMemberSettings;
+      return { ...defaultSetting, ...data, memberName: normalizedName };
+    }
+  } catch (err) {
+    // Continue to local storage
   }
 
   // 3. Fallback to localStorage
   if (typeof window !== "undefined") {
     try {
-      const local = localStorage.getItem(`cycle_settings_${memberName}`);
+      const local = localStorage.getItem(`cycle_settings_${normalizedName}`);
       if (local) {
-        return { ...defaultSetting, ...JSON.parse(local) };
+        return { ...defaultSetting, ...JSON.parse(local), memberName: normalizedName };
       }
     } catch {}
   }
@@ -461,36 +464,38 @@ export async function getMemberCycleSettings(memberName: "إيمان" | "رقي�
 }
 
 /**
- * Save cycle settings to Firestore (dual collections for safety) and local storage
+ * Save cycle settings to Firestore (dual collections for 100% reliability) and localStorage
  */
 export async function saveMemberCycleSettings(settings: CycleMemberSettings): Promise<void> {
+  const normalizedName = normalizeMemberName(settings.memberName);
   const toSave: CycleMemberSettings = {
     ...settings,
+    memberName: normalizedName,
     updatedAt: new Date().toISOString()
   };
 
   // 1. Cache immediately to localStorage
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem(`cycle_settings_${settings.memberName}`, JSON.stringify(toSave));
+      localStorage.setItem(`cycle_settings_${normalizedName}`, JSON.stringify(toSave));
     } catch {}
   }
 
-  // 2. Save to familyCycleSettings
+  // 2. Save directly to home_finance (100% permitted by firestore rules)
   try {
-    const docRef = doc(db, "familyCycleSettings", settings.memberName);
-    await setDoc(docRef, toSave, { merge: true });
-  } catch (err) {
-    console.warn(`Could not save to familyCycleSettings/${settings.memberName}, trying home_finance:`, err);
-  }
-
-  // 3. Also save to home_finance as guaranteed fallback
-  try {
-    const hfKey = `cycle_settings_${getMemberDocKey(settings.memberName)}`;
+    const hfKey = getMemberDocKey(normalizedName);
     const hfRef = doc(db, "home_finance", hfKey);
     await setDoc(hfRef, toSave, { merge: true });
   } catch (err) {
-    console.error(`Failed to save fallback cycle settings for ${settings.memberName}:`, err);
+    console.warn(`Could not save to home_finance/${getMemberDocKey(normalizedName)}:`, err);
+  }
+
+  // 3. Also save to familyCycleSettings for multi-path sync
+  try {
+    const docRef = doc(db, "familyCycleSettings", normalizedName);
+    await setDoc(docRef, toSave, { merge: true });
+  } catch (err) {
+    // Silently proceed
   }
 }
 
@@ -501,48 +506,46 @@ export function subscribeToMemberCycleSettings(
   memberName: "إيمان" | "رقية" | string,
   callback: (settings: CycleMemberSettings) => void
 ): () => void {
-  const defaultSetting = DEFAULT_CYCLE_SETTINGS[memberName] || {
-    memberName,
-    periodDuration: 5,
-    cycleLength: 28,
-    lastPeriodDate: formatToDateString(new Date()),
-    history: []
-  };
+  const normalizedName = normalizeMemberName(memberName);
+  const defaultSetting = DEFAULT_CYCLE_SETTINGS[normalizedName] || DEFAULT_CYCLE_SETTINGS["إيمان"];
 
-  // Check localStorage first for immediate initial render
+  // Check localStorage first for instant 0ms UI load
   if (typeof window !== "undefined") {
     try {
-      const local = localStorage.getItem(`cycle_settings_${memberName}`);
+      const local = localStorage.getItem(`cycle_settings_${normalizedName}`);
       if (local) {
-        callback({ ...defaultSetting, ...JSON.parse(local) });
+        callback({ ...defaultSetting, ...JSON.parse(local), memberName: normalizedName });
       }
     } catch {}
   }
 
-  const docRef = doc(db, "familyCycleSettings", memberName);
-  const unsubPrimary = onSnapshot(
-    docRef,
+  // Subscribe directly to home_finance (always authorized in security rules)
+  const hfKey = getMemberDocKey(normalizedName);
+  const hfRef = doc(db, "home_finance", hfKey);
+  const unsubHomeFinance = onSnapshot(
+    hfRef,
     (snap) => {
       if (snap.exists()) {
         const data = snap.data() as CycleMemberSettings;
-        callback({ ...defaultSetting, ...data });
+        callback({ ...defaultSetting, ...data, memberName: normalizedName });
+      } else {
+        // If empty in home_finance, check familyCycleSettings
+        getDoc(doc(db, "familyCycleSettings", normalizedName)).then((csnap) => {
+          if (csnap.exists()) {
+            callback({ ...defaultSetting, ...(csnap.data() as CycleMemberSettings), memberName: normalizedName });
+          } else {
+            callback(defaultSetting);
+          }
+        }).catch(() => callback(defaultSetting));
       }
     },
     (err) => {
-      console.warn(`familyCycleSettings snapshot error for ${memberName}, listening to home_finance fallback`);
-      // Listen to home_finance fallback if primary has error
-      const hfKey = `cycle_settings_${getMemberDocKey(memberName)}`;
-      const hfRef = doc(db, "home_finance", hfKey);
-      return onSnapshot(hfRef, (hfSnap) => {
-        if (hfSnap.exists()) {
-          const data = hfSnap.data() as CycleMemberSettings;
-          callback({ ...defaultSetting, ...data });
-        }
-      }, () => {});
+      console.warn(`Realtime subscription error for ${normalizedName}, using local fallback:`, err);
+      callback(defaultSetting);
     }
   );
 
-  return unsubPrimary;
+  return unsubHomeFinance;
 }
 
 /**
@@ -552,6 +555,7 @@ export async function updateCycleStartDate(
   currentSettings: CycleMemberSettings,
   newStartDate: string
 ): Promise<CycleMemberSettings> {
+  const normalizedName = normalizeMemberName(currentSettings.memberName);
   const duration = currentSettings.periodDuration || 5;
   const history = [...(currentSettings.history || [])];
 
@@ -575,6 +579,7 @@ export async function updateCycleStartDate(
 
   const updated: CycleMemberSettings = {
     ...currentSettings,
+    memberName: normalizedName,
     lastPeriodDate: newStartDate,
     history
   };
@@ -592,6 +597,7 @@ export async function logCycleEntry(
   duration?: number,
   notes?: string
 ): Promise<CycleMemberSettings> {
+  const normalizedName = normalizeMemberName(currentSettings.memberName);
   const periodDuration = duration || currentSettings.periodDuration || 5;
   const newHistoryItem: CycleHistoryItem = {
     id: `cycle-${Date.now()}`,
@@ -606,6 +612,7 @@ export async function logCycleEntry(
 
   const updated: CycleMemberSettings = {
     ...currentSettings,
+    memberName: normalizedName,
     lastPeriodDate: startDate,
     history: updatedHistory
   };
@@ -622,6 +629,7 @@ export async function updateHistoryEntry(
   itemId: string,
   updatedFields: Partial<CycleHistoryItem>
 ): Promise<CycleMemberSettings> {
+  const normalizedName = normalizeMemberName(currentSettings.memberName);
   const history = (currentSettings.history || []).map((item) => {
     if (item.id === itemId) {
       const duration = updatedFields.duration ?? item.duration;
@@ -645,6 +653,7 @@ export async function updateHistoryEntry(
 
   const updated: CycleMemberSettings = {
     ...currentSettings,
+    memberName: normalizedName,
     lastPeriodDate: newestStartDate,
     history
   };
@@ -660,6 +669,7 @@ export async function deleteHistoryEntry(
   currentSettings: CycleMemberSettings,
   itemId: string
 ): Promise<CycleMemberSettings> {
+  const normalizedName = normalizeMemberName(currentSettings.memberName);
   const history = (currentSettings.history || []).filter((item) => item.id !== itemId);
 
   // If history still has items, sync lastPeriodDate with the newest one
@@ -667,6 +677,7 @@ export async function deleteHistoryEntry(
 
   const updated: CycleMemberSettings = {
     ...currentSettings,
+    memberName: normalizedName,
     lastPeriodDate: newestStartDate,
     history
   };
