@@ -117,6 +117,8 @@ service cloud.firestore {
     // ───────────── الإدارة فقط ─────────────
     // طلبات السوشيال والزبائن (أسماء، هواتف، عناوين)
     match /external_orders/{id}   { allow read, write: if isAdmin(); }
+    // الصور الكاملة لطلبات السوشيال (الطلب نفسه يحمل مصغّرة فقط)
+    match /external_order_images/{id} { allow read, write: if isAdmin(); }
     match /customers/{id}         { allow read, write: if isAdmin(); }
     match /social_customers/{id}  { allow read, write: if isAdmin(); }
 

@@ -21,15 +21,16 @@ import {
   collection,
   deleteField,
   doc,
+  getDoc,
   getDocs,
   getDocsFromServer,
   increment,
   onSnapshot,
   serverTimestamp,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 
 // ───────────────────────── أدوات عامة ─────────────────────────
 
@@ -70,40 +71,54 @@ export function orderImage(o: any): string {
   return o?.imageUrl || o?.tempImageUrl || o?.image || "";
 }
 
-/** هل الطلب يحمل صورة مخزنة داخل المستند (base64)؟ */
-export function hasEmbeddedImage(o: any): boolean {
-  return isDataUrl(o?.imageUrl) || isDataUrl(o?.tempImageUrl) || isDataUrl(o?.image);
+
+// ───────────────────────── الكاش (IndexedDB) ─────────────────────────
+//
+// النسخة المحفوظة على الجهاز مطابقة لما يرسله الخادم (نفس الحقول ونفس الصور المصغّرة)،
+// حتى لا يظهر عند الفتح شكل مختلف ثم يتبدل. تُحفظ في IndexedDB لا في localStorage (حدّه 5MB).
+
+const IDB_NAME = "CakePrincessCache";
+const IDB_STORE = "kv";
+const IDB_KEY = "social_orders_v4";
+/** أي نص أطول من هذا (صورة كاملة قديمة داخل الطلب) لا يدخل الكاش */
+const MAX_CACHED_STRING = 60_000;
+const LEGACY_KEYS = ["cache_external_orders_v2", "cache_external_orders_all", "cache_social_orders_lite_v3"];
+
+function openCacheDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") return reject(new Error("no indexedDB"));
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(IDB_STORE)) req.result.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 
-// ───────────────────────── الكاش الخفيف ─────────────────────────
-
-const CACHE_KEY = "cache_social_orders_lite_v3";
-const LEGACY_KEYS = ["cache_external_orders_v2", "cache_external_orders_all"];
-
-/** نسخة خفيفة للكاش: بدون صور base64 وبتواريخ نصية */
-function toLite(o: any): any {
-  const lite: any = { ...o };
-  for (const k of ["imageUrl", "tempImageUrl", "image"]) {
-    if (isDataUrl(lite[k])) delete lite[k];
+/** نسخة قابلة للحفظ: تواريخ نصية، وبدون أي صورة كاملة مضمّنة */
+function toCacheable(o: any): any {
+  const out: any = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (typeof v === "string" && v.length > MAX_CACHED_STRING) continue;
+    if (v && typeof v === "object" && (typeof (v as any).toMillis === "function" || typeof (v as any).seconds === "number")) {
+      const ms = toMillis(v);
+      out[k] = ms ? new Date(ms).toISOString() : null;
+      continue;
+    }
+    out[k] = v;
   }
-  if (lite.createdAt && typeof lite.createdAt !== "string") {
-    const ms = toMillis(lite.createdAt);
-    lite.createdAt = ms ? new Date(ms).toISOString() : null;
-  }
-  if (lite.lastOrder && typeof lite.lastOrder !== "string") {
-    const ms = toMillis(lite.lastOrder);
-    lite.lastOrder = ms ? new Date(ms).toISOString() : null;
-  }
-  return lite;
+  return out;
 }
 
-function readCache(): any[] {
-  if (typeof window === "undefined") return [];
+async function readCache(): Promise<any[]> {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed?.data) ? parsed.data : [];
+    const dbi = await openCacheDb();
+    return await new Promise((resolve) => {
+      const req = dbi.transaction(IDB_STORE, "readonly").objectStore(IDB_STORE).get(IDB_KEY);
+      req.onsuccess = () => resolve(Array.isArray(req.result?.data) ? req.result.data : []);
+      req.onerror = () => resolve([]);
+    });
   } catch {
     return [];
   }
@@ -113,21 +128,26 @@ let cacheTimer: ReturnType<typeof setTimeout> | null = null;
 function writeCacheSoon(orders: any[]) {
   if (typeof window === "undefined") return;
   if (cacheTimer) clearTimeout(cacheTimer);
-  cacheTimer = setTimeout(() => {
+  cacheTimer = setTimeout(async () => {
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: orders.map(toLite) }));
-    } catch {
-      // إذا امتلأ التخزين نحذف الكاش بدل إبقاء نسخة قديمة مضللة
-      try { localStorage.removeItem(CACHE_KEY); } catch {}
-    }
-  }, 400);
+      const dbi = await openCacheDb();
+      dbi.transaction(IDB_STORE, "readwrite").objectStore(IDB_STORE).put({ ts: Date.now(), data: orders.map(toCacheable) }, IDB_KEY);
+    } catch {}
+  }, 300);
+}
+
+/** مسح النسخة المحفوظة (عند تسجيل الخروج مثلاً) */
+export async function clearSocialOrdersCache() {
+  try {
+    const dbi = await openCacheDb();
+    dbi.transaction(IDB_STORE, "readwrite").objectStore(IDB_STORE).delete(IDB_KEY);
+  } catch {}
 }
 
 let legacyCleaned = false;
 function cleanLegacyCaches() {
   if (legacyCleaned || typeof window === "undefined") return;
   legacyCleaned = true;
-  // المفاتيح القديمة كانت تحمل الصور وتملأ حصة localStorage (5MB) فتُفشل كاش بقية الصفحات
   for (const k of LEGACY_KEYS) {
     try { localStorage.removeItem(k); } catch {}
   }
@@ -151,6 +171,7 @@ let unsubscribe: (() => void) | null = null;
 let stopTimer: ReturnType<typeof setTimeout> | null = null;
 let hydrated = false;
 let retryCount = 0;
+let serverDelivered = false;
 
 function sortOrders(list: any[]): any[] {
   return list.sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
@@ -191,16 +212,19 @@ function start() {
   if (!hydrated) {
     hydrated = true;
     cleanLegacyCaches();
-    const cached = readCache();
-    if (cached.length > 0) {
-      state = { orders: sortOrders(cached), loading: false, fromCache: true, error: null };
-    }
+    // النسخة المحفوظة تُعرض فقط إذا لم يصل رد الخادم بعد
+    readCache().then((cached) => {
+      if (cached.length > 0 && !serverDelivered) {
+        setState({ orders: sortOrders(cached), loading: false, fromCache: true, error: null });
+      }
+    });
   }
 
   unsubscribe = onSnapshot(
     collection(db, "external_orders"),
     (snap) => {
       retryCount = 0;
+      serverDelivered = true;
       applyDocs(snap.docs.map((d) => ({ id: d.id, ...d.data() })), false);
     },
     (err) => {
@@ -243,6 +267,7 @@ export function subscribeSocialOrders(cb: (s: SocialOrdersState) => void): () =>
 /** تحديث يدوي من الخادم مباشرة */
 export async function refreshSocialOrders(): Promise<number> {
   const snap = await getDocsFromServer(collection(db, "external_orders"));
+  serverDelivered = true;
   applyDocs(snap.docs.map((d) => ({ id: d.id, ...d.data() })), false);
   if (!unsubscribe && listeners.size > 0) start();
   return snap.size;
@@ -508,6 +533,19 @@ export function withSoftTimeout<T>(p: Promise<T>, ms: number): Promise<T | undef
 }
 
 // ───────────────────────── الصور ─────────────────────────
+//
+// Firebase Storage غير مفعّل على المشروع، فكانت كل صورة تُحفظ كاملة داخل الطلب
+// (مئات الكيلوبايت لكل طلب) وتُنزَّل كلها عند كل فتح للصفحة.
+//
+// الآن:
+//   • الطلب يحمل صورة مصغّرة فقط (≈10–15KB) في imageUrl ⇒ القائمة خفيفة وسريعة.
+//   • الصورة الكاملة في مستند منفصل: external_order_images/{orderId} ⇒ تُحمَّل فقط عند الضغط عليها.
+
+export const IMAGES_COLLECTION = "external_order_images";
+/** حد حجم الصورة الكاملة كنص (حد مستند Firestore هو 1MB) */
+const FULL_IMAGE_MAX_CHARS = 700_000;
+/** صورة مضمّنة أكبر من هذا تُعتبر «ثقيلة» وتحتاج نقلاً */
+export const HEAVY_IMAGE_CHARS = 60_000;
 
 function readAsDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -518,107 +556,214 @@ function readAsDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/**
- * صورة مصغرة جداً (≈10-25KB) تُحفظ داخل مستند الطلب للعرض الفوري فقط،
- * ريثما تُرفع الصورة الكاملة إلى Storage. لا تُثقل المستند ولا الكاش.
- */
-export async function makeInlineThumbnail(file: Blob, maxDim = 320, quality = 0.6): Promise<string> {
-  if (typeof window === "undefined") return "";
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("image decode failed"));
+    el.src = src;
+  });
+}
+
+function renderJpeg(img: HTMLImageElement, maxDim: number, quality: number): string {
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  ctx.fillStyle = "#ffffff"; // صور PNG الشفافة لا تصير سوداء
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+/** صورة كاملة بجودة جيدة لا تتجاوز حد المستند */
+function renderFull(img: HTMLImageElement): string {
+  for (const dim of [1600, 1280, 1024, 800]) {
+    for (const q of [0.82, 0.72, 0.62]) {
+      const out = renderJpeg(img, dim, q);
+      if (out && out.length <= FULL_IMAGE_MAX_CHARS) return out;
+    }
+  }
+  return renderJpeg(img, 640, 0.6);
+}
+
+export interface PreparedImage {
+  /** للعرض في القوائم (داخل الطلب) */
+  thumb: string;
+  /** للعرض عند التكبير (مستند منفصل) */
+  full: string;
+}
+
+/** تجهيز صورة من ملف أو من نص data URL */
+export async function prepareOrderImage(source: Blob | string): Promise<PreparedImage | null> {
+  if (typeof window === "undefined") return null;
   try {
-    const src = await readAsDataUrl(file);
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error("image decode failed"));
-      el.src = src;
-    });
-    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(img.width * scale));
-    canvas.height = Math.max(1, Math.round(img.height * scale));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return "";
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", quality);
+    const src = typeof source === "string" ? source : await readAsDataUrl(source);
+    const img = await loadImage(src);
+    const thumb = renderJpeg(img, 360, 0.62);
+    const full = renderFull(img);
+    if (!thumb || !full) return null;
+    return { thumb, full };
   } catch {
-    return "";
+    return null;
   }
 }
 
-/** رفع صورة الطلب إلى Storage وإرجاع الرابط */
-export async function uploadOrderImage(orderId: string, file: Blob, ext = "jpg"): Promise<string> {
-  const fileRef = ref(storage, `external_orders/${orderId}_${Date.now()}.${ext}`);
-  await uploadBytes(fileRef, file, { contentType: file.type || "image/jpeg" });
-  return getDownloadURL(fileRef);
+/** للتوافق مع الاستدعاءات السابقة */
+export async function makeInlineThumbnail(file: Blob): Promise<string> {
+  return (await prepareOrderImage(file))?.thumb || "";
 }
 
-/**
- * رفع الصورة في الخلفية ثم تحديث الطلب بالرابط النهائي.
- * عند الفشل تبقى المصغّرة داخل الطلب ويُعاد سبب الفشل الحقيقي.
- */
-export async function attachOrderImage(orderId: string, file: Blob): Promise<{ ok: boolean; url?: string; reason?: string }> {
+/** حفظ الصورة الكاملة في مستندها المنفصل */
+export async function saveFullOrderImage(orderId: string, full: string): Promise<{ ok: boolean; reason?: string }> {
   try {
-    const ext = (file.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
-    const url = await uploadOrderImage(orderId, file, ext);
-    await updateDoc(doc(db, "external_orders", orderId), {
-      imageUrl: url,
-      tempImageUrl: deleteField(),
-      imagePending: deleteField(),
-    });
-    return { ok: true, url };
+    await setDoc(doc(db, IMAGES_COLLECTION, orderId), { full, updatedAt: serverTimestamp() });
+    return { ok: true };
   } catch (err) {
-    console.error("[socialOrders] image upload failed:", err);
+    console.error("[socialOrders] full image save failed:", err);
     return { ok: false, reason: describeFirebaseError(err) };
   }
+}
+
+const fullImageMemo = new Map<string, string>();
+
+/** جلب الصورة الكاملة للتكبير (مع رجوع للمصغّرة إن لم توجد) */
+export async function getFullOrderImage(order: any): Promise<string> {
+  const fallback = orderImage(order);
+  if (!order?.id) return fallback;
+  // صورة قديمة مخزنة في Storage أو صورة كاملة ما زالت داخل الطلب
+  if (fallback && !isDataUrl(fallback)) return fallback;
+  const embeddedFull = [order.tempImageUrl, order.image].find((v) => isDataUrl(v) && v.length > HEAVY_IMAGE_CHARS);
+  if (embeddedFull) return embeddedFull;
+  if (!order.hasFullImage) return fallback;
+  const memo = fullImageMemo.get(order.id);
+  if (memo) return memo;
+  try {
+    const snap = await getDoc(doc(db, IMAGES_COLLECTION, order.id));
+    const full = snap.exists() ? String(snap.data().full || "") : "";
+    if (full) {
+      fullImageMemo.set(order.id, full);
+      return full;
+    }
+  } catch {}
+  return fallback;
+}
+
+/** هل الطلب يحمل صورة كاملة ثقيلة داخل مستنده؟ */
+export function hasEmbeddedImage(o: any): boolean {
+  return [o?.imageUrl, o?.tempImageUrl, o?.image].some((v) => isDataUrl(v) && v.length > HEAVY_IMAGE_CHARS);
+}
+
+/**
+ * حقول الصورة لطلب جديد/معدَّل + حفظ النسخة الكاملة بعد حفظ الطلب.
+ * الاستخدام:
+ *   const img = await prepareOrderImage(file);
+ *   orderData = { ...orderData, ...imageFieldsFor(img) };
+ *   ... احفظ الطلب ...
+ *   await saveFullOrderImage(orderId, img.full)
+ */
+export function imageFieldsFor(img: PreparedImage | null, isEdit = false): Record<string, any> {
+  if (!img) return {};
+  return {
+    imageUrl: img.thumb,
+    hasFullImage: true,
+    ...(isEdit ? { tempImageUrl: deleteField(), image: deleteField(), imagePending: deleteField() } : {}),
+  };
 }
 
 export interface MigrationResult {
   found: number;
   migrated: number;
   failed: number;
-  /** سبب أول فشل (غالباً صلاحيات Storage) */
   reason?: string;
 }
 
 /**
- * نقل الصور المخزنة داخل مستندات الطلبات (base64) إلى Firebase Storage.
- * تُشغَّل مرة واحدة؛ بعدها يصير تحميل الصفحة خفيفاً جداً.
+ * نقل الصور الكاملة المضمّنة في الطلبات إلى external_order_images واستبدالها بمصغّرة.
+ * آمن: يكتب الصورة الكاملة أولاً، ثم يخفف الطلب. إذا فشلت الخطوة الأولى لا يُلمس الطلب.
  */
 export async function migrateEmbeddedImages(
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  source?: any[]
 ): Promise<MigrationResult> {
-  const snap = await getDocsFromServer(collection(db, "external_orders"));
-  const targets = snap.docs.filter((d) => hasEmbeddedImage(d.data()));
+  const docs = source
+    ? source
+    : (await getDocsFromServer(collection(db, "external_orders"))).docs.map((d) => ({ id: d.id, ...d.data() }));
+  const targets = docs.filter(hasEmbeddedImage);
   const result: MigrationResult = { found: targets.length, migrated: 0, failed: 0 };
 
   let done = 0;
-  for (const d of targets) {
-    const data = d.data() as any;
+  for (const data of targets) {
     try {
-      // نختار أكبر نسخة (الأعلى جودة) من الحقول الثلاثة
       const candidates = [data.imageUrl, data.tempImageUrl, data.image].filter(isDataUrl) as string[];
       const best = candidates.sort((a, b) => b.length - a.length)[0];
-      const blob = await (await fetch(best)).blob();
-      const ext = (blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
-      const url = await uploadOrderImage(`migrated_${d.id}`, blob, ext);
-      const patch: Record<string, any> = { imageUrl: url, tempImageUrl: deleteField() };
+      const prepared = await prepareOrderImage(best);
+      if (!prepared) throw new Error("تعذر قراءة الصورة");
+      const saved = await saveFullOrderImage(data.id, prepared.full);
+      if (!saved.ok) throw Object.assign(new Error(saved.reason), { code: "save-failed" });
+      const patch: Record<string, any> = {
+        hasFullImage: true,
+        tempImageUrl: deleteField(),
+        imagePending: deleteField(),
+      };
+      // لا نستبدل رابط Storage حقيقياً إن وُجد
+      if (!data.imageUrl || isDataUrl(data.imageUrl)) patch.imageUrl = prepared.thumb;
       if (isDataUrl(data.image)) patch.image = deleteField();
-      await updateDoc(doc(db, "external_orders", d.id), patch);
+      await updateDoc(doc(db, "external_orders", data.id), patch);
       result.migrated += 1;
     } catch (err: any) {
       result.failed += 1;
-      if (!result.reason) result.reason = describeFirebaseError(err);
-      // صلاحيات Storage مرفوضة: لا فائدة من تكرار المحاولة على البقية
-      if (String(err?.code || "").includes("unauthorized")) {
-        result.failed += targets.length - done - 1;
-        break;
-      }
+      if (!result.reason) result.reason = err?.message || describeFirebaseError(err);
+      if (String(err?.message || "").includes("صلاحية")) break; // الصلاحيات مرفوضة: لا فائدة من الإكمال
     }
     done += 1;
     onProgress?.(done, targets.length);
   }
   return result;
 }
+
+const MIGRATION_LOCK = "social_images_migration_lock";
+
+/**
+ * تشغيل النقل تلقائياً مرة واحدة في الخلفية عند وجود صور ثقيلة.
+ * قفل بسيط يمنع تشغيله من نافذتين معاً.
+ */
+export function useAutoMigrateImages(
+  orders: any[],
+  fromCache: boolean,
+  notify?: (msg: string, kind: "info" | "success" | "error") => void
+) {
+  const heavy = useMemo(() => orders.filter(hasEmbeddedImage), [orders]);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  useEffect(() => {
+    if (fromCache || heavy.length === 0 || autoMigrationRunning) return;
+    try {
+      const lock = Number(localStorage.getItem(MIGRATION_LOCK) || 0);
+      if (Date.now() - lock < 3 * 60_000) return;
+      localStorage.setItem(MIGRATION_LOCK, String(Date.now()));
+    } catch {}
+    autoMigrationRunning = true;
+    notify?.(`جاري تخفيف ${heavy.length} طلب (نقل الصور الكاملة) لتسريع الصفحة…`, "info");
+    setProgress({ done: 0, total: heavy.length });
+    migrateEmbeddedImages((done, total) => setProgress({ done, total }), heavy)
+      .then((res) => {
+        if (res.failed === 0) notify?.(`تم تخفيف ${res.migrated} طلب ✔ الصفحة صارت أسرع`, "success");
+        else notify?.(`خُفّف ${res.migrated} وتعذر ${res.failed}: ${res.reason || ""}`, "error");
+      })
+      .finally(() => {
+        autoMigrationRunning = false;
+        setProgress(null);
+        try { localStorage.removeItem(MIGRATION_LOCK); } catch {}
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heavy.length, fromCache]);
+
+  return { heavyCount: heavy.length, progress };
+}
+let autoMigrationRunning = false;
 
 // ───────────────────────── مبالغ ─────────────────────────
 

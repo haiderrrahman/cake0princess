@@ -12,7 +12,7 @@ import {
 import dynamic from "next/dynamic";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, query, orderBy, limit, onSnapshot, increment, where } from "firebase/firestore";
 import { toast } from "sonner";
-import { useSocialOrders, mutateSocialOrdersLocally, refreshSocialOrders, describeFirebaseError } from "@/lib/socialOrders";
+import { useSocialOrders, mutateSocialOrdersLocally, refreshSocialOrders, describeFirebaseError, useAutoMigrateImages, orderImage, getFullOrderImage } from "@/lib/socialOrders";
 import { db } from "@/lib/firebase";
 
 const InventoryDeductModal = dynamic(() => import("@/components/InventoryDeductModal"), { ssr: false });
@@ -160,7 +160,11 @@ const setFreshCache = (key: string, data: any) => {
 
 function AdminHubContent() {
   // طلبات السوشيال من المخزن المشترك (مستمع واحد لكل النظام + كاش خفيف بدون صور)
-  const { orders: externalOrders, loading: extOrdersLoading } = useSocialOrders();
+  const { orders: externalOrders, loading: extOrdersLoading, fromCache: extFromCache } = useSocialOrders();
+  // نقل الصور الكاملة القديمة من داخل الطلبات تلقائياً (مرة واحدة) حتى تصير القائمة خفيفة
+  const { progress: imageMigration } = useAutoMigrateImages(externalOrders, extFromCache, (msg, kind) =>
+    kind === "error" ? toast.error(msg, { duration: 9000 }) : kind === "success" ? toast.success(msg) : toast(msg)
+  );
   const extOrdersLoaded = !extOrdersLoading;
   const setExternalOrders = mutateSocialOrdersLocally;
   const [ordersLoaded, setOrdersLoaded] = useState(() => {
@@ -238,7 +242,16 @@ function AdminHubContent() {
   // Track purchase source per item: 'haider' | 'cake'
   const [purchaseSource, setPurchaseSource] = useState<Record<string, 'salary' | 'cake'>>({});
   const [invExpSummary, setInvExpSummary] = useState({ haider: 0, cake: 0 });
-  const [blacklistedCustomers, setBlacklistedCustomers] = useState<string[]>([]);
+  // القائمة السوداء محفوظة على الجهاز حتى يكون ترتيب الطلبات ثابتاً من أول عرض (كان يتبدل بعد ثانية)
+  const [blacklistedCustomers, setBlacklistedCustomers] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = JSON.parse(localStorage.getItem("hub_blacklist_v1") || "[]");
+      return Array.isArray(raw) ? raw : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Inventory sub-tab & cake material purchases state
   const [inventorySubTab, setInventorySubTab] = useState<'stock' | 'cycles' | 'purchases'>('stock');
@@ -404,7 +417,9 @@ function AdminHubContent() {
     const unsubCustomers = onSnapshot(query(collection(db, "customers"), where("isBlacklisted", "==", true)), (snap) => {
       const names = snap.docs.map(d => d.data().name).filter(Boolean);
       const phones = snap.docs.map(d => d.data().phone).filter(Boolean);
-      setBlacklistedCustomers([...names, ...phones]);
+      const list = [...names, ...phones];
+      setBlacklistedCustomers(list);
+      try { localStorage.setItem("hub_blacklist_v1", JSON.stringify(list)); } catch {}
     });
 
     return () => {
@@ -1819,6 +1834,16 @@ function AdminHubContent() {
                   </div>
 
                   <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    {extFromCache && (
+                      <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" /> مطابقة مع الخادم…
+                      </span>
+                    )}
+                    {imageMigration && (
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded-lg flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" /> تخفيف {imageMigration.done}/{imageMigration.total}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={handleRefreshExternal}
@@ -1888,13 +1913,19 @@ function AdminHubContent() {
                           
                           {/* Image Top */}
                           <div className="w-full aspect-square rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 border border-gray-100 dark:border-zinc-700 relative">
-                            {(order.imageUrl || order.tempImageUrl || order.image) ? (
+                            {orderImage(order) ? (
                               <img 
-                                src={order.imageUrl || order.tempImageUrl || order.image} 
+                                src={orderImage(order)} 
                                 alt={order.cakeName} 
                                 loading="lazy"
                                 decoding="async"
-                                onClick={() => window.open(order.imageUrl || order.tempImageUrl || order.image, '_blank')} 
+                                onClick={() => {
+                                  const title = `${order.customerName || ""} — ${order.cakeName || ""}`;
+                                  setPreviewZoomImageUrl({ url: orderImage(order), title });
+                                  getFullOrderImage(order).then((full) =>
+                                    setPreviewZoomImageUrl((cur) => (cur && cur.title === title ? { url: full, title } : cur))
+                                  );
+                                }} 
                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                               />
                             ) : (

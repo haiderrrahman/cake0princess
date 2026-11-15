@@ -5,7 +5,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { deleteField } from "firebase/firestore";
 import CustomerNameInput from "@/components/CustomerNameInput";
-import { attachOrderImage, makeInlineThumbnail, orderImage, saveCustomerFromOrder, useCustomerDirectory, withSoftTimeout } from "@/lib/socialOrders";
+import { imageFieldsFor, prepareOrderImage, saveFullOrderImage, orderImage, saveCustomerFromOrder, useCustomerDirectory, withSoftTimeout } from "@/lib/socialOrders";
 import imageCompression from 'browser-image-compression';
 import FormattedNumberInput from "@/components/FormattedNumberInput";
 import { toast } from "sonner";
@@ -164,7 +164,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       const isDebtSettled = numPaidAmount === numPrice;
 
       // مصغّرة خفيفة للعرض الفوري؛ الصورة الكاملة تُرفع إلى Storage في الخلفية
-      const tempImageUrl = imageFile ? await makeInlineThumbnail(imageFile) : "";
+      const prepared = imageFile ? await prepareOrderImage(imageFile) : null;
+      const tempImageUrl = prepared?.thumb || "";
 
       const computedDeliveryFee = deliveryType === "bismayah" 
         ? (bismayahComplex === "A" ? 1000 : 2000) 
@@ -219,7 +220,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,
         // بدون صورة جديدة لا نلمس حقول الصورة إطلاقاً
-        ...(tempImageUrl ? { imageUrl: tempImageUrl, imagePending: true, tempImageUrl: deleteField() } : {})
+        ...imageFieldsFor(prepared, true)
       });
 
       // تحديث بطاقة الزبون (لا يُحتسب الطلب مرتين عند التعديل)
@@ -232,13 +233,9 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         2500
       );
 
-      if (imageFile) {
-        attachOrderImage(order.id, imageFile).then((res) => {
-          if (res.ok) {
-            window.dispatchEvent(new CustomEvent('backgroundUploadSuccess'));
-          } else {
-            toast.error(`حُفظ التعديل لكن لم تُرفع الصورة الكاملة: ${res.reason}`, { duration: 7000 });
-          }
+      if (prepared) {
+        saveFullOrderImage(order.id, prepared.full).then((res) => {
+          if (!res.ok) toast.error(`حُفظ الطلب لكن تعذر حفظ الصورة الكاملة (تبقى المصغّرة): ${res.reason}`, { duration: 7000 });
         });
       }
 

@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Plus, Search, MapPin, Edit3, Trash2, User, Loader2, ArrowRight, Smartphone, Image as ImageIcon, Phone, Calendar, Calculator, RefreshCw, Sparkles, AlertTriangle } from 'lucide-react';
 import { collection, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, deleteField } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { compressImage } from "@/lib/imageUtils";
 import FormattedNumberInput from "@/components/FormattedNumberInput";
 import DatePicker from "react-datepicker";
 import { ar } from "date-fns/locale/ar";
@@ -19,12 +18,13 @@ import { CakeCostBreakdown } from "@/lib/cakeCostCalculator";
 import Pagination from "@/components/Pagination";
 import {
   CustomerSuggestion,
-  attachOrderImage,
   describeFirebaseError,
   findCustomer,
-  hasEmbeddedImage,
-  makeInlineThumbnail,
-  migrateEmbeddedImages,
+  getFullOrderImage,
+  imageFieldsFor,
+  prepareOrderImage,
+  saveFullOrderImage,
+  useAutoMigrateImages,
   normalizeArabic,
   orderImage,
   parseIqdInput,
@@ -45,11 +45,10 @@ const FAR_FUTURE = 8640000000000000;
 export default function ExternalOrdersAdmin() {
   const router = useRouter();
   // مستمع واحد مشترك لكل النظام + كاش خفيف بدون صور (انظر lib/socialOrders)
-  const { orders, loading, error: loadError } = useSocialOrders();
+  const { orders, loading, fromCache, error: loadError } = useSocialOrders();
   const { directory } = useCustomerDirectory();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [migration, setMigration] = useState<{ done: number; total: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<"orders" | "debts">("orders");
@@ -92,7 +91,16 @@ export default function ExternalOrdersAdmin() {
   }, [searchQuery, statusFilter]);
 
   // عدد الطلبات التي ما زالت صورها مخزنة داخل قاعدة البيانات (سبب البطء الرئيسي)
-  const embeddedImagesCount = useMemo(() => orders.filter(hasEmbeddedImage).length, [orders]);
+  // نقل الصور الكاملة القديمة من داخل الطلبات تلقائياً (مرة واحدة) لتخفيف الصفحة
+  const { progress: migration } = useAutoMigrateImages(orders, fromCache, (msg, kind) =>
+    kind === "error" ? toast.error(msg, { duration: 9000 }) : kind === "success" ? toast.success(msg) : toast(msg)
+  );
+
+  // تكبير الصورة: نعرض المصغّرة فوراً ثم نستبدلها بالكاملة عند وصولها
+  const openZoom = (order: any) => {
+    setZoomImage(orderImage(order));
+    getFullOrderImage(order).then((full) => setZoomImage((cur) => (cur ? full : cur)));
+  };
 
   const resetForm = () => {
     setIsEditMode(false);
@@ -218,18 +226,11 @@ export default function ExternalOrdersAdmin() {
         ...(!isEditMode && { status: "pending", createdAt: serverTimestamp() }),
       };
 
-      // الصورة: مصغّرة خفيفة داخل الطلب للعرض الفوري، والأصل يُرفع إلى Storage في الخلفية.
+      // الصورة: مصغّرة خفيفة داخل الطلب، والصورة الكاملة في مستند منفصل (external_order_images).
       // عند التعديل بدون صورة جديدة لا نلمس حقول الصورة إطلاقاً.
-      let fileToUpload: File | null = null;
-      if (imageFile) {
-        fileToUpload = await compressImage(imageFile);
-        const thumb = await makeInlineThumbnail(fileToUpload);
-        if (thumb) {
-          orderData.imageUrl = thumb;
-          orderData.imagePending = true;
-          if (isEditMode) orderData.tempImageUrl = deleteField();
-        }
-      }
+      const prepared = imageFile ? await prepareOrderImage(imageFile) : null;
+      if (imageFile && !prepared) toast.error("تعذرت قراءة الصورة، سيُحفظ الطلب بدونها");
+      Object.assign(orderData, imageFieldsFor(prepared, isEditMode));
 
       let savedDocId: string;
       if (isEditMode && editOrderId) {
@@ -242,9 +243,9 @@ export default function ExternalOrdersAdmin() {
         toast.success("تم إضافة الطلب بنجاح ✔");
       }
 
-      if (fileToUpload) {
-        attachOrderImage(savedDocId, fileToUpload).then((res) => {
-          if (!res.ok) toast.error(`حُفظ الطلب لكن لم تُرفع الصورة الكاملة: ${res.reason}`, { duration: 7000 });
+      if (prepared) {
+        saveFullOrderImage(savedDocId, prepared.full).then((res) => {
+          if (!res.ok) toast.error(`حُفظ الطلب لكن تعذر حفظ الصورة الكاملة (تبقى المصغّرة): ${res.reason}`, { duration: 7000 });
         });
       }
 
@@ -324,29 +325,6 @@ export default function ExternalOrdersAdmin() {
     }
   };
 
-  // نقل الصور المخزنة داخل قاعدة البيانات إلى Storage (تُشغَّل مرة واحدة)
-  const fixImages = async () => {
-    if (migration) return;
-    const ok = await customConfirm(
-      `يوجد ${embeddedImagesCount} طلب صورته مخزنة داخل قاعدة البيانات وهذا يبطّئ الصفحة. هل تريد نقلها إلى التخزين الآن؟`,
-      { confirmText: "انقلها", cancelText: "لاحقاً" }
-    );
-    if (!ok) return;
-    setMigration({ done: 0, total: embeddedImagesCount });
-    try {
-      const res = await migrateEmbeddedImages((done, total) => setMigration({ done, total }));
-      if (res.failed === 0) {
-        toast.success(`تم نقل ${res.migrated} صورة بنجاح ✔`);
-      } else {
-        toast.error(`نُقلت ${res.migrated} وفشلت ${res.failed}. السبب: ${res.reason || "غير معروف"}`, { duration: 9000 });
-      }
-    } catch (e) {
-      toast.error(`تعذر النقل: ${describeFirebaseError(e)}`);
-    } finally {
-      setMigration(null);
-    }
-  };
-
   const handleDelete = async (id: string) => {
     if (await customConfirm("هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.")) {
       try {
@@ -410,20 +388,18 @@ export default function ExternalOrdersAdmin() {
             <div>
               <h1 className="text-xl font-black text-white mb-1">الطلبات الخارجية (السوشيال)</h1>
               <p className="text-xs text-emerald-200 font-bold">طلبات انستغرام، واتساب، والمكالمات</p>
-              {embeddedImagesCount > 0 && (
-                <button
-                  type="button"
-                  onClick={fixImages}
-                  disabled={!!migration}
-                  className="mt-2 text-[10px] font-bold bg-amber-500/90 hover:bg-amber-500 text-white px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10 transition disabled:opacity-70 flex items-center gap-1.5"
-                >
-                  {migration ? (
-                    <><Loader2 className="w-3 h-3 animate-spin" /> جاري النقل {migration.done}/{migration.total}</>
-                  ) : (
-                    <><AlertTriangle className="w-3 h-3" /> {embeddedImagesCount} صورة تُبطّئ الصفحة — انقلها للتخزين</>
-                  )}
-                </button>
-              )}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {fromCache && !loadError && (
+                  <span className="text-[10px] font-bold bg-white/15 text-white px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" /> جاري مطابقة البيانات مع الخادم…
+                  </span>
+                )}
+                {migration && (
+                  <span className="text-[10px] font-bold bg-amber-500/90 text-white px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" /> تخفيف الطلبات {migration.done}/{migration.total}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           
@@ -641,7 +617,7 @@ export default function ExternalOrdersAdmin() {
                                 decoding="async"
                                 src={orderImage(order)} 
                                 alt={order.cakeName} 
-                                onClick={() => setZoomImage(orderImage(order))} 
+                                onClick={() => openZoom(order)} 
                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                               />
                             ) : (
@@ -721,7 +697,7 @@ export default function ExternalOrdersAdmin() {
                     decoding="async"
                     src={orderImage(order)} 
                     alt={order.cakeName} 
-                    onClick={() => setZoomImage(orderImage(order))} 
+                    onClick={() => openZoom(order)} 
                     className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                   />
                 ) : (

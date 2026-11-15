@@ -16,9 +16,10 @@ import { CakeCostBreakdown } from "@/lib/cakeCostCalculator";
 import CustomerNameInput from "@/components/CustomerNameInput";
 import {
   CustomerSuggestion,
-  attachOrderImage,
   describeFirebaseError,
-  makeInlineThumbnail,
+  imageFieldsFor,
+  prepareOrderImage,
+  saveFullOrderImage,
   parseIqdInput,
   saveCustomerFromOrder,
   useCustomerDirectory,
@@ -174,8 +175,8 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         2500
       )) || null;
 
-      // مصغّرة خفيفة داخل الطلب للعرض الفوري؛ الصورة الكاملة تُرفع إلى Storage في الخلفية
-      const thumb = imageFile ? await makeInlineThumbnail(imageFile) : "";
+      // مصغّرة خفيفة داخل الطلب؛ الصورة الكاملة في مستند منفصل (external_order_images)
+      const prepared = imageFile ? await prepareOrderImage(imageFile) : null;
 
       const newOrderRef = await addDoc(collection(db, "external_orders"), {
         customerId, customerName: cleanName, customerPhone, address: computedAddress, platform, cakeName,
@@ -187,18 +188,14 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,      // حقل موحد مع باقي التطبيق
         deliveryTime: deliveryDate, // توافق مع السجلات القديمة
-        imageUrl: thumb || "",
-        ...(thumb ? { imagePending: true } : {}),
+        imageUrl: "",
+        ...imageFieldsFor(prepared),
         createdAt: serverTimestamp(),
       });
 
-      if (imageFile) {
-        attachOrderImage(newOrderRef.id, imageFile).then((res) => {
-          if (res.ok) {
-            window.dispatchEvent(new CustomEvent('backgroundUploadSuccess'));
-          } else {
-            toast.error(`حُفظ الطلب لكن لم تُرفع الصورة الكاملة: ${res.reason}`, { duration: 7000 });
-          }
+      if (prepared) {
+        saveFullOrderImage(newOrderRef.id, prepared.full).then((res) => {
+          if (!res.ok) toast.error(`حُفظ الطلب لكن تعذر حفظ الصورة الكاملة (تبقى المصغّرة): ${res.reason}`, { duration: 7000 });
         });
       }
 
