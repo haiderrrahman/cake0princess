@@ -1,46 +1,75 @@
 rules_version = '2';
 
+// ════════════════════════════════════════════════════════════════════
+//  قواعد Storage — كيك الأميرة
+//
+//  • روابط التحميل (download URLs) التي يحفظها التطبيق تحمل رمزاً خاصاً
+//    وتبقى تعمل في الصور مهما كانت قواعد القراءة هنا.
+//  • الرفع: للأدمن فقط، عدا صورة التصميم الخاص وصورة الملف الشخصي
+//    فيرفعهما المستخدم المسجَّل لنفسه.
+//  • سابقاً كانت مجلدات المنزل والصحة مفتوحة للكتابة لأي شخص بدون تسجيل،
+//    وكان رفع صور طلبات السوشيال يتطلب custom claim غير مضبوط فيفشل.
+// ════════════════════════════════════════════════════════════════════
+
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Check if the user is an admin
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
     function isAdmin() {
-      return request.auth != null && request.auth.token.admin == true;
+      return signedIn() && (
+        ('email' in request.auth.token && request.auth.token.email in [
+          'ontheway.princess@gmail.com',
+          'haider.rahman@gmail.com',
+          'haiderr.rahman@gmail.com',
+          'test.user.12345@gmail.com'
+        ])
+        || ('admin' in request.auth.token && request.auth.token.admin == true)
+      );
     }
 
-    match /home_finance/{allPaths=**} {
-      allow read, write: if true;
+    function isImage() {
+      return request.resource.contentType.matches('image/.*')
+          && request.resource.size < 15 * 1024 * 1024;
     }
 
-    match /receipts/{allPaths=**} {
-      allow read, write: if true;
-    }
+    // ── خاص بالعائلة: قراءة وكتابة للأدمن فقط ──
+    match /home_finance/{allPaths=**} { allow read, write: if isAdmin(); }
+    match /receipts/{allPaths=**}     { allow read, write: if isAdmin(); }
+    match /needs/{allPaths=**}        { allow read, write: if isAdmin(); }
+    match /health/{allPaths=**}       { allow read, write: if isAdmin(); }
 
-    match /needs/{allPaths=**} {
-      allow read, write: if true;
-    }
+    // ── صور طلبات السوشيال وبطاقات الزبائن ──
+    match /external_orders/{allPaths=**}  { allow read, write: if isAdmin(); }
+    match /social_customers/{allPaths=**} { allow read, write: if isAdmin(); }
 
-    match /inventory/{allPaths=**} {
-      allow read, write: if true;
-    }
-
-    match /health/{allPaths=**} {
-      allow read, write: if true;
-    }
-
-    match /products/{imageId} {
+    // ── المستخدم يرفع لنفسه (اسم الملف يبدأ بمعرّفه) ──
+    match /custom_orders/{fileName} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin()
+                   || (signedIn() && fileName.matches(request.auth.uid + '_.*') && isImage());
     }
-    
-    match /courses/{imageId} {
+    match /profiles/{fileName} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin()
+                   || (signedIn() && fileName.matches(request.auth.uid + '_.*') && isImage());
     }
-    
-    match /{allPaths=**} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
+
+    // ── صور المتجر والمخزون: قراءة عامة، رفع للأدمن ──
+    // (لا توجد قاعدة عامة /{allPaths=**} عمداً: في Storage تتراكم القواعد المتطابقة،
+    //  فقاعدة عامة بقراءة مفتوحة كانت ستفتح مجلدات الصحة والمنزل أيضاً)
+    match /products/{allPaths=**}       { allow read: if true; allow write: if isAdmin(); }
+    match /courses/{allPaths=**}        { allow read: if true; allow write: if isAdmin(); }
+    match /supplies/{allPaths=**}       { allow read: if true; allow write: if isAdmin(); }
+    match /banners/{allPaths=**}        { allow read: if true; allow write: if isAdmin(); }
+    match /ads/{allPaths=**}            { allow read: if true; allow write: if isAdmin(); }
+    match /offers/{allPaths=**}         { allow read: if true; allow write: if isAdmin(); }
+    match /competitions/{allPaths=**}   { allow read: if true; allow write: if isAdmin(); }
+    match /cake_inventory/{allPaths=**} { allow read: if true; allow write: if isAdmin(); }
+    match /inventory/{allPaths=**}      { allow read: if true; allow write: if isAdmin(); }
+
+    // أي مسار غير مذكور مرفوض تلقائياً.
   }
 }

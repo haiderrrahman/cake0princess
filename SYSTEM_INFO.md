@@ -61,3 +61,10 @@
 2. في حال تعديل قواعد البيانات، يجب التأكد من تحديث `firestore.rules` إن لزم الأمر.
 3. التعديلات الجمالية تعتمد بالكامل على `Tailwind CSS`.
 4. أي ميزة جديدة تحتاج لحفظ بيانات يجب إضافتها عبر `src/lib/firebase.ts` أو استدعاءات API داخل `src/app`.
+
+## 8. قواعد إلزامية بعد تدقيق 15/11/2026 (اقرأ AUDIT_2026-11-15.md)
+* **طلبات السوشيال (`external_orders`):** لا تفتح مستمعاً أو getDocs جديداً لها. استخدم `useSocialOrders()` / `subscribeSocialOrders()` من `src/lib/socialOrders.ts` (مستمع واحد مشترك + كاش خفيف).
+* **اسم الزبون:** استخدم `<CustomerNameInput>` مع `useCustomerDirectory()`؛ وحفظ بطاقة الزبون عبر `saveCustomerFromOrder()`.
+* **الصور:** ممنوع حفظ base64 داخل مستندات Firestore أو في localStorage. مصغّرة عبر `makeInlineThumbnail` ثم رفع عبر `attachOrderImage` / `uploadImageResiliently`.
+* **الدورة الشهرية:** كل الحسابات في `src/lib/cycleEngine.ts` (دوال صافية)، والتخزين في `src/lib/cycleTracker.ts` (مستند واحد `home_finance/cycle_*`). لا بيانات افتراضية وهمية.
+* **الصلاحيات:** أي مجموعة Firestore أو مجلد Storage جديد يجب إضافته في `firestore.rules` / `storage.rules`، وأي أدمن جديد يُضاف بريده في القواعد وفي `AuthContext.tsx`.

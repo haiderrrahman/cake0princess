@@ -10,10 +10,8 @@ interface GlobalDataContextType {
   courses: any[];
   supplies: any[];
   suppliesCategories: string[];
-  externalOrders: any[];
   loading: boolean;
   refreshAll: () => Promise<void>;
-  updateExternalOrdersLocally: (orders: any[]) => void;
 }
 
 const GlobalDataContext = createContext<GlobalDataContextType | undefined>(undefined);
@@ -46,7 +44,6 @@ export function GlobalDataProvider({ children }: { children: React.ReactNode }) 
   const [courses, setCourses] = useState<any[]>(() => safeGetLocal("cp_cache_courses", []));
   const [supplies, setSupplies] = useState<any[]>(() => safeGetLocal("cp_cache_supplies", []));
   const [suppliesCategories, setSuppliesCategories] = useState<string[]>(() => safeGetLocal("cp_cache_supplies_categories", ["الكل"]));
-  const [externalOrders, setExternalOrders] = useState<any[]>(() => safeGetLocal("cache_external_orders_v2", []));
   const [loading, setLoading] = useState<boolean>(() => {
     // Only true if we have zero cached items
     const hasCached = safeGetLocal("cp_cache_products", []).length > 0;
@@ -60,15 +57,15 @@ export function GlobalDataProvider({ children }: { children: React.ReactNode }) 
         catsSnap,
         coursesSnap,
         suppliesSnap,
-        suppliesCatsSnap,
-        extOrdersSnap
+        suppliesCatsSnap
       ] = await Promise.allSettled([
         getDocs(collection(db, "products")),
         getDocs(collection(db, "categories")),
         getDocs(collection(db, "courses")),
         getDocs(collection(db, "supplies")),
         getDocs(collection(db, "supplies_categories")),
-        getDocs(collection(db, "external_orders")),
+        // ملاحظة: طلبات السوشيال لا تُحمَّل هنا. هذا المزوّد يعمل لكل زائر للمتجر،
+        // وكان يجلب أسماء وهواتف وعناوين الزبائن لكل متصفح. الآن تُحمَّل داخل لوحة الإدارة فقط (lib/socialOrders).
       ]);
 
       if (prodSnap.status === "fulfilled" && !prodSnap.value.empty) {
@@ -100,19 +97,6 @@ export function GlobalDataProvider({ children }: { children: React.ReactNode }) 
         setSuppliesCategories(scList);
         safeSetLocal("cp_cache_supplies_categories", scList);
       }
-
-      if (extOrdersSnap.status === "fulfilled" && !extOrdersSnap.value.empty) {
-        const extList = extOrdersSnap.value.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-        // Sort in memory by date descending — NEVER using Firestore orderBy to prevent missing doc bugs
-        extList.sort((a, b) => {
-          const tA = new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime();
-          const tB = new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime();
-          return tB - tA;
-        });
-        setExternalOrders(extList);
-        safeSetLocal("cache_external_orders_v2", extList);
-        safeSetLocal("cache_external_orders_all", extList);
-      }
     } catch (e) {
       console.error("GlobalDataContext refreshAll error:", e);
     } finally {
@@ -120,13 +104,12 @@ export function GlobalDataProvider({ children }: { children: React.ReactNode }) 
     }
   }, []);
 
-  const updateExternalOrdersLocally = useCallback((orders: any[]) => {
-    setExternalOrders(orders);
-    safeSetLocal("cache_external_orders_v2", orders);
-    safeSetLocal("cache_external_orders_all", orders);
-  }, []);
-
   useEffect(() => {
+    // تنظيف كاش قديم كان يخزّن طلبات السوشيال (بيانات زبائن + صور) في متصفح كل زائر
+    try {
+      localStorage.removeItem("cache_external_orders_v2");
+      localStorage.removeItem("cache_external_orders_all");
+    } catch {}
     // Eagerly prefetch everything once on app startup in background idle
     refreshAll();
   }, [refreshAll]);
@@ -139,10 +122,8 @@ export function GlobalDataProvider({ children }: { children: React.ReactNode }) 
         courses,
         supplies,
         suppliesCategories,
-        externalOrders,
         loading,
         refreshAll,
-        updateExternalOrdersLocally,
       }}
     >
       {children}

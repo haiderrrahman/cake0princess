@@ -9,11 +9,13 @@ import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { collection, query, where, onSnapshot, updateDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { 
-  getMemberCycleSettings, 
-  calculateCycleStatus, 
-  isImanAccount, 
-  formatToDateString 
+import {
+  CYCLE_MEMBERS,
+  getMemberCycleSettings,
+  calculateCycleStatus,
+  isImanAccount,
+  formatToDateString,
+  daysLabel,
 } from "@/lib/cycleTracker";
 
 export default function GlobalActions() {
@@ -140,51 +142,73 @@ export default function GlobalActions() {
     }
   }, [notifications, mounted, notifiedIds]);
 
-  // ─── Exclusive Menstrual Cycle Alert for Iman ───
+  // ─── تذكير الدورة الشهرية ───
+  // يظهر فقط لحسابات العائلة (أدمن) وللحساب المطابق لصاحبة البيانات.
+  // سابقاً كان يُقرأ المستند لكل مستخدم مسجَّل ويظهر لأي حساب اسمه «إيمان».
   useEffect(() => {
-    if (!mounted || !user) return;
+    if (!mounted || !user || !isAdmin) return;
 
-    let isSubscribed = true;
+    let alive = true;
     (async () => {
-      try {
-        const imanSettings = await getMemberCycleSettings("إيمان");
-        if (!isSubscribed) return;
+      const todayStr = formatToDateString(new Date());
+      const email = (user.email || "").toLowerCase().trim();
 
-        // Verify that the currently logged-in account belongs to Iman
-        if (!isImanAccount(user, imanSettings.customEmail)) return;
+      for (const member of CYCLE_MEMBERS) {
+        try {
+          const storageKey = `cycle_notified_${member.docId}_${todayStr}`;
+          if (localStorage.getItem(storageKey)) continue;
 
-        const todayStr = formatToDateString(new Date());
-        const storageKey = `iman_cycle_notified_${todayStr}`;
-        if (typeof window !== "undefined" && localStorage.getItem(storageKey)) {
-          return; // Already notified today
-        }
+          const settings = await getMemberCycleSettings(member.name);
+          if (!alive) return;
 
-        const status = calculateCycleStatus(imanSettings, todayStr);
+          const isOwner =
+            member.name === "إيمان"
+              ? isImanAccount(user, settings.customEmail, true)
+              : !!settings.customEmail && settings.customEmail.toLowerCase() === email;
+          if (!isOwner) continue;
 
-        // 1. One day before period
-        if (status.isDueTomorrow) {
+          const status = calculateCycleStatus(settings, todayStr);
+          if (!status.isConfigured) continue;
+
+          let icon = "🌸";
+          let title = "";
+          let body = "";
+          if (status.isCurrentlyInPeriod) {
+            icon = "🍵";
+            title = `اليوم ${status.currentPeriodDay} من الدورة`;
+            body = status.needsEndConfirmation
+              ? "سجّلي الانتهاء من صفحة العائلة عند توقف النزول."
+              : status.periodDaysRemaining > 0
+              ? `المتوقع أن تستمر ${daysLabel(status.periodDaysRemaining)} أخرى. خذي قسطاً من الراحة.`
+              : "اليوم هو آخر يوم متوقع.";
+          } else if (status.isDueToday) {
+            title = "الدورة متوقعة اليوم";
+            body = "سجّلي البداية من صفحة العائلة حال نزولها.";
+          } else if (status.isDueTomorrow) {
+            title = "الدورة متوقعة غداً";
+            body = "تذكير لتجهيز مستلزماتك.";
+          } else {
+            continue;
+          }
+
           toast.custom((t) => (
             <div
               style={{ width: "min(92vw, 400px)", minWidth: "300px", maxWidth: "420px" }}
-              className="animate-in slide-in-from-top-4 w-full bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl pointer-events-auto flex items-stretch justify-between ring-1 ring-black/10 dark:ring-white/10 overflow-hidden border border-pink-300 dark:border-pink-800 bg-gradient-to-r from-pink-500/10 via-transparent to-rose-500/5 transition text-right"
+              className="animate-in slide-in-from-top-4 w-full bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl pointer-events-auto flex items-stretch justify-between ring-1 ring-black/10 dark:ring-white/10 overflow-hidden border border-rose-200 dark:border-rose-800 text-right"
               dir="rtl"
             >
-              <div className="w-1.5 shrink-0 bg-gradient-to-b from-pink-500 to-rose-500" />
+              <div className="w-1.5 shrink-0 bg-rose-400" />
               <div className="flex-1 min-w-0 p-3 sm:p-3.5">
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-pink-100 dark:bg-pink-950/60 text-xl border border-pink-200 dark:border-pink-800/40">
-                    🌸
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-rose-50 dark:bg-rose-950/60 text-xl">
+                    {icon}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="text-[10px] font-black bg-pink-100 dark:bg-pink-950 text-pink-700 dark:text-pink-300 px-2 py-0.5 rounded-full border border-pink-200">
-                      تذكير خاص بكِ يا إيمان 🌸
+                    <span className="text-[10px] font-black bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-full">
+                      تذكير خاص بـ{member.name}
                     </span>
-                    <h5 className="mt-1 text-xs font-black text-gray-900 dark:text-white leading-snug">
-                      موعد الدورة الشهرية المتوقع غداً
-                    </h5>
-                    <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-300 font-medium">
-                      نتمنى لكِ يوماً هادئاً، احرصي على الراحة وتجهيز مستلزماتك 🌿
-                    </p>
+                    <h5 className="mt-1 text-xs font-black text-gray-900 dark:text-white leading-snug">{title}</h5>
+                    <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-300 font-medium">{body}</p>
                   </div>
                 </div>
               </div>
@@ -199,97 +223,14 @@ export default function GlobalActions() {
           ), { duration: 9000, position: "top-center", unstyled: true });
 
           localStorage.setItem(storageKey, "1");
-        } 
-        // 2. During period (each day tells her how many days left)
-        else if (status.isCurrentlyInPeriod) {
-          toast.custom((t) => (
-            <div
-              style={{ width: "min(92vw, 400px)", minWidth: "300px", maxWidth: "420px" }}
-              className="animate-in slide-in-from-top-4 w-full bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl pointer-events-auto flex items-stretch justify-between ring-1 ring-black/10 dark:ring-white/10 overflow-hidden border border-rose-300 dark:border-rose-800 bg-gradient-to-r from-rose-500/10 via-transparent to-pink-500/5 transition text-right"
-              dir="rtl"
-            >
-              <div className="w-1.5 shrink-0 bg-gradient-to-b from-rose-500 to-pink-500" />
-              <div className="flex-1 min-w-0 p-3 sm:p-3.5">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-rose-100 dark:bg-rose-950/60 text-xl border border-rose-200 dark:border-rose-800/40">
-                    🍵
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[10px] font-black bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-full border border-rose-200">
-                        مرحباً إيمان 🌸
-                      </span>
-                      <span className="text-[10px] font-bold text-gray-400">
-                        (اليوم {status.currentPeriodDay} من {status.periodDuration})
-                      </span>
-                    </div>
-                    <h5 className="mt-1 text-xs font-black text-gray-900 dark:text-white leading-snug">
-                      متبقي {status.periodDaysRemaining} {status.periodDaysRemaining === 1 ? "يوم واحد" : "أيام"} على انتهاء الدورة
-                    </h5>
-                    <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-300 font-medium">
-                      خذي قسطاً كافياً من الراحة واعتني بصحتك ودفئك اليوم 🌸
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => toast.dismiss(t as string | number)}
-                className="w-9 flex items-center justify-center text-gray-400 hover:text-gray-600 border-r border-gray-100 dark:border-zinc-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ), { duration: 9000, position: "top-center", unstyled: true });
-
-          localStorage.setItem(storageKey, "1");
+        } catch (err) {
+          console.warn("Could not check cycle reminder:", err);
         }
-        // 3. Due today
-        else if (status.isDueToday) {
-          toast.custom((t) => (
-            <div
-              style={{ width: "min(92vw, 400px)", minWidth: "300px", maxWidth: "420px" }}
-              className="animate-in slide-in-from-top-4 w-full bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl pointer-events-auto flex items-stretch justify-between ring-1 ring-black/10 dark:ring-white/10 overflow-hidden border border-pink-300 dark:border-pink-800 bg-gradient-to-r from-pink-500/10 via-transparent to-rose-500/5 transition text-right"
-              dir="rtl"
-            >
-              <div className="w-1.5 shrink-0 bg-gradient-to-b from-pink-500 to-rose-500" />
-              <div className="flex-1 min-w-0 p-3 sm:p-3.5">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-pink-100 dark:bg-pink-950/60 text-xl border border-pink-200 dark:border-pink-800/40">
-                    🌸
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[10px] font-black bg-pink-100 dark:bg-pink-950 text-pink-700 dark:text-pink-300 px-2 py-0.5 rounded-full border border-pink-200">
-                      صباح الخير إيمان 🌸
-                    </span>
-                    <h5 className="mt-1 text-xs font-black text-gray-900 dark:text-white leading-snug">
-                      اليوم هو موعد بدء الدورة الشهرية المتوقع
-                    </h5>
-                    <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-300 font-medium">
-                      يمكنك تأكيد بدئها من صفحة العائلة عند النزول 🌿
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => toast.dismiss(t as string | number)}
-                className="w-9 flex items-center justify-center text-gray-400 hover:text-gray-600 border-r border-gray-100 dark:border-zinc-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ), { duration: 9000, position: "top-center", unstyled: true });
-
-          localStorage.setItem(storageKey, "1");
-        }
-      } catch (err) {
-        console.warn("Could not check Iman cycle alert:", err);
       }
     })();
 
-    return () => { isSubscribed = false; };
-  }, [user, mounted]);
+    return () => { alive = false; };
+  }, [user, mounted, isAdmin]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 

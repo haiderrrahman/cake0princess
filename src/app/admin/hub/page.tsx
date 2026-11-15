@@ -12,6 +12,7 @@ import {
 import dynamic from "next/dynamic";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, query, orderBy, limit, onSnapshot, increment, where } from "firebase/firestore";
 import { toast } from "sonner";
+import { useSocialOrders, mutateSocialOrdersLocally, refreshSocialOrders, describeFirebaseError } from "@/lib/socialOrders";
 import { db } from "@/lib/firebase";
 
 const InventoryDeductModal = dynamic(() => import("@/components/InventoryDeductModal"), { ssr: false });
@@ -158,10 +159,10 @@ const setFreshCache = (key: string, data: any) => {
 };
 
 function AdminHubContent() {
-  const [extOrdersLoaded, setExtOrdersLoaded] = useState(() => {
-    const cached = getFreshCache('cache_external_orders_v2');
-    return Array.isArray(cached) && cached.length > 0;
-  });
+  // طلبات السوشيال من المخزن المشترك (مستمع واحد لكل النظام + كاش خفيف بدون صور)
+  const { orders: externalOrders, loading: extOrdersLoading } = useSocialOrders();
+  const extOrdersLoaded = !extOrdersLoading;
+  const setExternalOrders = mutateSocialOrdersLocally;
   const [ordersLoaded, setOrdersLoaded] = useState(() => {
     const cached = getFreshCache('cache_orders_v2');
     return Array.isArray(cached) && cached.length > 0;
@@ -171,9 +172,6 @@ function AdminHubContent() {
 
   const [orders, setOrders] = useState<any[]>(() => {
     return getFreshCache('cache_orders_v2') || [];
-  });
-  const [externalOrders, setExternalOrders] = useState<any[]>(() => {
-    return getFreshCache('cache_external_orders_v2') || [];
   });
   const [customOrders, setCustomOrders] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
@@ -203,24 +201,11 @@ function AdminHubContent() {
   const handleRefreshExternal = async () => {
     setIsRefreshingExt(true);
     try {
-      const snap = await getDocs(query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(250)));
-      let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-      allExt.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt || 0).getTime());
-      setExternalOrders(allExt);
-      setExtOrdersLoaded(true);
-      saveHubCache("cache_external_orders_all", allExt);
-      saveHubCache("cache_external_orders_v2", allExt);
-      try {
-        const cleanExt = allExt.slice(0, 50).map(o => ({
-          ...o,
-          image: o.image && o.image.startsWith("data:") ? undefined : o.image
-        }));
-        setFreshCache("cache_external_orders_v2", cleanExt);
-      } catch {}
-      toast.success(`تم تحديث ${allExt.length} طلب سوشيال بنجاح 🔄`);
+      const count = await refreshSocialOrders();
+      toast.success(`تم تحديث ${count} طلب سوشيال بنجاح 🔄`);
     } catch (e) {
       console.error("Refresh error:", e);
-      toast.error("فشل تحديث البيانات، يرجى إعادة المحاولة");
+      toast.error(`فشل تحديث البيانات: ${describeFirebaseError(e)}`);
     } finally {
       setIsRefreshingExt(false);
     }
@@ -327,16 +312,12 @@ function AdminHubContent() {
       const cleanOrders = orders.slice(0, 50).map(o => ({ ...o, items: o.items?.map((i:any) => ({ ...i, tempImageUrl: undefined })) }));
       setFreshCache("cache_orders_v2", cleanOrders);
       
-      if (externalOrders.length > 0) {
-        saveHubCache("cache_external_orders_all", externalOrders);
-      }
-      
       const cleanSales = storeSales.slice(0, 50);
       setFreshCache("cache_store_sales_v2", cleanSales);
     } catch (e) {
       console.error("Cache error:", e);
     }
-  }, [orders, externalOrders, storeSales]);
+  }, [orders, storeSales]);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -444,45 +425,7 @@ function AdminHubContent() {
     // Instant load disabled to prevent stale data flash
     // getHubCache disabled
 
-    // 2. Real-time snapshot listener with limit to ensure maximum speed and zero lag
-    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(250));
-    const unsubExt = onSnapshot(qExt, (snap) => {
-      
-      const allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-      setExternalOrders(allExt);
-      setExtOrdersLoaded(true);
-      setLoading(false);
-      saveHubCache("cache_external_orders_all", allExt);
-      saveHubCache("cache_external_orders_v2", allExt);
-      try {
-        const cleanExt = allExt.slice(0, 50).map(o => ({
-          ...o,
-          image: o.image && o.image.startsWith("data:") ? undefined : o.image
-        }));
-        setFreshCache("cache_external_orders_v2", cleanExt);
-      } catch {}
-    }, (err) => {
-      console.error("External orders listener error:", err);
-      // Fallback
-      getDocs(qExt).then(snap => {
-        let allExt = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-        setExternalOrders(allExt);
-        setExtOrdersLoaded(true);
-        setLoading(false);
-        saveHubCache("cache_external_orders_all", allExt);
-        saveHubCache("cache_external_orders_v2", allExt);
-      try {
-        const cleanExt = allExt.slice(0, 50).map(o => ({
-          ...o,
-          image: o.image && o.image.startsWith("data:") ? undefined : o.image
-        }));
-        setFreshCache("cache_external_orders_v2", cleanExt);
-      } catch {}
-      }).catch(() => {
-        setExtOrdersLoaded(true);
-        setLoading(false);
-      });
-    });
+    // طلبات السوشيال تأتي من useSocialOrders (lib/socialOrders) — لا مستمع إضافي هنا
 
     const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(30));
     const unsubOrders = onSnapshot(qOrders, (snap) => {
@@ -508,7 +451,7 @@ function AdminHubContent() {
       console.error("Store sales listener error:", err);
     });
 
-    return () => { unsubExt(); unsubOrders(); unsubStore(); };
+    return () => { unsubOrders(); unsubStore(); };
   }, []);
 
 
@@ -1949,8 +1892,7 @@ function AdminHubContent() {
                               <img 
                                 src={order.imageUrl || order.tempImageUrl || order.image} 
                                 alt={order.cakeName} 
-                                loading="eager"
-                                fetchPriority="high"
+                                loading="lazy"
                                 decoding="async"
                                 onClick={() => window.open(order.imageUrl || order.tempImageUrl || order.image, '_blank')} 
                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 

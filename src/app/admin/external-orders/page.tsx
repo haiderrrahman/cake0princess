@@ -1,80 +1,66 @@
 "use client";
 import { customConfirm } from '@/lib/customConfirm';
 import { toast } from "sonner";
-import { useState, useEffect, useRef } from "react";
-import Link from "next/link";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, MapPin, Navigation, Edit3, CheckCircle, Clock, Trash2, ShieldCheck, User, Loader2, ArrowRight, Smartphone, Camera, FileImage, Image as ImageIcon, Phone, Calendar, Calculator, RefreshCw, Sparkles } from 'lucide-react';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, query, limit, onSnapshot, startAfter } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
-import Image from "next/image";
+import { Plus, Search, MapPin, Edit3, Trash2, User, Loader2, ArrowRight, Smartphone, Image as ImageIcon, Phone, Calendar, Calculator, RefreshCw, Sparkles, AlertTriangle } from 'lucide-react';
+import { collection, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, deleteField } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { compressImage } from "@/lib/imageUtils";
 import FormattedNumberInput from "@/components/FormattedNumberInput";
 import DatePicker from "react-datepicker";
-import { format } from "date-fns";
 import { ar } from "date-fns/locale/ar";
 import "react-datepicker/dist/react-datepicker.css";
 import CustomerProfileModal from "@/components/CustomerProfileModal";
 import MapLink from "@/components/MapLink";
 import CakeCostBreakdownModal from "@/components/CakeCostBreakdownModal";
+import CustomerNameInput from "@/components/CustomerNameInput";
 import { CakeCostBreakdown } from "@/lib/cakeCostCalculator";
 import Pagination from "@/components/Pagination";
+import {
+  CustomerSuggestion,
+  attachOrderImage,
+  describeFirebaseError,
+  findCustomer,
+  hasEmbeddedImage,
+  makeInlineThumbnail,
+  migrateEmbeddedImages,
+  normalizeArabic,
+  orderImage,
+  parseIqdInput,
+  patchSocialOrderLocally,
+  refreshSocialOrders,
+  saveCustomerFromOrder,
+  toMillis,
+  useCustomerDirectory,
+  useSocialOrders,
+  withSoftTimeout,
+} from "@/lib/socialOrders";
 
-// Stale-While-Revalidate cache helper: ensures instant 0ms display on navigation
-// while real-time Firestore listeners immediately refresh in background
-const getFreshCache = (key: string) => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') {
-      if (Array.isArray(parsed.data) && parsed.data.length > 0) {
-        return parsed.data;
-      }
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
-};
+const isDebtOrder = (o: any) =>
+  o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled;
 
-const setFreshCache = (key: string, data: any) => {
-  if (typeof window === 'undefined') return;
-  try {
-    const envelope = {
-      _timestamp: Date.now(),
-      data
-    };
-    localStorage.setItem(key, JSON.stringify(envelope));
-  } catch (e) {
-    console.warn("Failed to set cache:", key, e);
-  }
-};
+const FAR_FUTURE = 8640000000000000;
 
 export default function ExternalOrdersAdmin() {
   const router = useRouter();
-  const [orders, setOrders] = useState<any[]>(() => {
-    return getFreshCache("cache_external_orders_v2") || [];
-  });
-  const [loading, setLoading] = useState(() => (getFreshCache("cache_external_orders_v2") || []).length === 0);
+  // مستمع واحد مشترك لكل النظام + كاش خفيف بدون صور (انظر lib/socialOrders)
+  const { orders, loading, error: loadError } = useSocialOrders();
+  const { directory } = useCustomerDirectory();
+
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [migration, setMigration] = useState<{ done: number; total: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<"orders" | "debts">("orders");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [settleOrder, setSettleOrder] = useState<any>(null);
-  const [settlePaidAmount, setSettlePaidAmount] = useState<string>("");
   const [settleDebtType, setSettleDebtType] = useState<"none" | "customer_owes" | "we_owe">("none");
   const [settleRemainingAmount, setSettleRemainingAmount] = useState<string>("");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editOrderId, setEditOrderId] = useState<string | null>(null);
-  
+
   // Form state
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -89,12 +75,12 @@ export default function ExternalOrdersAdmin() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [address, setAddress] = useState("");
-  
+
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [selectedCustomerForProfile, setSelectedCustomerForProfile] = useState<{name: string, phone?: string} | null>(null);
 
-  const [customers, setCustomers] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
 
   // Pagination States (10 orders per page)
   const PAGE_SIZE = 10;
@@ -105,94 +91,51 @@ export default function ExternalOrdersAdmin() {
     setCurrentPage(1);
   }, [searchQuery, statusFilter]);
 
+  // عدد الطلبات التي ما زالت صورها مخزنة داخل قاعدة البيانات (سبب البطء الرئيسي)
+  const embeddedImagesCount = useMemo(() => orders.filter(hasEmbeddedImage).length, [orders]);
+
+  const resetForm = () => {
+    setIsEditMode(false);
+    setEditOrderId(null);
+    setCustomerName("");
+    setCustomerPhone("");
+    setPlatform("إنستجرام");
+    setCakeName("");
+    setPrice("");
+    setCost("");
+    setCostBreakdown(null);
+    setDeliveryDate(new Date().toISOString());
+    setAddress("");
+    setImageFile(null);
+    setImagePreview(null);
+  };
+
   const handleRefreshOrders = async () => {
     setIsRefreshing(true);
     try {
-      const snap = await getDocs(collection(db, "external_orders"));
-      let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-      fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
-      setOrders(fetchedOrders);
-      setFreshCache("cache_external_orders_v2", fetchedOrders);
-      setFreshCache("cache_external_orders_all", fetchedOrders);
-      setLoading(false);
-      toast.success(`تم تحديث ${fetchedOrders.length} طلب بنجاح 🔄`);
+      const count = await refreshSocialOrders();
+      toast.success(`تم تحديث ${count} طلب بنجاح 🔄`);
     } catch (e) {
-      toast.error("فشل تحديث البيانات، يرجى المحاولة لاحقاً");
+      toast.error(`فشل تحديث البيانات: ${describeFirebaseError(e)}`);
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    // 1. Parallel fast fetch on mount for all orders
-    getDocs(collection(db, "external_orders")).then((snap) => {
-      if (!snap.empty) {
-        let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
-        setOrders(fetchedOrders);
-        setFreshCache("cache_external_orders_v2", fetchedOrders);
-        setFreshCache("cache_external_orders_all", fetchedOrders);
-        setLoading(false);
-      }
-    }).catch(() => {});
-
-    // 2. Real-time snapshot of ALL orders without orderBy so no documents are ever dropped by Firestore
-    const unsubscribe = onSnapshot(collection(db, "external_orders"), (snap) => {
-      const fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-      fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
-      setOrders(fetchedOrders);
-      setFreshCache("cache_external_orders_v2", fetchedOrders);
-      setFreshCache("cache_external_orders_all", fetchedOrders);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching external orders:", error);
-      getDocs(collection(db, "external_orders")).then(snap => {
-        let fetchedOrders = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
-        fetchedOrders.sort((a, b) => new Date(b.createdAt?.toDate?.() || b.createdAt || 0).getTime() - new Date(a.createdAt?.toDate?.() || a.createdAt || 0).getTime());
-        setOrders(fetchedOrders);
-        setFreshCache("cache_external_orders_v2", fetchedOrders);
-        setFreshCache("cache_external_orders_all", fetchedOrders);
-        setLoading(false);
-      });
-    });
-
-    // 3. Fetch customers in the background
-    getDocs(collection(db, "customers")).then(custSnap => {
-      setCustomers(custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }).catch(e => console.error("Error fetching customers:", e));
-
-    return () => unsubscribe();
-  }, []);
-
-  const fillCustomerData = (name: string, existingPhone: string, existingAddress: string, existingPlatform: string) => {
-    let finalPhone = existingPhone;
-    let finalAddress = existingAddress;
-    let finalPlatform = existingPlatform;
-
-    if (!finalPhone || !finalAddress || !finalPlatform) {
-      const orderWithPhone = orders.find(o => o.customerName.trim().toLowerCase() === name.trim().toLowerCase() && o.customerPhone);
-      const orderWithAddress = orders.find(o => o.customerName.trim().toLowerCase() === name.trim().toLowerCase() && o.address);
-      const anyOrder = orders.find(o => o.customerName.trim().toLowerCase() === name.trim().toLowerCase());
-      
-      if (!finalPhone && orderWithPhone) finalPhone = orderWithPhone.customerPhone;
-      if (!finalAddress && orderWithAddress) finalAddress = orderWithAddress.address;
-      if (!finalPlatform && anyOrder) finalPlatform = anyOrder.platform;
-    }
-
-    if (finalPhone) setCustomerPhone(finalPhone);
-    if (finalAddress) setAddress(finalAddress);
-    if (finalPlatform) setPlatform(finalPlatform);
+  // تعبئة بيانات الزبون عند اختياره من الاقتراحات
+  const applyCustomer = (c: CustomerSuggestion) => {
+    if (c.phone) setCustomerPhone(c.phone);
+    if (c.address) setAddress(c.address);
+    if (c.platform) setPlatform(c.platform);
   };
 
-  const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const name = e.target.value;
+  const handleCustomerNameChange = (name: string) => {
     setCustomerName(name);
-    
-    const exactMatch = customers.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
-    if (exactMatch) {
-      fillCustomerData(exactMatch.name, exactMatch.phone || "", exactMatch.address || "", exactMatch.platform || "");
-    } else {
-      fillCustomerData(name, "", "", "");
+    // لو كتب الاسم كاملاً بدون اختياره من القائمة نكمل الحقول الفارغة فقط
+    const exact = findCustomer(directory, name);
+    if (exact) {
+      if (!customerPhone && exact.phone) setCustomerPhone(exact.phone);
+      if (!address && exact.address) setAddress(exact.address);
     }
   };
 
@@ -207,7 +150,7 @@ export default function ExternalOrdersAdmin() {
     setCost(order.cost ? String(order.cost) : "");
     setCostBreakdown(order.costBreakdown || null);
     setDeliveryDate(order.deliveryDate || new Date().toISOString());
-    setImagePreview(order.imageUrl || null);
+    setImagePreview(orderImage(order) || null);
     setImageFile(null);
     setAddress(order.address || "");
     setIsModalOpen(true);
@@ -223,58 +166,32 @@ export default function ExternalOrdersAdmin() {
 
   const handleAddOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName || !cakeName || !price || !deliveryDate) {
-      if (!deliveryDate) toast.error("يرجى تحديد تاريخ التسليم");
+    const cleanName = customerName.replace(/\s+/g, " ").trim();
+    if (!cleanName || !cakeName.trim() || !price) {
+      toast.error("يرجى تعبئة اسم الزبون وتفاصيل الطلب والسعر");
+      return;
+    }
+    if (!deliveryDate) {
+      toast.error("يرجى تحديد تاريخ التسليم");
       return;
     }
 
     setSubmitting(true);
     try {
-      const parseIqdInput = (val: string | number) => {
-        let num = Number(val) || 0;
-        if (num > 0 && num < 1000) num *= 1000;
-        return num;
-      };
-
       const numPrice = parseIqdInput(price);
       const numCost = cost ? parseIqdInput(cost) : 0;
       const profit = numCost > 0 ? numPrice - numCost : numPrice;
+      const editingOrder = isEditMode ? orders.find(o => o.id === editOrderId) : null;
 
-      const existingCustomer = customers.find(c => c.name === customerName);
-      let customerId = existingCustomer?.id;
-      
-      const promisesToRace = [];
-
-      if (!existingCustomer) {
-        const custRefPromise = addDoc(collection(db, "customers"), {
-          name: customerName,
-          phone: customerPhone,
-          address: address || "",
-          platform: platform || "واتساب",
-          points: Math.floor(numPrice / 1000),
-          totalSpent: numPrice,
-          ordersCount: 1,
-          createdAt: serverTimestamp(),
-        });
-        promisesToRace.push(custRefPromise.then(ref => { customerId = ref.id; }));
-      } else {
-        const docRef = doc(db, "customers", customerId!);
-        const updateCustPromise = updateDoc(docRef, {
-          phone: customerPhone || existingCustomer.phone || "",
-          address: address || existingCustomer.address || "",
-          platform: platform || existingCustomer.platform || "واتساب",
-          points: (existingCustomer.points || 0) + Math.floor(numPrice / 1000),
-          totalSpent: (existingCustomer.totalSpent || 0) + numPrice,
-          ordersCount: (existingCustomer.ordersCount || 0) + 1,
-          lastOrder: serverTimestamp()
-        });
-        promisesToRace.push(updateCustPromise);
-      }
-
-      await Promise.race([
-        Promise.all(promisesToRace),
-        new Promise(resolve => setTimeout(resolve, 1500))
-      ]);
+      // بطاقة الزبون: لا ننتظرها أكثر من 2.5 ثانية حتى لا يتأخر حفظ الطلب
+      const customerId = await withSoftTimeout(
+        saveCustomerFromOrder(
+          directory,
+          { name: cleanName, phone: customerPhone, address, platform },
+          { orderAmount: numPrice, ...(editingOrder ? { previousAmount: Number(editingOrder.price) || 0 } : {}) }
+        ),
+        2500
+      );
 
       // Extract coordinates if user typed them in the address field
       let extractedLocationUrl = "";
@@ -285,53 +202,39 @@ export default function ExternalOrdersAdmin() {
         }
       }
 
-      // ── Build base order data WITHOUT image first ──────────────────────────
-      // If editing: only include imageUrl if the user picked a NEW file or we still
-      // have the existing URL (never send empty string – that would wipe the image).
-      const existingImageUrl = isEditMode
-        ? orders.find(o => o.id === editOrderId)?.imageUrl || ""
-        : "";
-
       const orderData: Record<string, any> = {
-        customerId: customerId || "offline-temp-id",
-        customerName,
+        ...(customerId ? { customerId } : {}),
+        customerName: cleanName,
         customerPhone,
         address,
         platform,
-        cakeName,
+        cakeName: cakeName.trim(),
         price: numPrice,
         cost: numCost,
         costBreakdown: costBreakdown ? JSON.parse(JSON.stringify(costBreakdown)) : null,
         profit,
         deliveryDate,
         ...(extractedLocationUrl && { locationUrl: extractedLocationUrl }),
-        ...(!isEditMode && { createdAt: serverTimestamp() }),
+        ...(!isEditMode && { status: "pending", createdAt: serverTimestamp() }),
       };
 
-      // Preserve existing image on edit when no new file chosen
-      // Process image directly for instant display
+      // الصورة: مصغّرة خفيفة داخل الطلب للعرض الفوري، والأصل يُرفع إلى Storage في الخلفية.
+      // عند التعديل بدون صورة جديدة لا نلمس حقول الصورة إطلاقاً.
+      let fileToUpload: File | null = null;
       if (imageFile) {
-        try {
-          const compressed = await compressImage(imageFile);
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(compressed);
-          });
-          orderData.imageUrl = dataUrl;
-          orderData.tempImageUrl = dataUrl;
-        } catch (e) {
-          console.error("Image processing error:", e);
+        fileToUpload = await compressImage(imageFile);
+        const thumb = await makeInlineThumbnail(fileToUpload);
+        if (thumb) {
+          orderData.imageUrl = thumb;
+          orderData.imagePending = true;
+          if (isEditMode) orderData.tempImageUrl = deleteField();
         }
-      } else if (isEditMode && existingImageUrl) {
-        orderData.imageUrl = existingImageUrl;
       }
 
-      let savedDocId: string | null = isEditMode ? editOrderId : null;
-
+      let savedDocId: string;
       if (isEditMode && editOrderId) {
         await updateDoc(doc(db, "external_orders", editOrderId), orderData);
+        savedDocId = editOrderId;
         toast.success("تم التحديث بنجاح");
       } else {
         const newDocRef = await addDoc(collection(db, "external_orders"), orderData);
@@ -339,31 +242,20 @@ export default function ExternalOrdersAdmin() {
         toast.success("تم إضافة الطلب بنجاح ✔");
       }
 
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.removeItem("cache_external_orders_v2");
-        } catch {}
+      if (fileToUpload) {
+        attachOrderImage(savedDocId, fileToUpload).then((res) => {
+          if (!res.ok) toast.error(`حُفظ الطلب لكن لم تُرفع الصورة الكاملة: ${res.reason}`, { duration: 7000 });
+        });
       }
 
-      // Reset form
-      setCustomerName("");
-      setCustomerPhone("");
-      setCakeName("");
-      setPrice("");
-      setCost("");
-      setCostBreakdown(null);
-      setDeliveryDate(new Date().toISOString());
-      setAddress("");
-      setImageFile(null);
-      setImagePreview(null);
+      resetForm();
       setIsModalOpen(false);
-      setIsEditMode(false);
-      setEditOrderId(null);
     } catch (error) {
-      console.error("Error adding order:", error);
-      toast.error("حدث خطأ أثناء إضافة الطلب");
+      console.error("Error saving order:", error);
+      toast.error(`تعذر حفظ الطلب: ${describeFirebaseError(error)}`);
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
 
@@ -376,7 +268,7 @@ export default function ExternalOrdersAdmin() {
         });
         toast.success("تم تسديد الدين بنجاح");
       } catch (e) {
-        toast.error("خطأ أثناء التسديد");
+        toast.error(`خطأ أثناء التسديد: ${describeFirebaseError(e)}`);
       }
     }
   };
@@ -387,9 +279,13 @@ export default function ExternalOrdersAdmin() {
       setSettleOrder(order);
       setSettleDebtType("none");
       setSettleRemainingAmount("");
-    } else {
+      return;
+    }
+    try {
       await updateDoc(doc(db, "external_orders", order.id), { status: newStatus });
       toast.success("تم تحديث الحالة");
+    } catch (e) {
+      toast.error(`تعذر تحديث الحالة: ${describeFirebaseError(e)}`);
     }
   };
 
@@ -397,11 +293,19 @@ export default function ExternalOrdersAdmin() {
     e.preventDefault();
     if (!settleOrder) return;
     
-    const orderPrice = Number(settleOrder.price);
+    const orderPrice = Number(settleOrder.price) || 0;
     let finalPaidAmount = orderPrice;
     const remAmt = Number(settleRemainingAmount) || 0;
-    
+
+    if (settleDebtType !== "none" && remAmt <= 0) {
+      toast.error("أدخل المبلغ الباقي");
+      return;
+    }
     if (settleDebtType === "customer_owes") {
+      if (remAmt > orderPrice) {
+        toast.error("المبلغ الباقي أكبر من سعر الطلب");
+        return;
+      }
       finalPaidAmount = orderPrice - remAmt; // They paid less
     } else if (settleDebtType === "we_owe") {
       finalPaidAmount = orderPrice + remAmt; // They paid more
@@ -410,38 +314,36 @@ export default function ExternalOrdersAdmin() {
     try {
       await updateDoc(doc(db, "external_orders", settleOrder.id), { 
         status: "delivered", 
-        paidAmount: finalPaidAmount 
+        paidAmount: finalPaidAmount,
+        isDebtSettled: false,
       });
       toast.success("تم تحديث الطلب بنجاح");
       setSettleOrder(null);
     } catch (e) {
-      toast.error("حدث خطأ");
+      toast.error(`حدث خطأ: ${describeFirebaseError(e)}`);
     }
   };
 
+  // نقل الصور المخزنة داخل قاعدة البيانات إلى Storage (تُشغَّل مرة واحدة)
   const fixImages = async () => {
-    if (await customConfirm("هل أنت متأكد من رغبتك في إصلاح الصور العالقة؟ قد يستغرق هذا بضع ثوانٍ.")) {
-      try {
-        const snap = await getDocs(collection(db, "external_orders"));
-        let count = 0;
-        for (const docSnap of snap.docs) {
-          const data = docSnap.data();
-          if (data.tempImageUrl && data.tempImageUrl.startsWith('data:image')) {
-            try {
-              const base64Response = await fetch(data.tempImageUrl);
-              const blob = await base64Response.blob();
-              const fileRef = ref(storage, `external_orders/recovered_${Date.now()}_${docSnap.id}.jpg`);
-              await uploadBytes(fileRef, blob);
-              const url = await getDownloadURL(fileRef);
-              await updateDoc(doc(db, "external_orders", docSnap.id), { imageUrl: url, tempImageUrl: null });
-              count++;
-            } catch (err: any) {}
-          }
-        }
-        toast.success(`تم إصلاح ${count} طلبات بنجاح.`);
-      } catch (e: any) {
-        toast.error("حدث خطأ");
+    if (migration) return;
+    const ok = await customConfirm(
+      `يوجد ${embeddedImagesCount} طلب صورته مخزنة داخل قاعدة البيانات وهذا يبطّئ الصفحة. هل تريد نقلها إلى التخزين الآن؟`,
+      { confirmText: "انقلها", cancelText: "لاحقاً" }
+    );
+    if (!ok) return;
+    setMigration({ done: 0, total: embeddedImagesCount });
+    try {
+      const res = await migrateEmbeddedImages((done, total) => setMigration({ done, total }));
+      if (res.failed === 0) {
+        toast.success(`تم نقل ${res.migrated} صورة بنجاح ✔`);
+      } else {
+        toast.error(`نُقلت ${res.migrated} وفشلت ${res.failed}. السبب: ${res.reason || "غير معروف"}`, { duration: 9000 });
       }
+    } catch (e) {
+      toast.error(`تعذر النقل: ${describeFirebaseError(e)}`);
+    } finally {
+      setMigration(null);
     }
   };
 
@@ -449,44 +351,39 @@ export default function ExternalOrdersAdmin() {
     if (await customConfirm("هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.")) {
       try {
         await deleteDoc(doc(db, "external_orders", id));
-        if (typeof window !== "undefined") {
-          try {
-            localStorage.removeItem("cache_external_orders_v2");
-          } catch {}
-        }
+        toast.success("تم حذف الطلب");
       } catch (error) {
         console.error("Error deleting order:", error);
-        toast.error("حدث خطأ أثناء الحذف");
+        toast.error(`حدث خطأ أثناء الحذف: ${describeFirebaseError(error)}`);
       }
     }
   };
 
-  const filteredOrders = orders.filter(o => {
-    const matchesSearch = o.customerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.cakeName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.customerPhone?.includes(searchQuery);
-    const matchesStatus = statusFilter === "all" || (o.status || "pending") === statusFilter;
-    return matchesSearch && matchesStatus;
-  }).sort((a, b) => {
-    const isDeliveredA = a.status === 'delivered' || a.status === 'completed';
-    const isDeliveredB = b.status === 'delivered' || b.status === 'completed';
-    
-    if (isDeliveredA && !isDeliveredB) return 1;
-    if (!isDeliveredA && isDeliveredB) return -1;
-    
-    const parseDate = (d: any) => {
-      if (!d) return new Date(8640000000000000); // push to bottom if no date
-      if (d.toDate) return d.toDate();
-      if (d.seconds) return new Date(d.seconds * 1000); // Fix for JSON stringified Firebase Timestamps
-      const parsed = new Date(d);
-      return isNaN(parsed.getTime()) ? new Date(8640000000000000) : parsed;
-    };
-    
-    const dateA = parseDate(a.deliveryDate);
-    const dateB = parseDate(b.deliveryDate);
-    
-    return dateA.getTime() - dateB.getTime();
-  });
+  const filteredOrders = useMemo(() => {
+    const q = normalizeArabic(searchQuery);
+    const qDigits = q.replace(/\D/g, "");
+    const deliveryMs = (o: any) => toMillis(o.deliveryDate) || FAR_FUTURE; // بدون تاريخ → آخر القائمة
+    const isDone = (o: any) => o.status === "delivered" || o.status === "completed";
+
+    return orders
+      .filter((o) => {
+        const matchesStatus = statusFilter === "all" || (o.status || "pending") === statusFilter;
+        if (!matchesStatus) return false;
+        if (!q) return true;
+        return (
+          normalizeArabic(o.customerName).includes(q) ||
+          normalizeArabic(o.cakeName).includes(q) ||
+          (qDigits.length >= 3 && String(o.customerPhone || "").replace(/\D/g, "").includes(qDigits))
+        );
+      })
+      .sort((a, b) => {
+        const doneA = isDone(a);
+        const doneB = isDone(b);
+        if (doneA !== doneB) return doneA ? 1 : -1;
+        // غير المسلَّمة: الأقرب تسليماً أولاً — المسلَّمة: الأحدث أولاً
+        return doneA ? deliveryMs(b) - deliveryMs(a) : deliveryMs(a) - deliveryMs(b);
+      });
+  }, [orders, searchQuery, statusFilter]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#0D0A1A] pb-40">
@@ -513,7 +410,20 @@ export default function ExternalOrdersAdmin() {
             <div>
               <h1 className="text-xl font-black text-white mb-1">الطلبات الخارجية (السوشيال)</h1>
               <p className="text-xs text-emerald-200 font-bold">طلبات انستغرام، واتساب، والمكالمات</p>
-              <button onClick={fixImages} className="mt-2 text-[10px] bg-red-500/80 hover:bg-red-500 text-white px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10 transition">إصلاح الصور العالقة (يستخدم مرة واحدة)</button>
+              {embeddedImagesCount > 0 && (
+                <button
+                  type="button"
+                  onClick={fixImages}
+                  disabled={!!migration}
+                  className="mt-2 text-[10px] font-bold bg-amber-500/90 hover:bg-amber-500 text-white px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10 transition disabled:opacity-70 flex items-center gap-1.5"
+                >
+                  {migration ? (
+                    <><Loader2 className="w-3 h-3 animate-spin" /> جاري النقل {migration.done}/{migration.total}</>
+                  ) : (
+                    <><AlertTriangle className="w-3 h-3" /> {embeddedImagesCount} صورة تُبطّئ الصفحة — انقلها للتخزين</>
+                  )}
+                </button>
+              )}
             </div>
           </div>
           
@@ -541,17 +451,7 @@ export default function ExternalOrdersAdmin() {
             </button>
             <button 
               onClick={() => {
-                setIsEditMode(false);
-                setEditOrderId(null);
-                setCustomerName("");
-                setCustomerPhone("");
-                setCakeName("");
-                setPrice("");
-                setCost("");
-                setCostBreakdown(null);
-                setDeliveryDate(new Date().toISOString());
-                setImageFile(null);
-                setImagePreview(null);
+                resetForm();
                 setIsModalOpen(true);
               }}
               className="bg-white text-emerald-950 rounded-xl px-4 py-2 flex items-center gap-2 text-sm font-black shadow-sm hover:bg-gray-100 transition active:scale-95 flex-shrink-0"
@@ -574,7 +474,7 @@ export default function ExternalOrdersAdmin() {
           let totalOweUs = 0, totalWeOwe = 0;
 
           orders.forEach(o => {
-            if (o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled) {
+            if (isDebtOrder(o)) {
               if (Number(o.paidAmount) < Number(o.price)) {
                 totalOweUs += (Number(o.price) - Number(o.paidAmount));
               } else if (Number(o.paidAmount) > Number(o.price)) {
@@ -593,7 +493,7 @@ export default function ExternalOrdersAdmin() {
             }
 
             const amt = received;
-            const dDate = o.deliveryDate ? new Date(o.deliveryDate) : (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt || 0));
+            const dDate = new Date(toMillis(o.deliveryDate) || toMillis(o.createdAt));
             dDate.setHours(0,0,0,0);
             
             if (dDate.getTime() === today.getTime() && o.status !== "rejected" && o.status !== "cancelled") {
@@ -642,6 +542,13 @@ export default function ExternalOrdersAdmin() {
       </div>
 
 
+      {loadError && (
+        <div className="mx-5 mb-4 flex items-start gap-2 rounded-2xl border border-rose-200 dark:border-rose-800/50 bg-rose-50 dark:bg-rose-900/20 p-3 text-xs font-bold text-rose-700 dark:text-rose-300">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>تعذر تحميل الطلبات من الخادم: {loadError}{orders.length > 0 ? " — المعروض الآن نسخة محفوظة على الجهاز." : ""}</span>
+        </div>
+      )}
+
       {/* ═══════════════ TABS ═══════════════ */}
       <div className="px-5 mb-4">
         <div className="flex bg-white dark:bg-zinc-900 rounded-2xl p-1.5 shadow-sm border border-gray-100 dark:border-zinc-800">
@@ -680,7 +587,7 @@ export default function ExternalOrdersAdmin() {
         </div>
       </div>
 
-      {loading ? (
+      {loading && orders.length === 0 ? (
         <div className="flex justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
         </div>
@@ -696,8 +603,8 @@ export default function ExternalOrdersAdmin() {
         <div className="space-y-3">
           
           {(() => {
-            const debts = filteredOrders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled);
-            const normals = filteredOrders.filter(o => !(o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled));
+            const debts = filteredOrders.filter(o => isDebtOrder(o));
+            const normals = filteredOrders.filter(o => !(isDebtOrder(o)));
             const totalPages = Math.max(1, Math.ceil(normals.length / PAGE_SIZE));
             const safeCurrentPage = Math.min(currentPage, totalPages);
             const paginatedNormals = normals.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
@@ -728,14 +635,13 @@ export default function ExternalOrdersAdmin() {
                       return (
                         <div key={order.id} className={`bg-white dark:bg-zinc-900 rounded-[24px] p-4 border-2 shadow-sm flex flex-col md:flex-row gap-4 relative group hover:shadow-md transition ${customerOwesUs ? 'border-rose-400 dark:border-rose-800/50' : 'border-blue-400 dark:border-blue-800/50'}`}>
                           <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
-                            {(order.imageUrl || order.tempImageUrl || order.image) ? (
+                            {orderImage(order) ? (
                               <img 
-                                loading="eager" 
-                                fetchPriority="high"
+                                loading="lazy" 
                                 decoding="async"
-                                src={order.imageUrl || order.tempImageUrl || order.image} 
+                                src={orderImage(order)} 
                                 alt={order.cakeName} 
-                                onClick={() => window.open(order.imageUrl || order.tempImageUrl || order.image, '_blank')} 
+                                onClick={() => setZoomImage(orderImage(order))} 
                                 className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                               />
                             ) : (
@@ -809,14 +715,13 @@ export default function ExternalOrdersAdmin() {
 
               {/* Image / Icon */}
               <div className="w-full md:w-24 h-32 md:h-24 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800 flex-shrink-0 relative border border-gray-100 dark:border-zinc-700">
-                {(order.imageUrl || order.tempImageUrl || order.image) ? (
+                {orderImage(order) ? (
                   <img 
-                    loading="eager" 
-                    fetchPriority="high"
+                    loading="lazy" 
                     decoding="async"
-                    src={order.imageUrl || order.tempImageUrl || order.image} 
+                    src={orderImage(order)} 
                     alt={order.cakeName} 
-                    onClick={() => window.open(order.imageUrl || order.tempImageUrl || order.image, '_blank')} 
+                    onClick={() => setZoomImage(orderImage(order))} 
                     className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-300" 
                   />
                 ) : (
@@ -953,7 +858,7 @@ export default function ExternalOrdersAdmin() {
 
       {activeTab === "debts" && !loading && (() => {
         // Debts are orders where status is 'delivered' and paidAmount != price and !isDebtSettled
-      const debtOrders = orders.filter(o => o.status === "delivered" && o.paidAmount !== undefined && Number(o.paidAmount) !== Number(o.price) && !o.isDebtSettled);
+      const debtOrders = orders.filter(o => isDebtOrder(o));
         const customersOweUs = debtOrders.filter(o => Number(o.paidAmount) < Number(o.price));
         const weOweCustomers = debtOrders.filter(o => Number(o.paidAmount) > Number(o.price));
 
@@ -1101,20 +1006,15 @@ export default function ExternalOrdersAdmin() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="relative">
                   <label className="block text-sm font-bold mb-2">اسم الزبون</label>
-                  <input required type="text" value={customerName} onChange={handleCustomerNameChange} className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none" placeholder="مثال: سارة محمد" />
-                  
-                  {customerName.length > 0 && !customers.find(c => c.name === customerName) && (
-                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                      {customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase())).slice(0, 15).map(c => (
-                         <div key={c.id} className="p-3 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 cursor-pointer text-sm font-bold border-b border-gray-50 dark:border-zinc-700/50 last:border-0" onClick={() => {
-                           setCustomerName(c.name);
-                           fillCustomerData(c.name, c.phone || "", c.address || "", c.platform || "");
-                         }}>
-                           {c.name} {c.phone && <span className="text-gray-400 text-xs ml-2 font-normal" dir="ltr">({c.phone})</span>}
-                         </div>
-                      ))}
-                    </div>
-                  )}
+                  <CustomerNameInput
+                    required
+                    value={customerName}
+                    onChange={handleCustomerNameChange}
+                    onPick={applyCustomer}
+                    directory={directory}
+                    placeholder="مثال: سارة محمد"
+                    inputClassName="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 focus:border-emerald-500 focus:outline-none"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-2">منصة الطلب</label>
@@ -1184,7 +1084,7 @@ export default function ExternalOrdersAdmin() {
                 {price && (
                   <div className="col-span-2 pt-2 flex items-center justify-between text-emerald-700 dark:text-emerald-400 border-t border-emerald-200 dark:border-emerald-800/50 mt-2">
                     <span className="text-sm font-bold flex items-center gap-2"><Calculator className="w-4 h-4"/> الربح الصافي:</span>
-                    <span className="font-black text-lg">{(Number(price) - (cost ? Number(cost) : 0)).toLocaleString()} د.ع</span>
+                    <span className="font-black text-lg">{(parseIqdInput(price) - (cost ? parseIqdInput(cost) : 0)).toLocaleString()} د.ع</span>
                   </div>
                 )}
               </div>
@@ -1225,7 +1125,7 @@ export default function ExternalOrdersAdmin() {
                   className="w-full h-32 border-2 border-dashed border-gray-300 dark:border-zinc-700 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition relative overflow-hidden"
                 >
                   {imagePreview ? (
-                    <Image src={imagePreview} alt="Preview" fill className="object-contain" />
+                    <img src={imagePreview} alt="معاينة" className="absolute inset-0 w-full h-full object-contain" />
                   ) : (
                     <>
                       <ImageIcon className="w-8 h-8 text-gray-400 mb-2" />
@@ -1241,6 +1141,13 @@ export default function ExternalOrdersAdmin() {
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* تكبير صورة الطلب */}
+      {zoomImage && (
+        <div className="fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4" onClick={() => setZoomImage(null)}>
+          <img src={zoomImage} alt="صورة الطلب" className="max-w-full max-h-full rounded-2xl object-contain" />
         </div>
       )}
 
@@ -1288,12 +1195,7 @@ export default function ExternalOrdersAdmin() {
                 costBreakdown: JSON.parse(JSON.stringify(breakdown)),
                 profit
               });
-              setOrders(prev => prev.map(o => o.id === viewingCostOrder.id ? {
-                ...o,
-                cost: numCost,
-                costBreakdown: breakdown,
-                profit
-              } : o));
+patchSocialOrderLocally(viewingCostOrder.id, { cost: numCost, costBreakdown: breakdown, profit });
               toast.success("تم تحديث تكلفة الكيكة والمقادير بنجاح ✔");
             } catch (err) {
               toast.error("فشل تحديث التكلفة");

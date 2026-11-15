@@ -50,7 +50,18 @@ function TrackOrderContent() {
 
       // 2. If not ID, search by Phone Number
       const q = query(collection(db, "orders"), where("phone", "==", term));
-      const querySnapshot = await getDocs(q);
+      let querySnapshot;
+      try {
+        querySnapshot = await getDocs(q);
+      } catch (permErr: any) {
+        // قواعد الأمان تمنع سرد الطلبات برقم الهاتف للزوار (حماية لبيانات الزبائن)
+        if (String(permErr?.code || "").includes("permission-denied")) {
+          toast.error("للبحث استخدم رقم الطلب الذي وصلك بعد إتمام الشراء");
+          setLoading(false);
+          return;
+        }
+        throw permErr;
+      }
       const results = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       
       // Sort by latest

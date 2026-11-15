@@ -10,6 +10,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState, useMemo } from "react";
 import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, orderBy, limit } from "firebase/firestore";
+import { subscribeSocialOrders } from "@/lib/socialOrders";
 import { db } from "@/lib/firebase";
 import AdminQuickEntry from "@/components/AdminQuickEntry";
 import { calculateFinancesStats, getCachedFinancesStats, persistFinancesStats } from "@/lib/financesSync";
@@ -145,7 +146,6 @@ export default function AdminDashboard() {
     };
 
     const qOrders = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200));
-    const qExt = query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(200));
     const qExp = query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(150));
     const qStore = query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(100));
 
@@ -153,9 +153,13 @@ export default function AdminDashboard() {
       currentOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       scheduleCalculateStats();
     });
-    const unsubExt = onSnapshot(qExt, (snap) => {
-      currentExtOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // طلبات السوشيال من المخزن المشترك (نفس المستمع المستخدم في صفحة الطلبات والمركز)
+    const unsubExt = subscribeSocialOrders((st) => {
+      if (st.loading) return;
+      currentExtOrders = st.orders;
       scheduleCalculateStats();
+      // منطق التنبيهات يعمل فقط على بيانات مؤكدة من الخادم حتى لا تتكرر الإشعارات من نسخة قديمة
+      if (st.fromCache) return;
 
         // Notifications Logic: Only check ACTIVE, un-delivered orders
         const now = new Date();

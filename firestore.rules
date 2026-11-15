@@ -1,93 +1,143 @@
 rules_version = '2';
 
+// ════════════════════════════════════════════════════════════════════
+//  قواعد Firestore — كيك الأميرة
+//
+//  المبدأ:
+//   • واجهة المتجر (منتجات، دورات، مستلزمات، بانرات...) قراءة للجميع وكتابة للأدمن.
+//   • كل بيانات الإدارة والمالية المنزلية والصحة: للأدمن فقط.
+//   • الزبون يرى ويعدّل بياناته هو فقط، ولا يستطيع ترقية نفسه إلى أدمن.
+//
+//  مهم: عند إضافة حساب أدمن جديد أضِف بريده في adminEmails() هنا
+//  وفي storage.rules وفي src/context/AuthContext.tsx.
+// ════════════════════════════════════════════════════════════════════
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Check if the user is an admin
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function adminEmails() {
+      return [
+        'ontheway.princess@gmail.com',
+        'haider.rahman@gmail.com',
+        'haiderr.rahman@gmail.com',
+        'test.user.12345@gmail.com'   // حساب تجريبي — يُفضَّل حذفه (انظر تقرير التدقيق)
+      ];
+    }
+
+    // أدمن = بريد معتمد، أو custom claim، أو role == "admin" في مستند المستخدم
     function isAdmin() {
-      return request.auth != null && request.auth.token.admin == true;
+      return signedIn() && (
+        ('email' in request.auth.token && request.auth.token.email in adminEmails())
+        || request.auth.token.get('admin', false) == true
+        || (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        )
+      );
     }
 
-    // Check if the user is accessing their own data
     function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
+      return signedIn() && request.auth.uid == userId;
     }
 
-    // Products (Cakes) collection
-    match /products/{productId} {
-      // Anyone can view products
+    // ───────────── واجهة المتجر: قراءة عامة، كتابة للأدمن ─────────────
+    match /products/{id}            { allow read: if true; allow write: if isAdmin(); }
+    match /categories/{id}          { allow read: if true; allow write: if isAdmin(); }
+    match /courses/{id}             { allow read: if true; allow write: if isAdmin(); }
+    match /supplies_categories/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /banners/{id}             { allow read: if true; allow write: if isAdmin(); }
+    match /ads/{id}                 { allow read: if true; allow write: if isAdmin(); }
+    match /offers/{id}              { allow read: if true; allow write: if isAdmin(); }
+    match /competitions/{id}        { allow read: if true; allow write: if isAdmin(); }
+
+    match /supplies/{id} {
       allow read: if true;
-      // Only admins can create/update/delete products
       allow write: if isAdmin();
+      // صفحة الدفع تُنقص المخزون عند الشراء: يُسمح فقط بإنقاص stockQuantity ولا شيء غيره
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockQuantity'])
+                    && request.resource.data.stockQuantity is number
+                    && request.resource.data.stockQuantity < resource.data.stockQuantity;
     }
 
-    // Courses collection
-    match /courses/{courseId} {
-      // Anyone can view course metadata
-      allow read: if true;
-      // Only admins can manage courses
-      allow write: if isAdmin();
-    }
-
-    // Users (Profiles) collection
+    // ───────────── المستخدمون ─────────────
     match /users/{userId} {
-      // Users can only read/write their own profiles, admins can read all
       allow read: if isOwner(userId) || isAdmin();
-      allow write: if isOwner(userId);
+      // إنشاء الحساب: بدون صلاحية أدمن
+      allow create: if isOwner(userId)
+                    && request.resource.data.get('role', 'user') == 'user';
+      // التعديل الذاتي: كل شيء عدا role (كان أي مستخدم يستطيع جعل نفسه أدمن)
+      allow update: if isOwner(userId)
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']);
+      allow write: if isAdmin();
     }
 
-    // Orders collection
+    // ───────────── طلبات المتجر ─────────────
     match /orders/{orderId} {
-      // Users can read/write their own orders
-      allow read, write: if request.auth != null && resource.data.userId == request.auth.uid;
-      // Admins can manage all orders
-      allow read, write: if isAdmin();
-      // Allow creation if the user is setting their own ID
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-    }
-
-    // Family Competition
-    match /familyCompetitionRounds/{roundId} {
-      allow read, write: if isAdmin();
-    }
-    match /familyCompetitionEntries/{entryId} {
+      // الضيف يطلب بدون حساب (userId = "guest")، والمسجَّل بمعرّفه فقط
+      allow create: if (!signedIn() && request.resource.data.userId == 'guest')
+                    || (signedIn() && request.resource.data.userId == request.auth.uid);
+      // تتبع الطلب برقمه (المعرّف عشوائي وغير قابل للتخمين)
+      allow get: if true;
+      // قوائم الطلبات: صاحبها أو الأدمن فقط.
+      // ملاحظة: هذا يوقف «البحث برقم الهاتف» للزوار في صفحة تتبع الطلب، لأن السماح به
+      // يعني أن أي شخص يستطيع سحب كل الطلبات بأسمائها وعناوينها. لإرجاعه (غير منصوح):
+      //   allow list: if true;
+      allow list: if signedIn() && resource.data.userId == request.auth.uid;
       allow read, write: if isAdmin();
     }
 
-    // Home Finance documents (expenses, needs, inventory, etc.)
-    match /home_finance/{docId} {
-      allow read, write: if true;
+    match /custom_orders/{orderId} {
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow read, write: if isAdmin();
     }
 
-    // Family cycle tracking settings and history
-    match /familyCycleSettings/{memberName} {
-      allow read, write: if true;
+    match /favorites/{favId} {
+      allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, write: if isAdmin();
     }
 
-    // Cake Inventory, Material Purchases & Invoices
-    match /cake_inventory/{itemId} {
-      allow read, write: if true;
+    // ───────────── الإشعارات ─────────────
+    match /notifications/{notifId} {
+      // صفحة الدفع (حتى للضيف) تُنشئ إشعاراً للأدمن فقط
+      allow create: if request.resource.data.userId == 'admin'
+                    && request.resource.data.read == false;
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      // صاحب الإشعار يغيّر حالة القراءة فقط
+      allow update: if signedIn() && resource.data.userId == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow read, write: if isAdmin();
     }
-    match /cake_material_purchases/{purchaseId} {
-      allow read, write: if true;
-    }
-    match /cake_invoices/{invoiceId} {
-      allow read, write: if true;
-    }
-    match /expenses/{expenseId} {
-      allow read, write: if true;
-    }
-    match /external_orders/{orderId} {
-      allow read, write: if true;
-    }
-    match /store_sales/{saleId} {
-      allow read, write: if true;
-    }
-    match /cake_recipe_templates/{templateId} {
-      allow read, write: if true;
-    }
-    match /finances_stats/{docId} {
-      allow read, write: if true;
-    }
+
+    // ───────────── الإدارة فقط ─────────────
+    // طلبات السوشيال والزبائن (أسماء، هواتف، عناوين)
+    match /external_orders/{id}   { allow read, write: if isAdmin(); }
+    match /customers/{id}         { allow read, write: if isAdmin(); }
+    match /social_customers/{id}  { allow read, write: if isAdmin(); }
+
+    // المالية والمخزون
+    match /expenses/{id}                { allow read, write: if isAdmin(); }
+    match /store_sales/{id}             { allow read, write: if isAdmin(); }
+    match /finances_stats/{id}          { allow read, write: if isAdmin(); }
+    match /cake_inventory/{id}          { allow read, write: if isAdmin(); }
+    match /cake_material_purchases/{id} { allow read, write: if isAdmin(); }
+    match /cake_invoices/{id}           { allow read, write: if isAdmin(); }
+    match /cake_recipe_templates/{id}   { allow read, write: if isAdmin(); }
+
+    // المنزل والعائلة (مصاريف، ديون، سجلات صحية، الدورة الشهرية)
+    match /home_finance/{id}             { allow read, write: if isAdmin(); }
+    match /familyCycleSettings/{id}      { allow read, write: if isAdmin(); }
+    match /familyCompetitionRounds/{id}  { allow read, write: if isAdmin(); }
+    match /familyCompetitionEntries/{id} { allow read, write: if isAdmin(); }
+
+    // مستند وهمي تستخدمه نماذج الإدخال السريع
+    match /dummy_update/{id} { allow read, write: if isAdmin(); }
+
+    // أي مجموعة غير مذكورة أعلاه مرفوضة تلقائياً.
   }
 }

@@ -13,6 +13,17 @@ import { ar } from "date-fns/locale/ar";
 import { BISMAYAH_BUILDINGS, BISMAYAH_APARTMENTS } from "../BismayahData";
 import CakeCostBreakdownModal from "@/components/CakeCostBreakdownModal";
 import { CakeCostBreakdown } from "@/lib/cakeCostCalculator";
+import CustomerNameInput from "@/components/CustomerNameInput";
+import {
+  CustomerSuggestion,
+  attachOrderImage,
+  describeFirebaseError,
+  makeInlineThumbnail,
+  parseIqdInput,
+  saveCustomerFromOrder,
+  useCustomerDirectory,
+  withSoftTimeout,
+} from "@/lib/socialOrders";
 
 const PLATFORMS = ["إنستجرام", "واتساب", "فيسبوك", "تيك توك", "هاتف", "أخرى"];
 
@@ -36,7 +47,6 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
   const [costBreakdown, setCostBreakdown] = useState<CakeCostBreakdown | null>(null);
   const [showCostCalculator, setShowCostCalculator] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState<string>(new Date().toISOString());
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
   // New location states
   const [deliveryType, setDeliveryType] = useState<"bismayah" | "other" | "door">("other");
@@ -50,7 +60,8 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [customers, setCustomers] = useState<any[]>([]);
+  // دليل الزبائن: من الطلبات السابقة + مجموعة customers (انظر lib/socialOrders)
+  const { directory } = useCustomerDirectory();
 
   useEffect(() => {
     if (typeof navigator !== "undefined") setIsOffline(!navigator.onLine);
@@ -58,10 +69,6 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
     const handleOnline = () => setIsOffline(false);
     window.addEventListener("offline", handleOffline);
     window.addEventListener("online", handleOnline);
-
-    getDocs(collection(db, "customers")).then(snap => {
-      setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
 
     return () => {
       window.removeEventListener("offline", handleOffline);
@@ -82,69 +89,25 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
     }
   };
 
-  const fillCustomerData = async (name: string, existingPhone: string, existingAddress: string, existingPlatform: string) => {
-    let finalPhone = existingPhone;
-    let finalAddress = existingAddress;
-    let finalPlatform = existingPlatform;
-
-    let finalLocationUrl = "";
-
-    if (!finalPhone || !finalAddress) {
-      try {
-        const { query, collection, where, limit, getDocs } = await import("firebase/firestore");
-        const q = query(collection(db, "external_orders"), where("customerName", "==", name), limit(10));
-        const snap = await getDocs(q);
-        const orderWithPhone = snap.docs.find(d => d.data().customerPhone);
-        const orderWithAddress = snap.docs.find(d => d.data().address);
-        const orderWithLocation = snap.docs.find(d => d.data().locationUrl);
-        
-        if (!finalPhone && orderWithPhone) finalPhone = orderWithPhone.data().customerPhone;
-        if (!finalAddress && orderWithAddress) finalAddress = orderWithAddress.data().address;
-        if (!finalPlatform && snap.docs.length > 0) finalPlatform = snap.docs[0].data().platform;
-        if (orderWithLocation) finalLocationUrl = orderWithLocation.data().locationUrl;
-      } catch (e) {
-        console.error("Error fetching past orders for autofill", e);
-      }
-    }
-
-    if (finalPhone) setCustomerPhone(finalPhone);
-    if (finalAddress) {
-      setAddress(finalAddress);
-      if (finalAddress === "تسليم باب الشقة بدون توصيل") {
+  // تعبئة بيانات الزبون المختار (الدليل يحمل أحدث هاتف/عنوان/موقع من طلباته السابقة)
+  const applyCustomer = (c: CustomerSuggestion) => {
+    if (c.phone) setCustomerPhone(c.phone);
+    if (c.address) {
+      setAddress(c.address);
+      if (c.address === "تسليم باب الشقة بدون توصيل") {
         setDeliveryType("door");
-      } else if (finalAddress.includes("مجمع") && finalAddress.includes("عمارة")) {
+      } else if (c.address.includes("مجمع") && c.address.includes("عمارة")) {
         setDeliveryType("bismayah");
       } else {
         setDeliveryType("other");
       }
     }
-    if (finalPlatform) setPlatform(finalPlatform);
-    if (finalLocationUrl) setLocationUrl(finalLocationUrl);
+    if (c.platform) setPlatform(c.platform);
+    if (c.locationUrl) setLocationUrl(c.locationUrl);
   };
 
-  const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const name = e.target.value;
+  const handleCustomerNameChange = (name: string) => {
     setCustomerName(name);
-    setShowCustomerDropdown(true);
-    
-    const exactMatch = customers.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
-    if (exactMatch) {
-      fillCustomerData(exactMatch.name, exactMatch.phone || "", exactMatch.address || "", exactMatch.platform || "");
-      if (exactMatch.locationUrl) setLocationUrl(exactMatch.locationUrl);
-    }
-  };
-
-  const selectCustomer = (name: string, phone: string, customerAddress: string, customerPlatform: string, customerLocationUrl?: string) => {
-    setCustomerName(name);
-    setShowCustomerDropdown(false);
-    fillCustomerData(name, phone || "", customerAddress || "", customerPlatform || "");
-    if (customerLocationUrl) setLocationUrl(customerLocationUrl);
-  };
-
-  const parseIqdInput = (val: string | number) => {
-    let num = Number(val) || 0;
-    if (num > 0 && num < 1000) num *= 1000;
-    return num;
   };
 
   const submitSale = async () => {
@@ -154,16 +117,14 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
     }
     setSubmitting(true);
 
+    // لا يوجد تخزين دائم للكتابات المعلّقة، فالحفظ بدون إنترنت كان يضيع عند إغلاق الصفحة.
+    // الأصدق أن نمنع الحفظ ونُبقي البيانات في النموذج حتى يعود الاتصال.
     if (typeof window !== "undefined" && !navigator.onLine) {
-      if (imageFile) {
-        toast.error("لا يمكن إرفاق صور الطلبات أثناء انقطاع الإنترنت. يرجى إزالة الصورة أو الاتصال أولاً.", { duration: 5000 });
-        setSubmitting(false);
-        return;
-      } else {
-        toast.success("مقطوع الإنترنت لديك.. سيتم حفظ الطلب نصياً في الجهاز ورفعه لاحقاً.", { duration: 5000 });
-      }
+      toast.error("لا يوجد اتصال بالإنترنت — لم يُحفظ الطلب. بياناتك باقية في النموذج، أعد المحاولة عند رجوع الاتصال.", { duration: 6000 });
+      setSubmitting(false);
+      return;
     }
-    
+
     try {
       const numPrice = parseIqdInput(price);
       const numCost = cost ? parseIqdInput(cost) : 0;
@@ -203,47 +164,21 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         finalLocationUrl = extractedFromAddr;
       }
 
-      const existingCustomer = customers.find(c => c.name === customerName);
-      let customerId = existingCustomer?.id;
-      
-      if (!existingCustomer) {
-        const custRef = await addDoc(collection(db, "customers"), {
-          name: customerName, phone: customerPhone,
-          address: computedAddress, platform, locationUrl: finalLocationUrl,
-          points: Math.floor(numPrice / 1000), totalSpent: numPrice,
-          ordersCount: 1, createdAt: serverTimestamp(),
-        });
-        customerId = custRef.id;
-      } else {
-        const docRef = doc(db, "customers", customerId!);
-        await updateDoc(docRef, {
-          phone: customerPhone || existingCustomer.phone || "",
-          address: computedAddress || existingCustomer.address || "",
-          platform: platform || existingCustomer.platform || "واتساب",
-          ...(finalLocationUrl ? { locationUrl: finalLocationUrl } : {}),
-          points: (existingCustomer.points || 0) + Math.floor(numPrice / 1000),
-          totalSpent: (existingCustomer.totalSpent || 0) + numPrice,
-          ordersCount: (existingCustomer.ordersCount || 0) + 1,
-          lastOrder: serverTimestamp()
-        });
-      }
+      const cleanName = customerName.replace(/\s+/g, " ").trim();
+      const customerId = (await withSoftTimeout(
+        saveCustomerFromOrder(
+          directory,
+          { name: cleanName, phone: customerPhone, address: computedAddress, platform, locationUrl: finalLocationUrl },
+          { orderAmount: numPrice }
+        ),
+        2500
+      )) || null;
 
-      let tempImageUrl = "";
-      if (imageFile) {
-        try {
-          tempImageUrl = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(imageFile);
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = error => reject(error);
-          });
-        } catch (e) {
-          console.error("Base64 error", e);
-        }
-      }
+      // مصغّرة خفيفة داخل الطلب للعرض الفوري؛ الصورة الكاملة تُرفع إلى Storage في الخلفية
+      const thumb = imageFile ? await makeInlineThumbnail(imageFile) : "";
 
       const newOrderRef = await addDoc(collection(db, "external_orders"), {
-        customerId, customerName, customerPhone, address: computedAddress, platform, cakeName,
+        customerId, customerName: cleanName, customerPhone, address: computedAddress, platform, cakeName,
         price: numPrice, cost: numCost,
         costBreakdown: costBreakdown ? JSON.parse(JSON.stringify(costBreakdown)) : null,
         profit,
@@ -252,39 +187,26 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,      // حقل موحد مع باقي التطبيق
         deliveryTime: deliveryDate, // توافق مع السجلات القديمة
-        imageUrl: tempImageUrl || "",
-        tempImageUrl: tempImageUrl || "",
+        imageUrl: thumb || "",
+        ...(thumb ? { imagePending: true } : {}),
         createdAt: serverTimestamp(),
       });
 
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.removeItem("cache_external_orders_v2");
-        } catch {}
-      }
-
       if (imageFile) {
-        if (navigator.onLine) {
-          toast.success("جاري رفع الصورة في الخلفية...", { icon: '⏳', duration: 3000 });
-          const fileRef = ref(storage, `external_orders/${Date.now()}_${imageFile.name}`);
-          uploadBytes(fileRef, imageFile).then(async () => {
-            const url = await getDownloadURL(fileRef);
-            await updateDoc(newOrderRef, { imageUrl: url, tempImageUrl: null });
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('backgroundUploadSuccess'));
-            }
-          }).catch(() => {
-             toast.error("تأجل رفع الصورة لعدم وجود إنترنت");
-          });
-        } else {
-          toast.success("تم حفظ الصورة محلياً (أوفلاين)");
-        }
+        attachOrderImage(newOrderRef.id, imageFile).then((res) => {
+          if (res.ok) {
+            window.dispatchEvent(new CustomEvent('backgroundUploadSuccess'));
+          } else {
+            toast.error(`حُفظ الطلب لكن لم تُرفع الصورة الكاملة: ${res.reason}`, { duration: 7000 });
+          }
+        });
       }
 
       toast.success("تم تسجيل الطلب بنجاح");
       onSuccess();
     } catch (e) {
-      toast.error("حدث خطأ أثناء التسجيل");
+      console.error("QuickEntrySocial save error:", e);
+      toast.error(`تعذر تسجيل الطلب: ${describeFirebaseError(e)}`);
     } finally {
       setSubmitting(false);
     }
@@ -325,28 +247,14 @@ export default function QuickEntrySocial({ onSuccess }: { onSuccess: () => void 
         <div>
           <label className="block text-xs font-bold text-gray-800 dark:text-slate-200 mb-2">اسم الزبون</label>
           <div className="relative">
-            <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input 
-              type="text" value={customerName} onChange={handleCustomerNameChange}
-              onFocus={() => setShowCustomerDropdown(true)}
-              onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
-              className="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 rounded-xl px-4 py-3 pr-10 text-sm font-bold focus:ring-2 focus:ring-pink-500 outline-none shadow-sm"
-              placeholder="اسم الزبون"
+            <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10 pointer-events-none" />
+            <CustomerNameInput
+              value={customerName}
+              onChange={handleCustomerNameChange}
+              onPick={applyCustomer}
+              directory={directory}
+              inputClassName="w-full bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 rounded-xl px-4 py-3 pr-10 text-sm font-bold focus:ring-2 focus:ring-pink-500 outline-none shadow-sm"
             />
-            {showCustomerDropdown && customerName && (
-              <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-40 overflow-y-auto custom-scrollbar">
-                {customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase())).map(c => (
-                  <li 
-                    key={c.id} 
-                    onClick={() => selectCustomer(c.name, c.phone, c.address, c.platform, c.locationUrl)}
-                    className="px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-zinc-800 last:border-0 flex justify-between items-center"
-                  >
-                    <span className="font-bold">{c.name}</span>
-                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{c.platform || "واتساب"}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
         </div>
         <div>

@@ -3,6 +3,9 @@ import { X, Check, Loader2, Camera, Upload, Phone, User, Calendar, Tag, Coins, M
 import { doc, updateDoc, collection, getDocs, addDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
+import { deleteField } from "firebase/firestore";
+import CustomerNameInput from "@/components/CustomerNameInput";
+import { attachOrderImage, makeInlineThumbnail, orderImage, saveCustomerFromOrder, useCustomerDirectory, withSoftTimeout } from "@/lib/socialOrders";
 import imageCompression from 'browser-image-compression';
 import FormattedNumberInput from "@/components/FormattedNumberInput";
 import { toast } from "sonner";
@@ -55,14 +58,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
   const [locationUrl, setLocationUrl] = useState("");
   const [manualDeliveryFee, setManualDeliveryFee] = useState("");
 
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-
-  useEffect(() => {
-    getDocs(collection(db, "customers")).then(snap => {
-      setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-  }, []);
+  // دليل الزبائن: من الطلبات السابقة + مجموعة customers (انظر lib/socialOrders)
+  const { directory } = useCustomerDirectory();
 
   useEffect(() => {
     if (order && isOpen) {
@@ -130,17 +127,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
     }
   };
 
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const name = e.target.value;
+  const handleNameChange = (name: string) => {
     setCustomerName(name);
-    setShowCustomerDropdown(true);
-    const existing = customers.find(c => c.name === name);
-    if (existing) {
-      if (existing.phone) setCustomerPhone(existing.phone);
-      if (existing.address) setAddress(existing.address);
-      if (existing.platform) setPlatform(existing.platform);
-      if (existing.locationUrl) setLocationUrl(existing.locationUrl);
-    }
   };
 
   const selectCustomer = (name: string, phone: string, addr: string, plat: string, locUrl?: string) => {
@@ -158,7 +146,6 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
     }
     if (plat) setPlatform(plat);
     if (locUrl) setLocationUrl(locUrl);
-    setShowCustomerDropdown(false);
   };
 
   const parseIqdInput = (val: string | number) => {
@@ -176,14 +163,8 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
       const numPaidAmount = parseIqdInput(paidAmount);
       const isDebtSettled = numPaidAmount === numPrice;
 
-      let tempImageUrl = "";
-      if (imageFile) {
-        try {
-          tempImageUrl = await fileToBase64(imageFile);
-        } catch (e) {
-          console.error("Base64 error", e);
-        }
-      }
+      // مصغّرة خفيفة للعرض الفوري؛ الصورة الكاملة تُرفع إلى Storage في الخلفية
+      const tempImageUrl = imageFile ? await makeInlineThumbnail(imageFile) : "";
 
       const computedDeliveryFee = deliveryType === "bismayah" 
         ? (bismayahComplex === "A" ? 1000 : 2000) 
@@ -237,53 +218,28 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         isBismayah: deliveryType === "bismayah", bismayahComplex, bismayahBuilding, bismayahApt, deliveryType,
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl: finalLocationUrl,
         deliveryDate,
-        // Preserve existing imageUrl or assign new image directly to imageUrl
-        ...(!imageFile && (order.imageUrl || order.tempImageUrl) ? { imageUrl: order.imageUrl || order.tempImageUrl } : {}),
-        ...(tempImageUrl ? { imageUrl: tempImageUrl, tempImageUrl } : {})
+        // بدون صورة جديدة لا نلمس حقول الصورة إطلاقاً
+        ...(tempImageUrl ? { imageUrl: tempImageUrl, imagePending: true, tempImageUrl: deleteField() } : {})
       });
 
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.removeItem("cache_external_orders_v2");
-        } catch {}
-      }
-
-      // Update customer profile
-      const existingCustomer = customers.find(c => c.name === customerName);
-      if (existingCustomer) {
-        await updateDoc(doc(db, "customers", existingCustomer.id), {
-          phone: customerPhone || existingCustomer.phone || "",
-          address: computedAddress || existingCustomer.address || "",
-          platform: platform || existingCustomer.platform || "واتساب",
-          ...(finalLocationUrl ? { locationUrl: finalLocationUrl } : {}),
-          totalSpent: (existingCustomer.totalSpent || 0) - parseIqdInput(order.price) + numPrice
-        });
-      } else {
-        await addDoc(collection(db, "customers"), {
-          name: customerName,
-          phone: customerPhone,
-          address: computedAddress,
-          platform: platform || "واتساب",
-          points: Math.floor(numPrice / 1000),
-          totalSpent: numPrice
-        });
-      }
+      // تحديث بطاقة الزبون (لا يُحتسب الطلب مرتين عند التعديل)
+      await withSoftTimeout(
+        saveCustomerFromOrder(
+          directory,
+          { name: customerName, phone: customerPhone, address: computedAddress, platform, locationUrl: finalLocationUrl },
+          { orderAmount: numPrice, previousAmount: parseIqdInput(order.price) }
+        ),
+        2500
+      );
 
       if (imageFile) {
-        if (navigator.onLine) {
-          toast.success("جاري رفع الصورة في الخلفية...", { icon: '⏳', duration: 4000 });
-          const fileRef = ref(storage, `external_orders/${Date.now()}_${imageFile.name}`);
-          uploadBytes(fileRef, imageFile).then(async () => {
-            const url = await getDownloadURL(fileRef);
-            await updateDoc(doc(db, "external_orders", order.id), { imageUrl: url, tempImageUrl: null });
+        attachOrderImage(order.id, imageFile).then((res) => {
+          if (res.ok) {
             window.dispatchEvent(new CustomEvent('backgroundUploadSuccess'));
-          }).catch(err => {
-            console.error("Image upload error:", err);
-            toast.error("تأجل رفع الصورة لعدم وجود إنترنت");
-          });
-        } else {
-          toast.success("تم حفظ الصورة محلياً (أوفلاين)");
-        }
+          } else {
+            toast.error(`حُفظ التعديل لكن لم تُرفع الصورة الكاملة: ${res.reason}`, { duration: 7000 });
+          }
+        });
       }
 
       toast.success("تم التعديل بنجاح", {
@@ -305,8 +261,7 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
         deliveryFee: computedDeliveryFee, totalPriceWithDelivery, locationUrl,
         deliveryDate,
         // Always keep existing imageUrl — never let it disappear from state
-        imageUrl: order.imageUrl || "",
-        ...(tempImageUrl ? { tempImageUrl } : {}),
+        imageUrl: tempImageUrl || orderImage(order),
       });
       onClose();
     } catch (err) {
@@ -365,38 +320,16 @@ export default function EditExternalOrderModal({ isOpen, onClose, order, onEditS
               <div className="relative">
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">اسم الزبون</label>
                 <div className="relative">
-                  <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input 
-                    type="text" value={customerName} onChange={handleNameChange} required
-                    onFocus={() => setShowCustomerDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
-                    className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                    placeholder="اسم الزبون"
+                  <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10 pointer-events-none" />
+                  <CustomerNameInput
+                    required
+                    value={customerName}
+                    onChange={handleNameChange}
+                    onPick={(c) => selectCustomer(c.name, c.phone, c.address, c.platform, c.locationUrl)}
+                    directory={directory}
+                    inputClassName="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
-                {showCustomerDropdown && customerName && (
-                  <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-lg max-h-40 overflow-y-auto custom-scrollbar">
-                    {customers.filter(c => c.name.includes(customerName)).map(c => (
-                      <li 
-                        key={c.id} 
-                        onClick={() => selectCustomer(c.name, c.phone, c.address, c.platform)}
-                        className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700/50 cursor-pointer flex justify-between items-center transition"
-                      >
-                        <span className="font-bold text-gray-900 dark:text-white text-sm">{c.name}</span>
-                        {(c.phone || c.platform) && (
-                          <span className="text-xs text-gray-400 font-medium">
-                            {c.platform} {c.phone ? `- ${c.phone}` : ''}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                    {customers.filter(c => c.name.includes(customerName)).length === 0 && (
-                      <li className="px-4 py-3 text-sm text-gray-500 font-bold text-center">
-                        زبون جديد
-                      </li>
-                    )}
-                  </ul>
-                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">منصة الطلب</label>

@@ -109,7 +109,8 @@ export default function FinancesAdmin() {
       try {
         const [ordersSnap, extSnap, storeSnap, cakeInvSnap] = await Promise.all([
           getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200))),
-          getDocs(query(collection(db, "external_orders"), orderBy("createdAt", "desc"), limit(200))),
+          // كل طلبات السوشيال (بدون حد 200) حتى تطابق الأرقام لوحة الإدارة والمركز
+          getDocs(collection(db, "external_orders")),
           getDocs(query(collection(db, "store_sales"), orderBy("createdAt", "desc"), limit(150))),
           getDocs(collection(db, "cake_inventory")),
         ]);
