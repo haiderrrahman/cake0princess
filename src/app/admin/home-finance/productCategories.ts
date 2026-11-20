@@ -1158,12 +1158,12 @@ export function detectProductPriority(name: string, category?: string): ProductP
   // 1. تبذير (Gambling, tobacco, lottery, energy drinks, pure wasteful splurges)
   const wasteKeywords = [
     "لوتو", "يانصيب", "سوبر كي", "عراق لوتو", "بطاقه لوتو", "بطاقات لوتو", "قمار", "رهان",
-    "سكائر", "سجائر", "فيب", "معسل", "اركيله", "ارجيله", "سحبه", "تبغ", "ولاعه", "فحم اركيله",
-    "ريد بول", "تايجر", "مشروب طاقه", "باور هورس", "بلو", "سلايم", "العاب ناريه", "مفرقعات"
+    "سكائر", "سجائر", "سكاير", "جكاير", "جگاير", "جقاير", "سيكاره", "سيجاره", "نركيله", "ناركيله", "فيب", "معسل", "اركيله", "ارجيله", "سحبه", "تبغ", "ولاعه", "فحم اركيله",
+    "ريد بول", "تايجر", "مشروب طاقه", "باور هورس", "بلو انرجي", "سلايم", "العاب ناريه", "مفرقعات"
   ];
   if (
-    normCat.includes("يانصيب") || normCat.includes("سكائر") || normCat.includes("معسل") ||
-    wasteKeywords.some(k => normN.includes(k))
+    normCat.includes("يانصيب") || normCat.includes("سكاير") || normCat.includes("معسل") ||
+    wasteKeywords.some(k => normN.includes(normalizeArabicText(k)))
   ) {
     return "تبذير";
   }
@@ -1178,12 +1178,12 @@ export function detectProductPriority(name: string, category?: string): ProductP
     "برغر", "برجر", "همبرجر", "بيتزا", "شاورما", "كنتاكي", "وجبه سريعه", "صاج", "فاهيتا",
     "سندويش جاهز", "فنكر", "بطاطس مقليه", "كابتشينو جاهز", "لاتيه", "قهوه بارده", "ايس كوفي",
     "ميلك شيك", "كوكتيل", "دليفري", "توصيل طلبات", "بروستد", "فلافل جاهزه", "سوشي",
-    "بيبسي", "كوكاكولا", "كولا", "سفن اب", "سفن", "ميراندا", "ميرندا", "فانتا", "ماونتن ديو", "شاني", "سبرايت", "عصير مصنع",
+    "بيبسي", "كوكاكولا", "كولا", "سفن اب", "ميراندا", "ميرندا", "فانتا", "ماونتن ديو", "شاني", "سبرايت", "عصير مصنع",
     "اكسسوارات كماليه", "شموع زينه", "ميداليه", "بالونات", "العاب اطفال كماليه"
   ];
   if (
     normCat.includes("حلويات") || normCat.includes("سناكات") || normCat.includes("مطاعم") ||
-    normCat.includes("كافيهات") || unnecessaryKeywords.some(k => normN.includes(k))
+    normCat.includes("كافيهات") || unnecessaryKeywords.some(k => normN.includes(normalizeArabicText(k)))
   ) {
     return "مال داعي";
   }
@@ -1219,7 +1219,7 @@ function classifyRawItemNature(name: string, category?: string): Omit<ItemNature
     "حلقوم", "مصاص", "علك", "علكه", "سكاكر", "مارشميلو", "ايس كريم", "موطه", "دوندورما",
     "سلاش", "مثلجات", "توتو", "حلوى", "نستله", "كنافه", "بقلاوه", "كراميل", "سويت"
   ];
-  if (normCat.includes("حلويات") || normCat.includes("سناكات") || sweetsKeywords.some(k => normN.includes(k))) {
+  if (normCat.includes("حلويات") || normCat.includes("سناكات") || sweetsKeywords.some(k => normN.includes(normalizeArabicText(k)))) {
     return {
       type: "discretionary",
       subType: "sweets",
@@ -1237,7 +1237,7 @@ function classifyRawItemNature(name: string, category?: string): Omit<ItemNature
     "سندويش جاهز", "فنكر", "بطاطس مقليه", "كابتشينو جاهز", "لاتيه", "قهوه بارده", "ايس كوفي",
     "ميلك شيك", "كوكتيل", "دليفري", "توصيل طلبات", "بروستد", "فلافل جاهزه", "سوشي", "منسف سفري", "برياني سفري", "كباب جاهز"
   ];
-  if (normCat.includes("مطاعم") || normCat.includes("كافيهات") || fastFoodKeywords.some(k => normN.includes(k))) {
+  if (normCat.includes("مطاعم") || normCat.includes("كافيهات") || fastFoodKeywords.some(k => normN.includes(normalizeArabicText(k)))) {
     return {
       type: "discretionary",
       subType: "fast_food",
@@ -1251,10 +1251,10 @@ function classifyRawItemNature(name: string, category?: string): Omit<ItemNature
 
   // 1c. Sodas & Energy Drinks (مشروبات غازية وطاقة)
   const drinksKeywords = [
-    "بيبسي", "كوكاكولا", "كولا", "سفن اب", "سفن", "ميراندا", "ميرندا", "فانتا", "ماونتن ديو",
-    "ريد بول", "تايجر", "مشروب طاقه", "باور هورس", "بلو", "كينزا", "شاني", "سبرايت", "عصير مصنع", "عصير معلب"
+    "بيبسي", "كوكاكولا", "كولا", "سفن اب", "ميراندا", "ميرندا", "فانتا", "ماونتن ديو",
+    "ريد بول", "تايجر", "مشروب طاقه", "باور هورس", "بلو انرجي", "كينزا", "شاني", "سبرايت", "عصير مصنع", "عصير معلب"
   ];
-  if (drinksKeywords.some(k => normN.includes(k))) {
+  if (drinksKeywords.some(k => normN.includes(normalizeArabicText(k)))) {
     return {
       type: "discretionary",
       subType: "drinks",
@@ -1268,9 +1268,9 @@ function classifyRawItemNature(name: string, category?: string): Omit<ItemNature
 
   // 1d. Tobacco & Shisha (سجائر ومعسل وتدخين)
   const smokingKeywords = [
-    "سكائر", "سجائر", "فيب", "معسل", "اركيله", "ارجيله", "سحبه", "تبغ", "ولاعه", "فحم اركيله"
+    "سكائر", "سجائر", "سكاير", "جكاير", "جگاير", "جقاير", "سيكاره", "سيجاره", "نركيله", "ناركيله", "فيب", "معسل", "اركيله", "ارجيله", "سحبه", "تبغ", "ولاعه", "فحم اركيله"
   ];
-  if (normCat.includes("سكائر") || normCat.includes("معسل") || smokingKeywords.some(k => normN.includes(k))) {
+  if (normCat.includes("سكاير") || normCat.includes("معسل") || smokingKeywords.some(k => normN.includes(normalizeArabicText(k)))) {
     return {
       type: "discretionary",
       subType: "smoking",
@@ -1286,7 +1286,7 @@ function classifyRawItemNature(name: string, category?: string): Omit<ItemNature
   const lottoKeywords = [
     "لوتو", "يانصيب", "سوبر كي", "عراق لوتو", "بطاقه لوتو", "قمار", "رهان"
   ];
-  if (normCat.includes("يانصيب") || lottoKeywords.some(k => normN.includes(k))) {
+  if (normCat.includes("يانصيب") || lottoKeywords.some(k => normN.includes(normalizeArabicText(k)))) {
     return {
       type: "discretionary",
       subType: "entertainment",
@@ -1302,7 +1302,7 @@ function classifyRawItemNature(name: string, category?: string): Omit<ItemNature
   const luxuryKeywords = [
     "اكسسوارات كماليه", "سلايم", "بالونات", "لعب اطفال كماليه", "ميداليه", "شموع زينه"
   ];
-  if (luxuryKeywords.some(k => normN.includes(k))) {
+  if (luxuryKeywords.some(k => normN.includes(normalizeArabicText(k)))) {
     return {
       type: "discretionary",
       subType: "luxury",
@@ -1324,7 +1324,7 @@ function classifyRawItemNature(name: string, category?: string): Omit<ItemNature
   if (
     normCat.includes("خضار") || normCat.includes("فواكه") || normCat.includes("لحوم") ||
     normCat.includes("البان") || normCat.includes("مؤونه") || normCat.includes("بقوليات") ||
-    normCat.includes("مياه") || normCat.includes("مخبوزات") || essentialKeywords.some(k => normN.includes(k))
+    normCat.includes("مياه") || normCat.includes("مخبوزات") || essentialKeywords.some(k => normN.includes(normalizeArabicText(k)))
   ) {
     return {
       type: "essential",
@@ -1342,7 +1342,7 @@ function classifyRawItemNature(name: string, category?: string): Omit<ItemNature
     "دواء", "علاج", "بندول", "فيتامين", "شاش", "قطن", "صيدليه", "مرهم", "قطره",
     "حفاضات", "بامبرز", "مناديل مبلله", "حليب اطفال"
   ];
-  if (normCat.includes("صيدليه") || normCat.includes("طفل") || healthKeywords.some(k => normN.includes(k))) {
+  if (normCat.includes("صيدليه") || normCat.includes("طفل") || healthKeywords.some(k => normN.includes(normalizeArabicText(k)))) {
     return {
       type: "essential",
       subType: "health",
@@ -1358,7 +1358,7 @@ function classifyRawItemNature(name: string, category?: string): Omit<ItemNature
   const cleanKeywords = [
     "تايد", "زاهي", "صابون", "شامبو", "كلور", "معقم", "منظف", "اكياس زباله", "ورق تواليت"
   ];
-  if (normCat.includes("منظفات") || cleanKeywords.some(k => normN.includes(k))) {
+  if (normCat.includes("منظفات") || cleanKeywords.some(k => normN.includes(normalizeArabicText(k)))) {
     return {
       type: "essential",
       subType: "cleaning",

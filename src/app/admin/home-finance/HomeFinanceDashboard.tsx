@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useDeferredValue } from "react";
 import {
   ArrowRight, Plus, Minus, Check, Wallet, CreditCard, Receipt,
   TrendingDown, TrendingUp, AlertCircle, ShoppingCart, X, Trash2,
@@ -25,6 +25,8 @@ const LottoTracker = dynamic(() => import("./LottoTracker"), { ssr: false });
 const WomenCycleCare = dynamic(() => import("./WomenCycleCare"), { ssr: false });
 const FamilySection = dynamic(() => import("./FamilySection"), { ssr: false });
 import { FamilyHealthRecord } from "./familyTypes";
+import { buildHomeInsights, analyzeExpenseDraft, dailySeed } from "./expenseInsights";
+import { SmartForecastPanel, DraftInsightsList } from "./SmartInsights";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
@@ -697,6 +699,10 @@ export default function HomeFinanceDashboard() {
   const [walletBankInput, setWalletBankInput] = useState<number>(410000);
   const [walletCashInput, setWalletCashInput] = useState<number>(50000);
   const [expCategoryInput, setExpCategoryInput] = useState<string>("");
+  // مبلغ المصروف أثناء الكتابة (للتحذيرات اللحظية قبل الحفظ)
+  const [expAmountDraft, setExpAmountDraft] = useState<string>("");
+  // تدوير النصائح الذكية («نصيحة أخرى»)
+  const [insightShuffle, setInsightShuffle] = useState(0);
   const [expDateInput, setExpDateInput] = useState<string>(today());
   const [isScanningReceipt, setIsScanningReceipt] = useState(false);
   const [scanStatusText, setScanStatusText] = useState("");
@@ -1650,6 +1656,51 @@ export default function HomeFinanceDashboard() {
 
   // بناءً على طلبك السابق: يتم خصم القسط أو الفاتورة فقط عند دفعها (لتصبح ضمن المصاريف) لمنع الخصم المزدوج
   const balance = totalIncome - totalExpensesAmt;
+
+  // ── التنبؤ الذكي والتحذيرات (expenseInsights.ts) ──
+  const homeInsights = useMemo(() => {
+    if (!selectedCycle) return null;
+    return buildHomeInsights({
+      expenses: allExpenses as any,
+      cycleStart: selectedCycle.start,
+      cycleEnd: selectedCycle.end,
+      income: totalIncome,
+      obligations: unpaidObligations,
+      budgetLimits: settings.budgetLimits,
+      seed: dailySeed() + insightShuffle,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allExpenses, selectedCycleId, totalIncome, unpaidObligations, settings.budgetLimits, insightShuffle]);
+
+  // تحذيرات لحظية أثناء إدخال مصروف (مؤجلة حتى لا تبطئ الكتابة)
+  const draftInput = useDeferredValue({
+    open: showExpenseModal,
+    name: expNameInput,
+    category: expCategoryInput,
+    items: expenseItems,
+    amount: expenseItems.length > 0 ? expenseItems.reduce((a, c) => a + (Number(c.price) || 0), 0) : Number(expAmountDraft) || 0,
+    date: expDateInput,
+    excludeId: editExpense?.id,
+  });
+  const draftInsights = useMemo(() => {
+    if (!draftInput.open || !selectedCycle) return [];
+    return analyzeExpenseDraft(
+      {
+        expenses: allExpenses as any,
+        cycleStart: selectedCycle.start,
+        cycleEnd: selectedCycle.end,
+        income: totalIncome,
+        obligations: unpaidObligations,
+        budgetLimits: settings.budgetLimits,
+      },
+      draftInput
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftInput, allExpenses, selectedCycleId, totalIncome, unpaidObligations, settings.budgetLimits]);
+
+  useEffect(() => {
+    if (showExpenseModal) setExpAmountDraft(editExpense?.amount ? String(editExpense.amount) : "");
+  }, [showExpenseModal, editExpense]);
 
   const shoppingList = [
     ...inventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "inventory" as const })),
@@ -4787,6 +4838,11 @@ setEditTrip(null);
         {/* ═══════════════ OVERVIEW TAB: SMART FINANCIAL COMMAND CENTER ═══════════════ */}
         {activeTab === "overview" && (
           <div className="flex flex-col gap-5 animate-in fade-in duration-300">
+
+            {/* 🔮 التنبؤ الذكي والتحذيرات المهمة */}
+            {homeInsights && (
+              <SmartForecastPanel className="order-2" data={homeInsights} onShuffle={() => setInsightShuffle((n) => n + 1)} />
+            )}
 
             {/* Financial Cycle & Health Hero Section */}
             <div className="order-1 relative bg-gradient-to-br from-white via-indigo-50/40 to-purple-50/50 dark:from-[#120324] dark:via-[#240b4a] dark:to-[#0a2540] rounded-[2.2rem] p-5 sm:p-6 shadow-xl dark:shadow-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden">
@@ -8977,6 +9033,7 @@ setEditTrip(null);
                     type="number" 
                     defaultValue={expenseItems.length === 0 ? editExpense?.amount : undefined} 
                     value={expenseItems.length > 0 ? expenseItems.reduce((acc, curr) => acc + (curr.price || 0), 0) : undefined} 
+                    onChange={e => { if (expenseItems.length === 0) setExpAmountDraft(e.target.value); }}
                     readOnly={expenseItems.length > 0} 
                     placeholder="0" 
                     className={`input-field font-black text-rose-600 dark:text-rose-400 ${expenseItems.length > 0 ? 'bg-indigo-50/50 dark:bg-zinc-800/80 cursor-not-allowed border-indigo-200 dark:border-indigo-800/40' : ''}`} 
@@ -8995,6 +9052,9 @@ setEditTrip(null);
                   />
                 </div>
               </div>
+
+              {/* 🔮 تحذيرات وتنبؤ لحظي قبل الحفظ */}
+              <DraftInsightsList insights={draftInsights} />
 
               {/* ─── Ultra-Fast Keyboard-Navigable Items Section ─── */}
               <div className="mt-4 pt-4 border-t border-gray-100 dark:border-zinc-800">
