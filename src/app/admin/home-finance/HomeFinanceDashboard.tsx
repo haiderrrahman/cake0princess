@@ -1385,20 +1385,14 @@ export default function HomeFinanceDashboard() {
         const carOnlyItems = e.items.filter(it => isCarItem(it, e));
 
         if (carOnlyItems.length > 0) {
-          const isPartial = carOnlyItems.length < e.items.length || (
-            normCat !== "السياره والنقل" &&
-            normCat !== "السياره" &&
-            normCat !== "سياره" &&
-            normCat !== "صيانه ووقود" &&
-            normCat !== "بنزين ووقود" &&
-            !e.isCar
-          );
+          // فاتورة مختلطة: ننقل مواد السيارة فقط وبمبلغها فقط (سعر المادة = مجموع سطرها)
+          const isPartial = carOnlyItems.length < e.items.length;
           const carAmount = carOnlyItems.reduce((sum, it) => sum + (Number(it.price) || 0), 0);
 
           list.push({
             ...e,
             items: carOnlyItems,
-            amount: (isPartial && carAmount > 0) ? carAmount : e.amount,
+            amount: isPartial ? carAmount : e.amount,
             isPartialCarReceipt: isPartial,
             originalTotalAmount: e.amount,
             originalItemCount: e.items.length,
@@ -1406,10 +1400,9 @@ export default function HomeFinanceDashboard() {
           return;
         }
 
-        // If it had items but NONE were for the car, and it's not explicitly a car expense, skip it
-        if (!e.isCar && normCat !== "السياره والنقل" && normCat !== "السياره" && normCat !== "سياره") {
-          return;
-        }
+        // فاتورة مفصّلة ولا توجد بها أي مادة للسيارة ⇒ لا تدخل السيارة
+        // (حتى لو كانت معلّمة isCar، لأن العلامة كانت تُضبط تلقائياً)
+        return;
       }
 
       // 2. Direct car expense (fuel, mechanic, or single car item without itemized array)
@@ -2549,7 +2542,7 @@ setEditFuturePlan(null);
         let updatedCar = [...carInventory];
         if (cleanedItems.length > 0) {
           cleanedItems.forEach(it => {
-            const isItCar = isCarExpenseMatch(it.name, it.category || category);
+            const isItCar = isCarItem(it, { name, category });
             if (isItCar) {
               const existingIdx = updatedCar.findIndex(c => normalizeArabicText(c.name) === normalizeArabicText(it.name));
               if (existingIdx >= 0) {
