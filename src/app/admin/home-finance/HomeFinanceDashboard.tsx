@@ -31,7 +31,7 @@ import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp, d
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { WORLD_COUNTRIES, IRAQ_GOVERNORATES } from "./countries";
 import { uploadImageResiliently, compressToTinyThumbnail, cleanForFirestore } from "@/lib/hfImageStore";
-import { scanReceiptWithGemini } from "@/lib/scanReceiptClient";
+import { scanReceiptsWithGemini, ScannedReceiptData } from "@/lib/scanReceiptClient";
 import { scanNeedItemWithGemini, cropItemFromImage, ScannedNeedItem } from "@/lib/scanNeedItemClient";
 import {
   PRODUCT_CATEGORIES,
@@ -703,6 +703,23 @@ export default function HomeFinanceDashboard() {
   const [expAmountDraft, setExpAmountDraft] = useState<string>("");
   // تدوير النصائح الذكية («نصيحة أخرى»)
   const [insightShuffle, setInsightShuffle] = useState(0);
+  // فواتير مقروءة تنتظر دورها (كل فاتورة تُحفظ كمصروف لوحدها)
+  const [pendingReceipts, setPendingReceipts] = useState<ScannedReceiptData[]>([]);
+  const [receiptQueue, setReceiptQueue] = useState<{ index: number; total: number; store: string } | null>(null);
+  const advancingReceiptRef = useRef(false);
+  // مواد أُضيفت للتو (تُبرَز لثوانٍ حتى يعرف المستخدم شنو انضاف)
+  const [freshItemIds, setFreshItemIds] = useState<Set<string>>(new Set());
+  const freshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markFreshItems = (ids: string[]) => {
+    setFreshItemIds(new Set(ids));
+    if (freshTimer.current) clearTimeout(freshTimer.current);
+    freshTimer.current = setTimeout(() => setFreshItemIds(new Set()), 5000);
+    // تمرير قائمة المواد لآخر مادة مضافة
+    setTimeout(() => {
+      const last = ids[ids.length - 1];
+      if (last) document.getElementById(`exp-row-${last}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 120);
+  };
   const [expDateInput, setExpDateInput] = useState<string>(today());
   const [isScanningReceipt, setIsScanningReceipt] = useState(false);
   const [scanStatusText, setScanStatusText] = useState("");
@@ -1702,6 +1719,23 @@ export default function HomeFinanceDashboard() {
     if (showExpenseModal) setExpAmountDraft(editExpense?.amount ? String(editExpense.amount) : "");
   }, [showExpenseModal, editExpense]);
 
+  // إغلاق النافذة يدوياً (بدون حفظ) يلغي الفواتير المتبقية بالانتظار
+  const pendingCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (showExpenseModal) {
+      if (pendingCloseTimer.current) clearTimeout(pendingCloseTimer.current);
+      return;
+    }
+    if (!receiptQueue || advancingReceiptRef.current) return;
+    pendingCloseTimer.current = setTimeout(() => {
+      if (advancingReceiptRef.current) return;
+      if (pendingReceipts.length > 0) toast(`أُلغيت ${pendingReceipts.length} فواتير متبقية لم تُحفظ`, { icon: "ℹ️" });
+      setPendingReceipts([]);
+      setReceiptQueue(null);
+    }, 800);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showExpenseModal]);
+
   const shoppingList = [
     ...inventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "inventory" as const })),
     ...carInventory.filter(i => (i.neededQuantity || 0) > 0).map(i => ({ ...i, _source: "car" as const })),
@@ -2289,6 +2323,81 @@ setEditFuturePlan(null);
   // ──────────────────────────────────────────
   // EXPENSE HANDLERS & SMART AI SCANNER
   // ──────────────────────────────────────────
+  /** تعبئة نموذج المصروف من فاتورة مقروءة */
+  const applyReceiptToForm = (
+    data: ScannedReceiptData,
+    opts: { customPlace?: string; append?: boolean; force?: boolean; silent?: boolean } = {}
+  ) => {
+    const isOuting = expCategoryInput === "طلعات وجولات";
+    const place = opts.customPlace || (selectedOutingPlace !== "كل المحطات" ? selectedOutingPlace : data.storeName) || (isOuting ? "سوق" : "سوبر ماركت");
+
+    if (opts.force || !expNameInput.trim() || expNameInput === "غير محدد") {
+      const goodName = data.storeName && !["غير محدد", "فاتورة مشتريات", "سوبر ماركت"].includes(data.storeName);
+      setExpNameInput(goodName ? data.storeName : isOuting ? "طلعة بغداد" : "تعاون ماركت");
+    }
+    if (data.category && (opts.force || (!isOuting && (!expCategoryInput || expCategoryInput === "سوبر ماركت")))) {
+      setExpCategoryInput(data.category);
+    }
+    if (opts.force || !opts.append) setExpDateInput(data.date || today());
+
+    const newItems: ExpenseItem[] = (data.items || []).map((it, idx) => {
+      const cat = it.category || detectProductCategory(it.name);
+      return {
+        id: it.id || `item-${Date.now()}-${idx}-${Math.random().toString(36).substring(7)}`,
+        name: it.name || "",
+        quantity: Number(it.quantity) || 1,
+        price: Number(it.price) || 0,
+        place: it.place || place,
+        category: cat,
+        priority: detectProductPriority(it.name || "", cat),
+        ...(it.hasWarranty ? { hasWarranty: true, warrantyPeriod: it.warrantyPeriod || "", warrantyExpiryDate: it.warrantyExpiryDate || "" } : {}),
+      } as ExpenseItem;
+    });
+    if (newItems.length === 0) {
+      if (!opts.silent) toast("لم تُقرأ مواد تفصيلية، تم تعبئة الاسم والتاريخ فقط", { icon: "ℹ️" });
+      return;
+    }
+    setExpenseItems(prev => {
+      const kept = opts.append ? prev.filter(it => (it.name || "").trim() !== "" || (Number(it.price) || 0) > 0) : [];
+      return [...kept, ...newItems];
+    });
+    markFreshItems(newItems.map(it => it.id));
+    if (!opts.silent) {
+      toast.success(opts.append ? `أُضيفت ${newItems.length} مادة للقائمة ⚡` : `تم استخراج ${newItems.length} مادة من الفاتورة ⚡`, { duration: 3500 });
+    }
+  };
+
+  /** فتح الفاتورة التالية بالانتظار بعد حفظ الحالية */
+  const openNextPendingReceipt = () => {
+    if (pendingReceipts.length === 0) return false;
+    const [next, ...rest] = pendingReceipts;
+    advancingReceiptRef.current = true;
+    setEditExpense(null);
+    setExpNameInput("");
+    setExpCategoryInput("");
+    setExpenseItems([]);
+    setAttachedReceiptImages([]);
+    setExpBeneficiary("عام للبيت");
+    setPendingReceipts(rest);
+    setReceiptQueue(q => (q ? { index: q.index + 1, total: q.total, store: next.storeName } : null));
+    setShowExpenseModal(true);
+    // بعد تصفير النموذج
+    setTimeout(() => {
+      applyReceiptToForm(next, { append: false, force: true, silent: true });
+      advancingReceiptRef.current = false;
+    }, 0);
+    return true;
+  };
+
+  /** دمج كل الفواتير المتبقية بالمصروف المفتوح */
+  const mergePendingReceipts = () => {
+    if (pendingReceipts.length === 0) return;
+    pendingReceipts.forEach(r => applyReceiptToForm(r, { append: true, silent: true }));
+    toast.success(`دُمجت ${pendingReceipts.length} فواتير بهذا المصروف`);
+    setPendingReceipts([]);
+    setReceiptQueue(null);
+  };
+
   const handleScanReceipt = async (
     e: React.ChangeEvent<HTMLInputElement>,
     customPlace?: string,
@@ -2308,74 +2417,26 @@ setEditFuturePlan(null);
       // "والصورة مال فاتورة الي اضيفها ما اريد ترفقها يعني بس ياخذ بياناتها وميرفقها"
       // dataUrls are used only by Gemini for OCR/parsing, without storing in attachedReceiptImages
 
-      // Pass images to Gemini for data extraction
-      const data = await scanReceiptWithGemini(dataUrls, (status) => setScanStatusText(status));
+      // قراءة كل الفواتير (قد تكون من أماكن مختلفة) — كل وحدة تُعاد لوحدها
+      const receipts = await scanReceiptsWithGemini(dataUrls, (status) => setScanStatusText(status));
+      const hasExistingItems = expenseItems.some(it => (it.name || "").trim() !== "" || (Number(it.price) || 0) > 0);
 
-      const determinedPlace = customPlace || (selectedOutingPlace !== "كل المحطات" ? selectedOutingPlace : data.storeName) || (expCategoryInput === "طلعات وجولات" ? "سوق" : "سوبر ماركت");
-
-      if (!expNameInput.trim() || expNameInput === "غير محدد") {
-        if (data.storeName && data.storeName !== "غير محدد" && data.storeName !== "فاتورة مشتريات" && data.storeName !== "سوبر ماركت") {
-          setExpNameInput(data.storeName);
-        } else {
-          setExpNameInput(expCategoryInput === "طلعات وجولات" ? "طلعة بغداد" : "تعاون ماركت");
-        }
-      }
-
-      if (data.category && expCategoryInput !== "طلعات وجولات" && (!expCategoryInput || expCategoryInput === "سوبر ماركت")) {
-        setExpCategoryInput(data.category);
-      }
-
-      const todayStr = today();
-      const currentYear = new Date().getFullYear().toString();
-      let extractedDate = data.date;
-
-      if (extractedDate) {
-        const parts = extractedDate.split("-");
-        if (parts.length === 3) {
-          if (parts[0] !== currentYear) {
-            extractedDate = `${currentYear}-${parts[1]}-${parts[2]}`;
-          }
-        }
-        if (extractedDate > todayStr) {
-          extractedDate = todayStr;
+      if (receipts.length === 1 || hasExistingItems) {
+        // فاتورة واحدة، أو إضافة لمصروف مفتوح ⇒ ندمج بالنموذج الحالي
+        receipts.forEach((r, i) => applyReceiptToForm(r, { customPlace, append: hasExistingItems || i > 0, silent: receipts.length > 1 }));
+        if (receipts.length > 1) {
+          toast.success(`أُضيفت ${receipts.length} فواتير (${receipts.map(r => r.storeName).join("، ")}) لنفس المصروف`, { duration: 5000 });
         }
       } else {
-        extractedDate = todayStr;
-      }
-
-      setExpDateInput(extractedDate);
-
-      if (Array.isArray(data.items) && data.items.length > 0) {
-        const itemsWithPlace = data.items.map((it, idx) => {
-          const itemPlace = it.place || determinedPlace || data.storeName || "سوبر ماركت";
-          const cat = it.category || detectProductCategory(it.name);
-          return {
-            id: it.id || `item-${Date.now()}-${idx}-${Math.random().toString(36).substring(7)}`,
-            name: it.name || "",
-            quantity: Number(it.quantity) || 1,
-            price: Number(it.price) || 0,
-            place: itemPlace,
-            category: cat,
-            priority: (it as any).priority || detectProductPriority(it.name || "", cat)
-          };
+        // عدة فواتير مختلفة ⇒ كل وحدة مصروف مستقل: نفتح الأولى ونخلي الباقي بالانتظار
+        const [first, ...rest] = receipts;
+        applyReceiptToForm(first, { customPlace, append: false, force: true, silent: true });
+        setPendingReceipts(rest);
+        setReceiptQueue({ index: 1, total: receipts.length, store: first.storeName });
+        toast.success(`تم التعرف على ${receipts.length} فواتير: ${receipts.map(r => r.storeName).join("، ")}`, {
+          description: "راجع الأولى واحفظها، والتالية تنفتح تلقائياً. أو ادمجها كلها بمصروف واحد.",
+          duration: 6000,
         });
-
-        // Filter out empty placeholder rows that might already exist
-        const existingValidItems = expenseItems.filter(it => (it.name || "").trim() !== "" || (Number(it.price) || 0) > 0);
-
-        if (existingValidItems.length > 0) {
-          // Merge / Append with existing items
-          const combined = [...existingValidItems, ...itemsWithPlace];
-          setExpenseItems(combined);
-          toast.success(`تم دمج وإضافة ${itemsWithPlace.length} مادة مع القائمة السابقة بنجاح! ⚡✨`, {
-            duration: 4000
-          });
-        } else {
-          setExpenseItems(itemsWithPlace);
-          toast.success(`تم استخراج ${data.items.length} مادة وتعبئة بيانات الفاتورة بنجاح! ⚡✨`, {
-            duration: 4000
-          });
-        }
       }
     } catch (err: any) {
       console.error("Receipt scan failed:", err);
@@ -2471,6 +2532,7 @@ setEditFuturePlan(null);
 
     if (newItems.length > 0) {
       setExpenseItems(prev => [...prev, ...newItems]);
+      markFreshItems(newItems.map(it => it.id));
       toast.success(`تمت إضافة ${newItems.length} مواد بنجاح!`);
       setShowQuickPasteModal(false);
       setQuickPasteText("");
@@ -2796,6 +2858,15 @@ setEditFuturePlan(null);
     setIsSavingExpense(false);
     setShowExpenseModal(false);
     setEditExpense(null);
+    // فواتير متعددة: افتح التالية تلقائياً
+    if (pendingReceipts.length > 0) {
+      setTimeout(() => {
+        if (!openNextPendingReceipt()) setReceiptQueue(null);
+      }, 350);
+    } else if (receiptQueue) {
+      toast.success(`تم حفظ كل الفواتير (${receiptQueue.total}) كمصاريف منفصلة ✔`);
+      setReceiptQueue(null);
+    }
   };
 
   const handleDeleteExpense = async (id: string, originDocId?: string) => {
@@ -5502,7 +5573,28 @@ setEditTrip(null);
                         {/* Items badge / view receipt button */}
                         {((exp.items && exp.items.length > 0) || (exp.receiptImages && exp.receiptImages.length > 0) || exp.imageUrl) && (() => {
                           const discCount = (exp.items || []).filter(it => classifyItemNature(it.name, it.category).type === "discretionary").length;
+                          const previewItems = [...(exp.items || [])].sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0)).slice(0, 3);
+                          const morePreview = (exp.items || []).length - previewItems.length;
                           return (
+                            <>
+                            {previewItems.length > 0 && (
+                              <ul className="mt-1.5 space-y-0.5">
+                                {previewItems.map((it, pi) => {
+                                  const pr = it.priority || detectProductPriority(it.name || "", it.category);
+                                  const dot = pr === "تبذير" ? "bg-rose-500" : pr === "مال داعي" ? "bg-amber-400" : "bg-emerald-500";
+                                  return (
+                                    <li key={it.id || pi} className="flex items-center justify-between gap-2 text-[10px] font-bold">
+                                      <span className="flex items-center gap-1 min-w-0 text-gray-700 dark:text-gray-300">
+                                        <i className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+                                        <span className="truncate">{it.name}{Number(it.quantity) > 1 ? ` ×${it.quantity}` : ""}</span>
+                                      </span>
+                                      <span className="shrink-0 text-gray-500">{fmt(Number(it.price) || 0)}</span>
+                                    </li>
+                                  );
+                                })}
+                                {morePreview > 0 && <li className="text-[9px] font-black text-gray-400">+ {morePreview} مواد أخرى</li>}
+                              </ul>
+                            )}
                             <button
                               type="button"
                               onClick={() => { setViewingReceiptExpense(exp); setReceiptItemFilter(""); }}
@@ -5524,6 +5616,7 @@ setEditTrip(null);
                                 <ChevronLeft className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                               </div>
                             </button>
+                            </>
                           );
                         })()}
 
@@ -9053,6 +9146,29 @@ setEditTrip(null);
                 </div>
               </div>
 
+              {/* 🧾 فواتير متعددة بالانتظار */}
+              {receiptQueue && (
+                <div className="mt-3 rounded-2xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 p-3">
+                  <p className="text-xs font-black text-indigo-800 dark:text-indigo-200">
+                    🧾 فاتورة {receiptQueue.index} من {receiptQueue.total}: {receiptQueue.store}
+                  </p>
+                  <p className="text-[11px] font-bold text-indigo-700/80 dark:text-indigo-300/80 mt-0.5">
+                    {pendingReceipts.length > 0
+                      ? `راجعها واحفظها، وبعدها تنفتح التالية (${pendingReceipts.map(r => r.storeName).join("، ")}) تلقائياً.`
+                      : "هذه آخر فاتورة."}
+                  </p>
+                  {pendingReceipts.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={mergePendingReceipts}
+                      className="mt-2 text-[11px] font-black px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 active:scale-95 transition"
+                    >
+                      دمج الباقي بهذا المصروف بدل ما ينحفظ لحاله
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* 🔮 تحذيرات وتنبؤ لحظي قبل الحفظ */}
               <DraftInsightsList insights={draftInsights} />
 
@@ -9145,6 +9261,27 @@ setEditTrip(null);
                   </div>
                 </div>
 
+                {/* ملخص حسب المحل (عند دمج أكثر من فاتورة) */}
+                {(() => {
+                  const byPlace = new Map<string, { count: number; total: number }>();
+                  expenseItems.forEach(it => {
+                    if (!(it.name || "").trim() && !(Number(it.price) > 0)) return;
+                    const k = (it.place || "").trim() || "بدون محل";
+                    const v = byPlace.get(k) || { count: 0, total: 0 };
+                    v.count += 1; v.total += Number(it.price) || 0;
+                    byPlace.set(k, v);
+                  });
+                  if (byPlace.size < 2) return null;
+                  return (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {Array.from(byPlace.entries()).map(([place, v]) => (
+                        <span key={place} className="text-[10px] font-black px-2 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-200">
+                          🏪 {place} · {v.count} مواد · {fmt(v.total)} د.ع
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
                 {/* Table Header */}
                 {expenseItems.length > 0 ? (
                   <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 border border-gray-100 dark:border-zinc-800">
@@ -9161,7 +9298,9 @@ setEditTrip(null);
                       {expenseItems.map((item, idx) => (
                         <div 
                           key={item.id} 
-                          className="flex flex-col sm:grid sm:grid-cols-12 gap-2 items-center bg-white dark:bg-zinc-950 p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-600 transition"
+                          id={`exp-row-${item.id}`}
+                          data-fresh={freshItemIds.has(item.id) ? "1" : undefined}
+                          className="data-[fresh]:ring-2 data-[fresh]:ring-emerald-400 data-[fresh]:bg-emerald-50/60 dark:data-[fresh]:bg-emerald-950/30 transition-colors flex flex-col sm:grid sm:grid-cols-12 gap-2 items-center bg-white dark:bg-zinc-950 p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-600 transition"
                         >
                           {/* Row Index */}
                           <div className="hidden sm:flex sm:col-span-1 items-center justify-center font-black text-xs text-gray-400">
