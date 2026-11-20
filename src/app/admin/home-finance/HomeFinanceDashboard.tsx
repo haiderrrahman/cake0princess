@@ -1592,6 +1592,39 @@ export default function HomeFinanceDashboard() {
     return Math.max(0, due - (bill.paidDates?.length || 0));
   };
 
+  // عدد الأشهر التي حلّ موعدها منذ إنشاء الفاتورة (نفس منطق التأخير أعلاه)
+  const getBillDueMonths = (bill: Bill) => {
+    if (!bill.createdAt) return 0;
+    const start = new Date(bill.createdAt);
+    if (isNaN(start.getTime())) return 0;
+    const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const now = new Date();
+    let due = 0;
+    const totalMonths = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+    for (let k = 0; k <= totalMonths; k++) {
+      const dueDate = new Date(start.getFullYear(), start.getMonth() + k, bill.dueDay || 1);
+      if (dueDate >= startDay && dueDate <= now) due++;
+    }
+    return due;
+  };
+
+  // رصيد الفاتورة: كم شهر متأخر وكم مبلغه، أو كم شهر مدفوع مسبقاً وكم مبلغه
+  // كل دفعة مسجلة في paidDates تمثل شهراً واحداً (الدفع عن عدة أشهر يُسجَّل كدفعة لكل شهر)
+  const getBillBalance = (bill: Bill) => {
+    const payments = [...(bill.paidDates || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const diff = getBillDueMonths(bill) - payments.length;
+    if (diff > 0) {
+      return { overdueMonths: diff, overdueAmount: diff * (Number(bill.amount) || 0), advanceMonths: 0, advanceAmount: 0 };
+    }
+    const advanceMonths = Math.max(0, -diff);
+    // المبلغ المسبق = ما دُفع فعلاً عن آخر الأشهر الزائدة
+    const advanceAmount = payments.slice(payments.length - advanceMonths).reduce((t, p) => t + (Number(p.amount) || 0), 0);
+    return { overdueMonths: 0, overdueAmount: 0, advanceMonths, advanceAmount: Math.round(advanceAmount) };
+  };
+
+  const monthsLabel = (n: number) =>
+    n === 1 ? "شهر واحد" : n === 2 ? "شهرين" : n <= 10 ? `${n} أشهر` : `${n} شهراً`;
+
   const getInstallmentDelayMonths = (i: Installment) => {
     if (i.remainingAmount <= 0) return 0;
     if (!i.startDate) {
@@ -6294,13 +6327,28 @@ setEditTrip(null);
             {bills.length > 0 && (
               <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4 space-y-3">
                 {(() => {
-                  const lateBills = bills.filter(b => getBillOverdueMonths(b) > 0);
-                  if (lateBills.length === 0) return null;
-                  const lateTotal = lateBills.reduce((s, b) => s + getBillOverdueMonths(b) * b.amount, 0);
+                  const balances = bills.map(b => getBillBalance(b));
+                  const late = balances.filter(x => x.overdueMonths > 0);
+                  const ahead = balances.filter(x => x.advanceMonths > 0);
+                  if (late.length === 0 && ahead.length === 0) return null;
+                  const lateMonths = late.reduce((t, x) => t + x.overdueMonths, 0);
+                  const lateTotal = late.reduce((t, x) => t + x.overdueAmount, 0);
+                  const aheadMonths = ahead.reduce((t, x) => t + x.advanceMonths, 0);
+                  const aheadTotal = ahead.reduce((t, x) => t + x.advanceAmount, 0);
                   return (
-                    <div className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl px-3 py-2">
-                      <span className="text-xs font-black text-red-700 dark:text-red-300">⚠️ متأخر: {lateBills.length} فاتورة</span>
-                      <span className="text-sm font-black text-red-600 dark:text-red-400">{fmt(lateTotal)} <span className="text-[10px]">د.ع</span></span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className={`rounded-xl px-3 py-2 border ${late.length > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50' : 'bg-gray-50 dark:bg-zinc-800/60 border-gray-100 dark:border-zinc-800'}`}>
+                        <div className={`text-[11px] font-black ${late.length > 0 ? 'text-red-700 dark:text-red-300' : 'text-gray-400'}`}>
+                          ⚠️ متأخر {late.length > 0 ? `· ${late.length} فاتورة · ${monthsLabel(lateMonths)}` : ''}
+                        </div>
+                        <div className={`text-sm font-black ${late.length > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>{fmt(lateTotal)} <span className="text-[10px]">د.ع</span></div>
+                      </div>
+                      <div className={`rounded-xl px-3 py-2 border ${ahead.length > 0 ? 'bg-sky-50 dark:bg-sky-900/20 border-sky-200 dark:border-sky-800/50' : 'bg-gray-50 dark:bg-zinc-800/60 border-gray-100 dark:border-zinc-800'}`}>
+                        <div className={`text-[11px] font-black ${ahead.length > 0 ? 'text-sky-700 dark:text-sky-300' : 'text-gray-400'}`}>
+                          ⏩ مدفوع مسبقاً {ahead.length > 0 ? `· ${ahead.length} فاتورة · ${monthsLabel(aheadMonths)}` : ''}
+                        </div>
+                        <div className={`text-sm font-black ${ahead.length > 0 ? 'text-sky-600 dark:text-sky-400' : 'text-gray-400'}`}>{fmt(aheadTotal)} <span className="text-[10px]">د.ع</span></div>
+                      </div>
                     </div>
                   );
                 })()}
@@ -6365,7 +6413,8 @@ setEditTrip(null);
                   const c = billColors[idx % billColors.length];
                   const billEmoji = billEmojis[idx % billEmojis.length];
                   const paidThisCycle = isBillPaidThisCycle(bill);
-                  const overdueMonths = getBillOverdueMonths(bill);
+                  const balance = getBillBalance(bill);
+                  const overdueMonths = balance.overdueMonths;
                   const isBillHistory = showBillHistory === bill.id;
                   const paidDates = bill.paidDates || [];
                   return (
@@ -6413,10 +6462,16 @@ setEditTrip(null);
                           ) : null}
                           {paidDates.length > 0 && <span className="text-[9px] text-gray-400">{new Date(paidDates[paidDates.length - 1].date).toLocaleDateString("ar-IQ")}</span>}
                         </div>
-                        {overdueMonths > 0 && (
+                        {balance.overdueMonths > 0 && (
                           <div className="rounded-xl bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800/50 px-2 py-1.5 text-center">
-                            <div className="text-[10px] font-black text-red-700 dark:text-red-300">متلكئ {overdueMonths} {overdueMonths === 1 ? 'شهر' : overdueMonths === 2 ? 'شهرين' : overdueMonths <= 10 ? 'أشهر' : 'شهر'}</div>
-                            <div className="text-[11px] font-black text-red-600 dark:text-red-400">المتأخر: {fmt(overdueMonths * bill.amount)} د.ع</div>
+                            <div className="text-[10px] font-black text-red-700 dark:text-red-300">متأخر {monthsLabel(balance.overdueMonths)}</div>
+                            <div className="text-[11px] font-black text-red-600 dark:text-red-400">المبلغ المتأخر: {fmt(balance.overdueAmount)} د.ع</div>
+                          </div>
+                        )}
+                        {balance.advanceMonths > 0 && (
+                          <div className="rounded-xl bg-sky-100 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800/50 px-2 py-1.5 text-center">
+                            <div className="text-[10px] font-black text-sky-700 dark:text-sky-300">مدفوع مسبقاً {monthsLabel(balance.advanceMonths)}</div>
+                            <div className="text-[11px] font-black text-sky-600 dark:text-sky-400">المبلغ المسبق: {fmt(balance.advanceAmount)} د.ع</div>
                           </div>
                         )}
                         {/* Pay/Undo button */}
