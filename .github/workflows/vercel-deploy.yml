@@ -1,0 +1,23 @@
+# نشر تلقائي على Vercel بعد كل push على main
+# يحتاج سر واحد بإعدادات المستودع: VERCEL_DEPLOY_HOOK (رابط Deploy Hook من Vercel)
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel deploy hook
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::السر VERCEL_DEPLOY_HOOK غير مضبوط — لم يُنشر شيء"
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK"
+          echo "تم إرسال طلب النشر إلى Vercel"
