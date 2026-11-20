@@ -26,6 +26,9 @@ const WomenCycleCare = dynamic(() => import("./WomenCycleCare"), { ssr: false })
 const FamilySection = dynamic(() => import("./FamilySection"), { ssr: false });
 import { FamilyHealthRecord } from "./familyTypes";
 import { buildHomeInsights, analyzeExpenseDraft, dailySeed, buildPriceBook, comparePrice } from "./expenseInsights";
+import { MoneyPulse, type DueItem } from "./MoneyPulse";
+import { HouseQuickFind, type FindEntry } from "./HouseQuickFind";
+import { FuturePulse } from "./FuturePulse";
 import { SmartForecastPanel, DraftInsightsList } from "./SmartInsights";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -1992,6 +1995,60 @@ export default function HomeFinanceDashboard() {
       const paidForMe = d.payments.filter(p => p.type === "دين لي" || (!p.type && d.type === "دين لي")).reduce((ps, p) => ps + p.amount, 0);
       return s + Math.max(0, (d.amount - paidOnMe) + paidForMe);
     }, 0);
+
+  // ── فهرس البحث السريع بكل قوائم البيت ──
+  const houseFindEntries = useMemo<FindEntry[]>(() => {
+    const out: FindEntry[] = [];
+    inventory.forEach(i => out.push({ key: "inv-" + i.id, name: i.name, where: "البيت", tab: "inventory", have: Number(i.quantity) || 0, need: Number(i.neededQuantity) || 0, unit: i.unit }));
+    needs.filter(n => !n.isBought).forEach(n => out.push({ key: "need-" + n.id, name: n.name, where: "النواقص", tab: "needs", need: n.quantity || 1, extra: n.category }));
+    carInventory.forEach(i => out.push({ key: "car-" + i.id, name: i.name, where: "السيارة", tab: "car", have: Number(i.quantity) || 0, need: Number(i.neededQuantity) || 0, unit: i.unit }));
+    travelInventory.forEach(i => out.push({ key: "trv-" + i.id, name: i.name, where: "السفر", tab: "travel", have: Number(i.quantity) || 0, need: Number(i.neededQuantity) || 0, unit: i.unit }));
+    familyNeeds.filter(f => f.status !== "completed").forEach(f => out.push({ key: "fam-" + f.id, name: f.title, where: "العائلة", tab: "familyNeeds", extra: f.member }));
+    return out;
+  }, [inventory, needs, carInventory, travelInventory, familyNeeds]);
+
+  const pickHouseEntry = (e: FindEntry) => {
+    if (e.tab === "inventory") setInventorySearch(e.name);
+    if (e.tab === "car") setCarSearch(e.name);
+    if (e.tab === "familyNeeds") setFamilySearch(e.name);
+    if (e.tab === "travel") { setTravelSubTab("inventory"); setInventorySearch(e.name); }
+    setActiveTab(e.tab as any);
+    setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
+  };
+
+  // ── مواعيد الالتزامات الجاية والمتأخرة (لوحة الراتب والأمور الخارجية) ──
+  const moneyDues: DueItem[] = (() => {
+    const now = new Date();
+    const dayNow = now.getDate();
+    const out: DueItem[] = [];
+    bills.forEach(b => {
+      const bal = getBillBalance(b);
+      if (isBillPaidThisCycle(b) && bal.overdueMonths === 0) return;
+      out.push({
+        id: b.id, kind: "فاتورة", name: b.name,
+        amount: bal.overdueMonths > 0 ? bal.overdueAmount : Number(b.amount) || 0,
+        daysLeft: bal.overdueMonths > 0 ? -1 : b.dueDay ? b.dueDay - dayNow : null,
+        overdueMonths: bal.overdueMonths, tab: "bills",
+      });
+    });
+    installments.forEach(i => {
+      const late = getInstallmentDelayMonths(i);
+      if (late <= 0) return;
+      const day = i.startDate ? new Date(i.startDate).getDate() : 0;
+      out.push({
+        id: i.id, kind: "قسط", name: i.name,
+        amount: late * (Number(i.monthlyInstallment) || 0),
+        daysLeft: late > 1 ? -1 : day ? day - dayNow : null,
+        overdueMonths: late > 1 ? late - 1 : 0, tab: "installments",
+      });
+    });
+    effectiveDebts.forEach(d => {
+      if (d.type !== "دين علي" || !d.monthlyInstallment) return;
+      if ((d.payments || []).some(p => isInCycle(p.date))) return;
+      out.push({ id: d.id, kind: "دين", name: d.person, amount: Number(d.monthlyInstallment) || 0, daysLeft: null, tab: "debts" });
+    });
+    return out;
+  })();
 
   // ──────────────────────────────────────────
   // FUTURE PLAN HANDLERS
@@ -4809,7 +4866,39 @@ setEditTrip(null);
       })()}
 
       <div className="px-4 mt-4 space-y-4">
-        
+
+        {(activeTab === "futurePlans" || activeTab === "travel") && !dataLoading && (
+          <FuturePulse
+            plans={futurePlans}
+            freeThisCycle={balance - unpaidObligations}
+            activeTrips={travelTrips.filter(t => t.status === "active").map(t => ({
+              id: t.id,
+              name: t.currency ? `${t.name} (${t.currency})` : t.name,
+              spent: travelExpenses.filter(x => x.tripId === t.id).reduce((a, x) => a + (Number(x.amount) || 0), 0),
+            }))}
+            onOpen={tab => setActiveTab(tab as any)}
+          />
+        )}
+
+        {(activeTab === "needs" || activeTab === "inventory" || activeTab === "familyNeeds" || activeTab === "car" || activeTab === "travel") && (
+          <HouseQuickFind entries={houseFindEntries} onPick={pickHouseEntry} />
+        )}
+
+        {(activeTab === "income" || activeTab === "bills" || activeTab === "installments" || activeTab === "debts") && !dataLoading && (
+          <MoneyPulse
+            income={totalIncome}
+            spent={totalExpensesAmt}
+            unpaidBills={unpaidBillsAmt}
+            unpaidInstallments={unpaidInstallmentsMonthly}
+            debtsOnMe={totalDebtsOnMe}
+            debtsForMe={totalDebtsForMe}
+            bank={Number(wallet.bankBalance) || 0}
+            cash={Number(wallet.cashBalance) || 0}
+            dues={moneyDues}
+            onOpen={tab => setActiveTab(tab as any)}
+          />
+        )}
+
         {/* STATS BANNER (المتوفر والنواقص في كل صفحة) */}
         {(() => {
           if (activeTab === "overview" || activeTab === "futurePlans" || activeTab === "familyNeeds") return null;
@@ -7629,7 +7718,9 @@ setEditTrip(null);
           const { data: currentInv } = getActiveInventory();
           const currentShoppingList = currentInv.filter(i => (i.neededQuantity || 0) > 0);
           const filteredInv = currentInv.filter(item =>
-            !inventorySearch || item.name.includes(inventorySearch) || item.category.includes(inventorySearch)
+            !inventorySearch.trim() ||
+            normalizeArabicText(item.name).includes(normalizeArabicText(inventorySearch.trim())) ||
+            normalizeArabicText(item.category || "").includes(normalizeArabicText(inventorySearch.trim()))
           );
           const totalItems = currentInv.length;
           const okItems = currentInv.filter(i => i.quantity > i.threshold).length;
