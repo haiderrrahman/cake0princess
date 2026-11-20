@@ -25,7 +25,7 @@ const LottoTracker = dynamic(() => import("./LottoTracker"), { ssr: false });
 const WomenCycleCare = dynamic(() => import("./WomenCycleCare"), { ssr: false });
 const FamilySection = dynamic(() => import("./FamilySection"), { ssr: false });
 import { FamilyHealthRecord } from "./familyTypes";
-import { buildHomeInsights, analyzeExpenseDraft, dailySeed } from "./expenseInsights";
+import { buildHomeInsights, analyzeExpenseDraft, dailySeed, buildPriceBook, comparePrice } from "./expenseInsights";
 import { SmartForecastPanel, DraftInsightsList } from "./SmartInsights";
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -707,6 +707,8 @@ export default function HomeFinanceDashboard() {
   const [pendingReceipts, setPendingReceipts] = useState<ScannedReceiptData[]>([]);
   const [receiptQueue, setReceiptQueue] = useState<{ index: number; total: number; store: string } | null>(null);
   const advancingReceiptRef = useRef(false);
+  // آخر قسم فرعي فُتح داخل كل قسم رئيسي (للرجوع له مباشرة)
+  const lastTabInSection = useRef<Record<string, string>>({});
   // مواد أُضيفت للتو (تُبرَز لثوانٍ حتى يعرف المستخدم شنو انضاف)
   const [freshItemIds, setFreshItemIds] = useState<Set<string>>(new Set());
   const freshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1689,6 +1691,13 @@ export default function HomeFinanceDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allExpenses, selectedCycleId, totalIncome, unpaidObligations, settings.budgetLimits, insightShuffle]);
 
+  // ذاكرة الأسعار (آخر سعر + المحل + أرخص مكان) — تُبنى فقط والنافذة مفتوحة
+  const priceBook = useMemo(
+    () => (showExpenseModal ? buildPriceBook(allExpenses as any, editExpense?.id) : new Map()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showExpenseModal, allExpenses, editExpense?.id]
+  );
+
   // تحذيرات لحظية أثناء إدخال مصروف (مؤجلة حتى لا تبطئ الكتابة)
   const draftInput = useDeferredValue({
     open: showExpenseModal,
@@ -2323,6 +2332,27 @@ setEditFuturePlan(null);
   // ──────────────────────────────────────────
   // EXPENSE HANDLERS & SMART AI SCANNER
   // ──────────────────────────────────────────
+  /** تنبيه فوري بالأسعار عند إضافة/قراءة مواد */
+  const announcePriceChanges = (items: { name?: string; price?: number; quantity?: number; place?: string }[]) => {
+    const book = buildPriceBook(allExpenses as any, editExpense?.id);
+    const up: string[] = [];
+    const down: string[] = [];
+    for (const it of items) {
+      const cmp = comparePrice(book, it.name || "", Number(it.price) || 0, Number(it.quantity) || 1, it.place || "");
+      if (!cmp || !cmp.last) continue;
+      if (cmp.verdict === "higher") up.push(`${it.name} +${fmt(cmp.diff)}`);
+      else if (cmp.verdict === "lower") down.push(it.name || "");
+    }
+    if (up.length) {
+      toast(`💸 ${up.length === 1 ? "مادة سعرها صاعد" : `${up.length} مواد سعرها صاعد`} عن آخر مرة`, {
+        description: up.slice(0, 4).join("، ") + (up.length > 4 ? "…" : "") + " — التفاصيل تحت كل مادة",
+        duration: 7000,
+      });
+    } else if (down.length) {
+      toast.success(`🎉 ${down.length === 1 ? "مادة أرخص" : `${down.length} مواد أرخص`} من آخر مرة: ${down.slice(0, 3).join("، ")}`);
+    }
+  };
+
   /** تعبئة نموذج المصروف من فاتورة مقروءة */
   const applyReceiptToForm = (
     data: ScannedReceiptData,
@@ -2362,6 +2392,7 @@ setEditFuturePlan(null);
       return [...kept, ...newItems];
     });
     markFreshItems(newItems.map(it => it.id));
+    setTimeout(() => announcePriceChanges(newItems), 400);
     if (!opts.silent) {
       toast.success(opts.append ? `أُضيفت ${newItems.length} مادة للقائمة ⚡` : `تم استخراج ${newItems.length} مادة من الفاتورة ⚡`, { duration: 3500 });
     }
@@ -2533,6 +2564,7 @@ setEditFuturePlan(null);
     if (newItems.length > 0) {
       setExpenseItems(prev => [...prev, ...newItems]);
       markFreshItems(newItems.map(it => it.id));
+      setTimeout(() => announcePriceChanges(newItems), 400);
       toast.success(`تمت إضافة ${newItems.length} مواد بنجاح!`);
       setShowQuickPasteModal(false);
       setQuickPasteText("");
@@ -4693,91 +4725,88 @@ setEditTrip(null);
 
       </div>
 
-      {/* ═══════════════ TABS AS APP ICONS ═══════════════ */}
-      <div className="pt-4 px-2 sm:px-4">
-        <div className="grid grid-cols-4 md:grid-cols-6 gap-x-2 gap-y-5 justify-items-center pb-2">
-          {tabs.map((t: any) => {
-            const isActive = activeTab === t.key;
-            const hasBadge = (t.badge || 0) > 0;
-            
-            const getTabColors = (key: string) => {
-              switch(key) {
-                case "overview":      return { grad: "from-blue-600 via-indigo-600 to-violet-700",   shadow: "shadow-indigo-500/35",   ring: "ring-indigo-400",   bg: "bg-indigo-500/10 dark:bg-indigo-500/20",   text: "text-indigo-600 dark:text-indigo-400" };
-                case "income":        return { grad: "from-emerald-500 via-green-500 to-teal-600", shadow: "shadow-emerald-500/35",ring: "ring-emerald-400",bg: "bg-emerald-500/10 dark:bg-emerald-500/20",text: "text-emerald-600 dark:text-emerald-400" };
-                case "expenses":      return { grad: "from-rose-500 via-pink-600 to-red-600",       shadow: "shadow-rose-500/35",   ring: "ring-rose-400",   bg: "bg-rose-500/10 dark:bg-rose-500/20",   text: "text-rose-600 dark:text-rose-400" };
-                case "needs":         return { grad: "from-amber-500 via-orange-500 to-rose-600",   shadow: "shadow-amber-500/35", ring: "ring-amber-400", bg: "bg-amber-500/10 dark:bg-amber-500/20", text: "text-amber-600 dark:text-amber-400" };
-                case "inventory":     return { grad: "from-teal-500 via-cyan-600 to-blue-600",   shadow: "shadow-teal-500/35",   ring: "ring-teal-400",   bg: "bg-teal-500/10 dark:bg-teal-500/20",   text: "text-teal-600 dark:text-teal-400" };
-                case "bills":         return { grad: "from-amber-400 via-yellow-500 to-orange-500",  shadow: "shadow-yellow-500/35",  ring: "ring-yellow-400",  bg: "bg-amber-500/10 dark:bg-amber-500/20",  text: "text-amber-600 dark:text-amber-400" };
-                case "installments":  return { grad: "from-purple-600 via-indigo-600 to-violet-700",  shadow: "shadow-purple-500/35", ring: "ring-purple-400", bg: "bg-purple-500/10 dark:bg-purple-500/20", text: "text-purple-600 dark:text-purple-400" };
-                case "debts":         return { grad: "from-fuchsia-600 via-purple-600 to-pink-600", shadow: "shadow-fuchsia-500/35", ring: "ring-fuchsia-400", bg: "bg-fuchsia-500/10 dark:bg-fuchsia-500/20", text: "text-fuchsia-600 dark:text-fuchsia-400" };
-                case "familyNeeds":   return { grad: "from-pink-500 via-rose-500 to-purple-600",      shadow: "shadow-pink-500/35",   ring: "ring-pink-400",   bg: "bg-pink-500/10 dark:bg-pink-500/20",   text: "text-pink-600 dark:text-pink-400" };
-                case "car":           return { grad: "from-slate-700 via-gray-800 to-zinc-950",      shadow: "shadow-slate-500/35",  ring: "ring-slate-400",  bg: "bg-slate-500/10 dark:bg-slate-500/20",  text: "text-slate-600 dark:text-slate-400" };
-                case "travel":        return { grad: "from-sky-500 via-blue-500 to-indigo-600",        shadow: "shadow-sky-500/35",    ring: "ring-sky-400",    bg: "bg-sky-500/10 dark:bg-sky-500/20",    text: "text-sky-600 dark:text-sky-400" };
-                case "futurePlans":   return { grad: "from-violet-600 via-purple-700 to-indigo-800",   shadow: "shadow-violet-500/35", ring: "ring-violet-400", bg: "bg-violet-500/10 dark:bg-violet-500/20", text: "text-violet-600 dark:text-violet-400" };
-                default:             return { grad: "from-gray-500 to-gray-600",       shadow: "shadow-gray-500/35",   ring: "ring-gray-400",   bg: "bg-gray-500/10",                        text: "text-gray-600" };
-              }
-            };
+      {/* ═══════════════ الأقسام الخمسة (هيكل المنزل الجديد) ═══════════════ */}
+      {(() => {
+        const SECTIONS: { key: string; label: string; emoji: string; hint: string; tabs: string[] }[] = [
+          { key: "home",   label: "الرئيسية",   emoji: "🏠", hint: "الراتب والتنبؤ والتنبيهات", tabs: ["overview"] },
+          { key: "money",  label: "الراتب",      emoji: "💼", hint: "الدخل والالتزامات الخارجية", tabs: ["income", "bills", "installments", "debts"] },
+          { key: "spend",  label: "المصاريف",    emoji: "🧾", hint: "السجل والفواتير والميزانيات", tabs: ["expenses"] },
+          { key: "house",  label: "البيت",       emoji: "🛋️", hint: "الموجودات والنواقص والعائلة", tabs: ["needs", "inventory", "familyNeeds", "car"] },
+          { key: "future", label: "المستقبل",    emoji: "🚀", hint: "الخطط والسفر والادخار", tabs: ["futurePlans", "travel"] },
+        ];
+        const tabByKey: Record<string, any> = {};
+        (tabs as any[]).forEach(t => { tabByKey[t.key] = t; });
+        const current = SECTIONS.find(sec => sec.tabs.includes(activeTab)) || SECTIONS[0];
+        lastTabInSection.current[current.key] = activeTab;
+        const shortAmount = (n: number) =>
+          Math.abs(n) >= 1000000 ? (n / 1000000).toFixed(1) + "M" : Math.abs(n) >= 1000 ? Math.round(n / 1000) + "K" : String(Math.round(n));
 
-            const colors = getTabColors(t.key);
-            const TabIcon = t.icon;
+        return (
+          <div className="pt-4 px-3 sm:px-4">
+            <div className="grid grid-cols-5 gap-1 sm:gap-1.5 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-3xl p-1.5 shadow-sm">
+              {SECTIONS.map(sec => {
+                const active = sec.key === current.key;
+                const count = dataLoading ? 0 : sec.tabs.reduce((n, k) => n + (Number(tabByKey[k]?.badge) || 0), 0);
+                return (
+                  <button
+                    key={sec.key}
+                    type="button"
+                    onClick={() => setActiveTab((active ? sec.tabs[0] : lastTabInSection.current[sec.key] || sec.tabs[0]) as any)}
+                    className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl py-2.5 transition active:scale-95 ${
+                      active ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-md" : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    <span className="text-xl leading-none">{sec.emoji}</span>
+                    <span className="text-[10px] sm:text-xs font-black">{sec.label}</span>
+                    {count > 0 && (
+                      <span className={`absolute top-1 left-1 min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-black flex items-center justify-center ${
+                        active ? "bg-rose-500 text-white" : "bg-rose-500 text-white"
+                      }`}>
+                        {count > 99 ? "99+" : count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
 
-            return (
-              <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                className="relative flex flex-col items-center gap-1.5 group outline-none w-full max-w-[82px] cursor-pointer"
-              >
-                {/* Icon Box */}
-                <div className={`relative flex items-center justify-center w-[58px] h-[58px] sm:w-[64px] sm:h-[64px] rounded-[1.3rem] sm:rounded-[1.4rem] transition-all duration-300 ${
-                  isActive 
-                    ? `bg-gradient-to-br ${colors.grad} text-white scale-110 z-10 shadow-lg ${colors.shadow} ring-2 ring-offset-2 ring-offset-[#f3f4f6] dark:ring-offset-[#09090b] ${colors.ring}` 
-                    : `${colors.bg} border border-white/40 dark:border-zinc-800/80 ${colors.text} shadow-xs group-hover:scale-105 group-hover:shadow-md`
-                }`}>
-                  {/* Hero Lucide Icon or Emoji */}
-                  {TabIcon ? (
-                    <TabIcon className={`w-6 h-6 sm:w-6.5 sm:h-6.5 transition-all duration-300 ${
-                      isActive ? 'stroke-[2.4] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)] scale-105' : 'stroke-[2.1]'
-                    }`} />
-                  ) : (
-                    <span className="text-2xl select-none">{t.emoji}</span>
-                  )}
-
-                  {/* Micro Emoji Badge */}
-                  <span className={`absolute -bottom-1 -left-1 text-[11px] select-none filter transition-transform duration-300 ${
-                    isActive ? 'scale-110' : 'opacity-85'
-                  }`}>
-                    {t.emoji}
-                  </span>
-                  
-                  {/* Badge */}
-                  {!dataLoading && ( (t.badge || 0) > 0 || (t.amount !== undefined && (t.isBalance || t.amount > 0)) ) && (
-                    <span className={`absolute -top-2 -right-2 min-w-[22px] h-[22px] rounded-full text-[9px] sm:text-[10px] font-black flex items-center justify-center px-1.5 shadow-sm border-[1.5px] transition-all duration-300 ${
-                      isActive 
-                        ? "bg-white text-gray-900 border-transparent dark:bg-zinc-900 dark:text-white dark:border-zinc-700" 
-                        : t.isBalance
-                          ? (t.amount >= 0 ? "bg-emerald-600 text-white border-white dark:border-zinc-900" : "bg-black text-white border-white dark:border-zinc-900")
-                          : "bg-rose-500 text-white border-white dark:border-zinc-900"
-                    }`}>
-                      {t.amount !== undefined 
-                        ? (Math.abs(t.amount) >= 1000000 ? (t.amount / 1000000).toFixed(1) + 'M' : Math.abs(t.amount) >= 1000 ? (t.amount / 1000).toFixed(0) + 'K' : t.amount)
-                        : (t.badge! > 99 ? '99+' : t.badge)}
-                    </span>
-                  )}
-                </div>
-
-                {/* Text Label */}
-                <span className={`text-[10px] sm:text-[11px] transition-all duration-300 max-w-[70px] text-center leading-tight flex flex-col items-center gap-0.5 ${
-                  isActive 
-                    ? `font-black ${colors.text} translate-y-0.5` 
-                    : "font-bold text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200"
-                }`}>
-                  <span>{t.label}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+            <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]">
+              {current.tabs.length === 1 ? (
+                <span className="text-[11px] font-bold text-gray-400 px-1">{current.hint}</span>
+              ) : (
+                current.tabs.map(k => {
+                  const t = tabByKey[k];
+                  if (!t) return null;
+                  const on = activeTab === k;
+                  const badge = Number(t.badge) || 0;
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setActiveTab(k as any)}
+                      className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-black border transition active:scale-95 ${
+                        on
+                          ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
+                          : "bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 text-gray-700 dark:text-gray-200"
+                      }`}
+                    >
+                      <span>{t.emoji}</span>
+                      <span>{t.label}</span>
+                      {!dataLoading && t.amount !== undefined && (t.isBalance || t.amount > 0) ? (
+                        <span className={`text-[10px] px-1.5 rounded-full ${on ? "bg-white/20" : t.isBalance && t.amount < 0 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"}`}>
+                          {shortAmount(t.amount)}
+                        </span>
+                      ) : !dataLoading && badge > 0 ? (
+                        <span className={`text-[10px] px-1.5 rounded-full ${on ? "bg-white/20" : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"}`}>{badge}</span>
+                      ) : null}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="px-4 mt-4 space-y-4">
         
@@ -9605,6 +9634,23 @@ setEditTrip(null);
                             </div>
                             <span className="text-[9px] text-gray-400">يُحدد تلقائياً بالذكاء الاصطناعي</span>
                           </div>
+                          {/* 💸 مقارنة السعر بآخر مرة وبأرخص مكان */}
+                          {(() => {
+                            if (!(Number(item.price) > 0)) return null;
+                            const cmp = comparePrice(priceBook, item.name || "", Number(item.price) || 0, Number(item.quantity) || 1, item.place || expNameInput);
+                            if (!cmp) return null;
+                            const tone =
+                              cmp.verdict === "higher" ? "text-rose-700 bg-rose-50 border-rose-200 dark:text-rose-300 dark:bg-rose-950/40 dark:border-rose-900/60"
+                              : cmp.verdict === "lower" ? "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-900/60"
+                              : cmp.verdict === "new" ? "text-gray-500 bg-gray-50 border-gray-200 dark:text-gray-400 dark:bg-zinc-900 dark:border-zinc-800"
+                              : cmp.message.includes("أرخص كان") ? "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/40 dark:border-amber-900/60"
+                              : "text-gray-600 bg-gray-50 border-gray-200 dark:text-gray-300 dark:bg-zinc-900 dark:border-zinc-800";
+                            return (
+                              <div className={`w-full sm:col-span-12 text-[10px] font-black px-2.5 py-1 rounded-lg border ${tone}`}>
+                                {cmp.message}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>

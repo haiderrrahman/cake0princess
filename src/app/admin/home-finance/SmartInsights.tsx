@@ -106,6 +106,32 @@ export function SmartForecastPanel({
         <p className="text-xs font-bold text-slate-400 text-center py-3">سجّل مصاريف هذه الدورة حتى تبدأ التنبؤات والتحذيرات.</p>
       )}
 
+      {/* 💸 مراقبة الأسعار */}
+      {data.priceWatch.length > 0 && (
+        <div className="mt-3 rounded-2xl border border-rose-100 dark:border-rose-900/40 p-3">
+          <p className="text-[11px] font-black text-slate-800 dark:text-white mb-1.5">💸 مراقبة الأسعار — اشتريت أغلى من قبل</p>
+          <ul className="divide-y divide-slate-100 dark:divide-zinc-800">
+            {data.priceWatch.map((w) => {
+              const better = w.cheapest < w.prev ? { price: w.cheapest, place: w.cheapestPlace } : { price: w.prev, place: w.prevPlace };
+              return (
+                <li key={w.name} className="py-1.5">
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-black">
+                    <span className="text-slate-800 dark:text-slate-100 truncate">{w.name}</span>
+                    <span className="text-rose-600 dark:text-rose-400 shrink-0">⬆️ {w.pct}%</span>
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">
+                    هسه {fmt(w.last)}{w.lastPlace ? ` من ${w.lastPlace}` : ""} · قبل {fmt(w.prev)}{w.prevPlace ? ` من ${w.prevPlace}` : ""}
+                    {better.place && better.price < w.last && (
+                      <span className="text-emerald-700 dark:text-emerald-400"> · الأفضل {fmt(better.price)} من {better.place}</span>
+                    )}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       {/* ابتعد عنه / حافظ عليه */}
       {(data.avoid.length > 0 || data.keep.length > 0) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">

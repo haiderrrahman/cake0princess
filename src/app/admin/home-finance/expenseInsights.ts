@@ -20,6 +20,7 @@ export interface InsightItem {
   price?: number;
   quantity?: number;
   category?: string;
+  place?: string;
 }
 
 export interface InsightExpense {
@@ -47,6 +48,22 @@ export interface NatureGroup {
   label: string;
   amount: number;
   count: number;
+}
+
+export interface PriceWatchItem {
+  name: string;
+  /** آخر سعر قطعة */
+  last: number;
+  lastPlace: string;
+  lastDate: string;
+  /** السعر الذي قبله */
+  prev: number;
+  prevPlace: string;
+  /** أرخص سعر بآخر 6 أشهر ومكانه */
+  cheapest: number;
+  cheapestPlace: string;
+  /** نسبة الصعود عن السعر السابق */
+  pct: number;
 }
 
 export interface HomeInsights {
@@ -78,6 +95,8 @@ export interface HomeInsights {
   avoid: NatureGroup[];
   /** شنو تحافظ عليه: أكبر البنود الأساسية */
   keep: NatureGroup[];
+  /** مواد اشتريتها مؤخراً بسعر أعلى من قبل أو من محل أغلى */
+  priceWatch: PriceWatchItem[];
 }
 
 export interface InsightContext {
@@ -140,6 +159,8 @@ interface Line {
   subTitle: string;      // عنوان المجموعة (حلويات، مشروبات...)
   /** سطر من مواد فاتورة (له سعر قطعة حقيقي) لا مصروف إجمالي */
   fromItem: boolean;
+  /** المحل */
+  place: string;
 }
 
 const natureCache = new Map<string, { nature: Nature; subTitle: string }>();
@@ -169,13 +190,13 @@ function toLines(expenses: InsightExpense[]): Line[] {
         const amount = Number(it.price) || 0;
         const qty = Number(it.quantity) > 0 ? Number(it.quantity) : 1;
         const n = natureOf(name, category);
-        lines.push({ expenseId: e.id, key: normalizeArabicText(name), name, category, amount, unitPrice: amount / qty, date, fromItem: true, ...n });
+        lines.push({ expenseId: e.id, key: normalizeArabicText(name), name, category, amount, unitPrice: amount / qty, date, fromItem: true, place: String(it.place || e.name || "").trim(), ...n });
       }
     } else if (Number(e.amount) > 0) {
       const name = String(e.name || e.category || "مصروف").trim();
       const category = e.category || "عام";
       const n = natureOf(name, category);
-      lines.push({ expenseId: e.id, key: normalizeArabicText(name), name, category, amount: Number(e.amount), unitPrice: Number(e.amount), date, fromItem: false, ...n });
+      lines.push({ expenseId: e.id, key: normalizeArabicText(name), name, category, amount: Number(e.amount), unitPrice: Number(e.amount), date, fromItem: false, place: String(e.name || "").trim(), ...n });
     }
   }
   return lines;
@@ -412,6 +433,7 @@ export function buildHomeInsights(ctx: InsightContext): HomeInsights {
 
   // 6) ارتفاع الأسعار + 7) مواد متوقع تحتاجها قريباً
   const history = buildItemHistory(allLines.filter((l) => l.date <= todayStr));
+  const homeBook = buildPriceBook(ctx.expenses, undefined, today);
   const recentFrom = ymd(new Date(today.getTime() - 14 * DAY));
   for (const [key, h] of Array.from(history)) {
     // الأسعار: آخر سعر مقابل معدل ما قبله
@@ -420,10 +442,17 @@ export function buildHomeInsights(ctx: InsightContext): HomeInsights {
       const before = h.unitPrices.slice(0, -1);
       const avg = before.reduce((a, b) => a + b, 0) / before.length;
       const lastDate = h.dates[h.dates.length - 1];
-      if (lastDate >= recentFrom && avg > 0 && last >= avg * 1.2 && last - avg >= 250) {
-        push({ id: `price-${key}`, level: "tip", icon: "💸", score: 28 + Math.min(10, pct(last - avg, avg) / 10),
-          title: `سعر ${h.name} ارتفع ${pct(last - avg, avg)}%`,
-          text: `آخر مرة ${fmt(last)} د.ع ومعدلك ${fmt(avg)} د.ع. قارن الأسعار بمحل ثاني.` });
+      if (lastDate >= recentFrom && avg > 0 && last >= avg * 1.4 && last - avg >= 500) {
+        const recs = homeBook.get(key) || [];
+        const lastRec = recs[recs.length - 1];
+        const cheapRec = recs.length ? recs.reduce((a, b) => (b.unitPrice < a.unitPrice ? b : a)) : undefined;
+        const where =
+          cheapRec && cheapRec.place && cheapRec.unitPrice < last && normalizeArabicText(cheapRec.place) !== normalizeArabicText(lastRec?.place || "")
+            ? ` أرخص كان ${fmt(cheapRec.unitPrice)} من ${cheapRec.place} (${shortDate(cheapRec.date)}) — اشتري من هناك.`
+            : " قارن الأسعار بمحل ثاني.";
+        push({ id: `price-${key}`, level: "warning", icon: "💸", score: 38 + Math.min(10, pct(last - avg, avg) / 10),
+          title: `سعر ${h.name} صاعد ${pct(last - avg, avg)}%`,
+          text: `آخر مرة ${fmt(last)} د.ع${lastRec?.place ? ` من ${lastRec.place}` : ""} ومعدلك ${fmt(avg)} د.ع.${where}` });
       }
     }
     // التنبؤ بالحاجة: مادة أساسية تتكرر بفترات منتظمة
@@ -448,6 +477,34 @@ export function buildHomeInsights(ctx: InsightContext): HomeInsights {
     }
   }
 
+  // مراقبة الأسعار: كل مادة اشتريتها آخر 30 يوم بسعر أعلى من سابقه أو من محل أغلى من أرخص محل
+  const watchFrom = ymd(new Date(today.getTime() - 30 * DAY));
+  const sixMonths = ymd(new Date(today.getTime() - 183 * DAY));
+  const priceWatch: PriceWatchItem[] = [];
+  for (const [key, recs] of Array.from(homeBook)) {
+    if (recs.length < 2) continue;
+    const lastRec = recs[recs.length - 1];
+    if (lastRec.date < watchFrom || lastRec.date > todayStr) continue;
+    const prevRec = recs[recs.length - 2];
+    const recent = recs.filter((r) => r.date >= sixMonths);
+    const cheap = (recent.length ? recent : recs).reduce((a, b) => (b.unitPrice < a.unitPrice ? b : a));
+    const tol = (v: number) => Math.max(100, v * 0.05);
+    const rose = lastRec.unitPrice - prevRec.unitPrice > tol(prevRec.unitPrice);
+    const cheaperElsewhere =
+      lastRec.unitPrice - cheap.unitPrice > tol(cheap.unitPrice) &&
+      normalizeArabicText(cheap.place) !== normalizeArabicText(lastRec.place);
+    if (!rose && !cheaperElsewhere) continue;
+    const h = history.get(key);
+    priceWatch.push({
+      name: h?.name || key,
+      last: lastRec.unitPrice, lastPlace: lastRec.place, lastDate: lastRec.date,
+      prev: prevRec.unitPrice, prevPlace: prevRec.place,
+      cheapest: cheap.unitPrice, cheapestPlace: cheap.place,
+      pct: pct(lastRec.unitPrice - Math.min(prevRec.unitPrice, cheap.unitPrice), Math.min(prevRec.unitPrice, cheap.unitPrice)),
+    });
+  }
+  priceWatch.sort((a, b) => b.pct - a.pct);
+
   // ترتيب + تنويع
   const levelRank: Record<InsightLevel, number> = { danger: 0, warning: 1, tip: 2, good: 3 };
   alerts.sort((a, b) => levelRank[a.level] - levelRank[b.level] || b.score - a.score);
@@ -468,7 +525,81 @@ export function buildHomeInsights(ctx: InsightContext): HomeInsights {
     tips: chosenTips,
     avoid,
     keep,
+    priceWatch: priceWatch.slice(0, 8),
   };
+}
+
+// ───────────────────────── ذاكرة الأسعار ─────────────────────────
+
+export interface PriceRecord {
+  unitPrice: number;
+  place: string;
+  date: string;
+}
+
+export type PriceBook = Map<string, PriceRecord[]>;
+
+/** آخر 12 شهراً من أسعار كل مادة (سعر القطعة + المحل + التاريخ)، الأقدم أولاً */
+export function buildPriceBook(expenses: InsightExpense[], excludeId?: string, today: Date = new Date()): PriceBook {
+  const from = ymd(new Date(dayStart(today).getTime() - 365 * DAY));
+  const book: PriceBook = new Map();
+  const lines = toLines(expenses.filter((e) => e.id !== excludeId))
+    .filter((l) => l.fromItem && l.key && l.key.length >= 2 && l.unitPrice > 0 && l.date >= from)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  for (const l of lines) {
+    const arr = book.get(l.key) || [];
+    arr.push({ unitPrice: Math.round(l.unitPrice), place: l.place, date: l.date });
+    book.set(l.key, arr);
+  }
+  return book;
+}
+
+export interface PriceComparison {
+  verdict: "new" | "higher" | "lower" | "same";
+  last?: PriceRecord;
+  /** أرخص سعر بآخر 6 أشهر */
+  cheapest?: PriceRecord;
+  /** الفرق عن آخر سعر (موجب = أغلى) */
+  diff: number;
+  pct: number;
+  /** نص قصير جاهز للعرض */
+  message: string;
+}
+
+const shortDate = (s: string) => {
+  const d = parseDay(s);
+  return d ? `${d.getDate()}/${d.getMonth() + 1}` : s;
+};
+
+/** مقارنة سعر مادة (سعر السطر ÷ الكمية) بآخر سعر وأرخص مكان */
+export function comparePrice(book: PriceBook, name: string, linePrice: number, quantity = 1, place = "", today: Date = new Date()): PriceComparison | null {
+  const key = normalizeArabicText(String(name || "").trim());
+  const unit = Number(linePrice) / (Number(quantity) > 0 ? Number(quantity) : 1);
+  if (!key || key.length < 2 || !(unit > 0)) return null;
+  const hist = book.get(key);
+  if (!hist || hist.length === 0) return { verdict: "new", diff: 0, pct: 0, message: "أول مرة تشتريها — راح نتذكر سعرها" };
+
+  const last = hist[hist.length - 1];
+  const from = ymd(new Date(dayStart(today).getTime() - 183 * DAY));
+  const recent = hist.filter((h) => h.date >= from);
+  const cheapest = (recent.length ? recent : hist).reduce((a, b) => (b.unitPrice < a.unitPrice ? b : a));
+  const diff = Math.round(unit - last.unitPrice);
+  const pctV = last.unitPrice > 0 ? Math.round((diff / last.unitPrice) * 100) : 0;
+  // فرق أقل من 5% أو 100 دينار = نفس السعر
+  const same = Math.abs(diff) <= Math.max(100, last.unitPrice * 0.05);
+  const verdict: PriceComparison["verdict"] = same ? "same" : diff > 0 ? "higher" : "lower";
+
+  const lastTxt = `${fmt(last.unitPrice)}${last.place ? ` من ${last.place}` : ""} (${shortDate(last.date)})`;
+  const cheaperElsewhere =
+    cheapest.unitPrice < unit - Math.max(100, unit * 0.05) &&
+    normalizeArabicText(cheapest.place) !== normalizeArabicText(place)
+      ? ` · أرخص كان ${fmt(cheapest.unitPrice)}${cheapest.place ? ` من ${cheapest.place}` : ""}`
+      : "";
+  let message = "";
+  if (verdict === "higher") message = `⬆️ أغلى بـ${fmt(diff)} (${pctV}%) — آخر مرة ${lastTxt}${cheaperElsewhere}`;
+  else if (verdict === "lower") message = `⬇️ أرخص بـ${fmt(-diff)} من آخر مرة ${lastTxt}`;
+  else message = `= نفس سعرك السابق ${lastTxt}${cheaperElsewhere}`;
+  return { verdict, last, cheapest, diff, pct: pctV, message };
 }
 
 // ───────────────────────── تحذيرات أثناء الإدخال ─────────────────────────
@@ -552,33 +683,43 @@ export function analyzeExpenseDraft(ctx: InsightContext, draft: DraftExpense): I
     }
   }
 
-  // 5) مواد اشتريتها مؤخراً + أسعار أعلى من معدلك
+  // 5) مواد اشتريتها مؤخراً + مقارنة الأسعار بآخر مرة وبأرخص مكان
   const history = buildItemHistory(allLines);
+  const book = buildPriceBook(others, undefined, today);
   const recent: string[] = [];
   const pricey: string[] = [];
+  const cheaper: string[] = [];
   for (const l of draftLines.filter((x) => x.fromItem)) {
     const h = history.get(l.key);
-    if (!h) continue;
-    const last = parseDay(h.dates[h.dates.length - 1]);
-    const dDate = parseDay(draftDate);
-    if (last && dDate) {
-      const since = daysBetween(last, dDate);
-      if (since >= 0 && since <= 3 && l.nature === "essential") recent.push(`${l.name} (قبل ${since === 0 ? "اليوم" : daysWord(since)})`);
+    if (h) {
+      const last = parseDay(h.dates[h.dates.length - 1]);
+      const dDate = parseDay(draftDate);
+      if (last && dDate) {
+        const since = daysBetween(last, dDate);
+        if (since >= 0 && since <= 3 && l.nature === "essential") recent.push(`${l.name} (قبل ${since === 0 ? "اليوم" : daysWord(since)})`);
+      }
     }
-    if (h.unitPrices.length >= 2) {
-      const avg = h.unitPrices.reduce((a, b) => a + b, 0) / h.unitPrices.length;
-      if (avg > 0 && l.unitPrice >= avg * 1.2 && l.unitPrice - avg >= 250) pricey.push(`${l.name} ${fmt(l.unitPrice)} (معدلك ${fmt(avg)})`);
-    }
+    const qty = l.amount > 0 && l.unitPrice > 0 ? l.amount / l.unitPrice : 1;
+    const cmp = comparePrice(book, l.name, l.amount, qty, l.place, today);
+    if (!cmp || !cmp.last) continue;
+    if (cmp.verdict === "higher") pricey.push(`${l.name}: ${cmp.message.replace(/^⬆️ /, "")}`);
+    else if (cmp.verdict === "lower") cheaper.push(`${l.name} (${fmt(-cmp.diff)} أرخص)`);
+    else if (cmp.message.includes("أرخص كان")) pricey.push(`${l.name}: ${cmp.message.replace(/^= /, "")}`);
   }
   if (recent.length) {
     out.push({ id: "d-recent", level: "tip", icon: "🧺", score: 55,
       title: "اشتريتها مؤخراً", text: `${recent.slice(0, 3).join("، ")}. تأكد إنك فعلاً تحتاجها حتى ما تتكدس.` });
   }
   if (pricey.length) {
-    out.push({ id: "d-price", level: "tip", icon: "💸", score: 52,
-      title: "أسعار أعلى من معدلك", text: `${pricey.slice(0, 3).join("، ")} د.ع.` });
+    out.push({ id: "d-price", level: pricey.length >= 3 ? "warning" : "tip", icon: "💸", score: 75,
+      title: pricey.length === 1 ? "سعر صاعد عن السابق" : `${pricey.length} مواد سعرها صاعد عن السابق`,
+      text: pricey.slice(0, 3).join(" | ") + (pricey.length > 3 ? ` | و${pricey.length - 3} غيرها` : "") });
+  }
+  if (cheaper.length) {
+    out.push({ id: "d-cheaper", level: "good", icon: "🎉", score: 30,
+      title: "أرخص من آخر مرة", text: cheaper.slice(0, 4).join("، ") });
   }
 
   const rank: Record<InsightLevel, number> = { danger: 0, warning: 1, tip: 2, good: 3 };
-  return out.sort((a, b) => rank[a.level] - rank[b.level] || b.score - a.score).slice(0, 5);
+  return out.sort((a, b) => rank[a.level] - rank[b.level] || b.score - a.score).slice(0, 6);
 }
