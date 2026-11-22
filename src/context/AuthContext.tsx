@@ -1,5 +1,7 @@
 "use client";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState } from "react";
+
+const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { onAuthStateChanged, User, signOut as firebaseSignOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
@@ -28,17 +30,15 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        return localStorage.getItem("auth_cached_isAdmin") === "true";
-      } catch (e) {
-        return false;
-      }
-    }
-    return false;
-  });
+  // يبدأ false مثل الصفحة الجاهزة من السيرفر، وبعدها مباشرة (قبل ما تنرسم الشاشة) نقرأ الكاش.
+  // القراءة داخل useState كانت تسبب اختلاف بين HTML السيرفر والمتصفح فيعيد React بناء الصفحة كلها.
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
+  useIsoLayoutEffect(() => {
+    try {
+      if (localStorage.getItem("auth_cached_isAdmin") === "true") setIsAdmin(true);
+    } catch {}
+  }, []);
 
   const setAndCacheAdmin = (val: boolean) => {
     setIsAdmin(val);

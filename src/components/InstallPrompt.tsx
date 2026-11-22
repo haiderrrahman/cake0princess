@@ -10,10 +10,11 @@ export default function InstallPrompt() {
 
   useEffect(() => {
     // Register Service Worker
+    // تسجيل الـ SW بعد اكتمال التحميل حتى ما يزاحم أول فتح للصفحة
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.error('Service Worker registration failed:', err);
-      });
+      const register = () => navigator.serviceWorker.register('/sw.js').catch(() => {});
+      if (document.readyState === 'complete') setTimeout(register, 3000);
+      else window.addEventListener('load', () => setTimeout(register, 3000), { once: true });
     }
 
     // Check if we are already in standalone mode (installed)
@@ -78,7 +79,7 @@ export default function InstallPrompt() {
     <div className="fixed top-4 left-4 right-4 z-[100] md:left-auto md:right-4 md:w-96 bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl p-4 border border-pink-100 dark:border-zinc-800 animate-in slide-in-from-top-4 fade-in duration-300">
       <div className="flex items-start gap-4">
         <div className="w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0 shadow-md border border-pink-100 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 flex items-center justify-center">
-          <img src="/cp-logo.png" alt="كيك الأميرة" className="w-full h-full object-contain rounded-xl" />
+          <img src="/cp-logo-sm.png" alt="كيك الأميرة" className="w-full h-full object-contain rounded-xl" />
         </div>
         <div className="flex-1">
           <h3 className="font-bold text-gray-900 dark:text-white">ثبت تطبيق كيك الأميرة!</h3>

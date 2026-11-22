@@ -157,7 +157,7 @@ export default function Home() {
         <div className="flex items-center justify-center gap-3 mb-4">
           {/* Logo */}
           <div className="relative w-16 h-16 drop-shadow-xl shrink-0">
-            <Image src="/cp-logo.png" alt="كيك الأميرة" fill className="object-contain" priority />
+            <Image src="/cp-logo-sm.png" alt="كيك الأميرة" fill className="object-contain" priority />
           </div>
           <div className="text-right flex flex-col justify-center">
             <h1 className="text-2xl font-black gradient-text-brand leading-normal py-1 mb-1.5">كيك الأميرة</h1>

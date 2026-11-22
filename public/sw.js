@@ -1,13 +1,5 @@
-// A simple service worker to satisfy PWA install requirements.
-self.addEventListener('install', (e) => {
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', (e) => {
-  e.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('fetch', (e) => {
-  // We don't cache anything in this simple SW, just let network handle it
-  e.respondWith(fetch(e.request));
-});
+// Service worker بسيط لتثبيت التطبيق (PWA) فقط.
+// بدون fetch handler: كل الطلبات تروح للشبكة مباشرة بدون ما تمر عبر الـ SW
+// (المرور الإجباري كان يبطّئ أول فتح على الموبايل والمتصفحات البطيئة).
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));

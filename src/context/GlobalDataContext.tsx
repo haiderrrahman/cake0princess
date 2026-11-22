@@ -1,6 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
+
+const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -12,6 +14,7 @@ interface GlobalDataContextType {
   suppliesCategories: string[];
   loading: boolean;
   refreshAll: () => Promise<void>;
+  activate: () => void;
 }
 
 const GlobalDataContext = createContext<GlobalDataContextType | undefined>(undefined);
@@ -39,16 +42,15 @@ const safeSetLocal = (key: string, data: any) => {
 
 export function GlobalDataProvider({ children }: { children: React.ReactNode }) {
   // Synchronous cache hydration for 0ms page transitions
-  const [products, setProducts] = useState<any[]>(() => safeGetLocal("cp_cache_products", []));
-  const [categories, setCategories] = useState<string[]>(() => safeGetLocal("cp_cache_categories", ["الكل"]));
-  const [courses, setCourses] = useState<any[]>(() => safeGetLocal("cp_cache_courses", []));
-  const [supplies, setSupplies] = useState<any[]>(() => safeGetLocal("cp_cache_supplies", []));
-  const [suppliesCategories, setSuppliesCategories] = useState<string[]>(() => safeGetLocal("cp_cache_supplies_categories", ["الكل"]));
-  const [loading, setLoading] = useState<boolean>(() => {
-    // Only true if we have zero cached items
-    const hasCached = safeGetLocal("cp_cache_products", []).length > 0;
-    return !hasCached;
-  });
+  // البيانات ما تنحمّل إلا من تفتح صفحة تحتاجها (المتجر، الدورات، المستلزمات)
+  // قبل: كل صفحة بالنظام (حتى الإدارة) كانت تقرا كاش كبير من localStorage وتنزّل كل المنتجات أول ما تفتح.
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>(["الكل"]);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [supplies, setSupplies] = useState<any[]>([]);
+  const [suppliesCategories, setSuppliesCategories] = useState<string[]>(["الكل"]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const activated = useRef(false);
 
   const refreshAll = useCallback(async () => {
     try {
@@ -110,7 +112,19 @@ export function GlobalDataProvider({ children }: { children: React.ReactNode }) 
       localStorage.removeItem("cache_external_orders_v2");
       localStorage.removeItem("cache_external_orders_all");
     } catch {}
-    // Eagerly prefetch everything once on app startup in background idle
+  }, []);
+
+  // أول صفحة تستخدم البيانات تشغّل التحميل: الكاش فوراً، والتحديث من السيرفر بالخلفية
+  const activate = useCallback(() => {
+    if (activated.current) return;
+    activated.current = true;
+    const cachedProducts = safeGetLocal("cp_cache_products", []);
+    setProducts(cachedProducts);
+    setCategories(safeGetLocal("cp_cache_categories", ["الكل"]));
+    setCourses(safeGetLocal("cp_cache_courses", []));
+    setSupplies(safeGetLocal("cp_cache_supplies", []));
+    setSuppliesCategories(safeGetLocal("cp_cache_supplies_categories", ["الكل"]));
+    if (cachedProducts.length > 0) setLoading(false);
     refreshAll();
   }, [refreshAll]);
 
@@ -124,6 +138,7 @@ export function GlobalDataProvider({ children }: { children: React.ReactNode }) 
         suppliesCategories,
         loading,
         refreshAll,
+        activate,
       }}
     >
       {children}
@@ -136,5 +151,7 @@ export function useGlobalData() {
   if (!ctx) {
     throw new Error("useGlobalData must be used within a GlobalDataProvider");
   }
+  const { activate } = ctx;
+  useIsoLayoutEffect(() => { activate(); }, [activate]);
   return ctx;
 }

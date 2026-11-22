@@ -4,10 +4,11 @@ import "./globals.css";
 import "react-datepicker/dist/react-datepicker.css";
 import BottomNav from "@/components/layout/BottomNav";
 
-const cairo = Cairo({ 
+// خط متغيّر: ملف واحد لكل لغة بدل 12 ملف (كل الأوزان من 200 إلى 1000)
+const cairo = Cairo({
   subsets: ["arabic", "latin"],
   variable: "--font-cairo",
-  weight: ["300", "400", "500", "600", "700", "800"]
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -20,7 +21,6 @@ export const metadata: Metadata = {
       { url: "/favicon.ico", sizes: "any" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
-      { url: "/cp-logo.png", sizes: "1024x1024", type: "image/png" },
     ],
     shortcut: "/favicon.ico",
     apple: [
@@ -66,7 +66,6 @@ import InstallPrompt from "@/components/InstallPrompt";
 import ContentProtection from "@/components/ContentProtection";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import GlobalActions from "@/components/GlobalActions";
-import SplashScreen from "@/components/SplashScreen";
 import NetworkStatus from "@/components/NetworkStatus";
 
 
@@ -94,7 +93,6 @@ export default function RootLayout({
                     }}
                   />
                   <InstallPrompt />
-                  <SplashScreen />
                   <main className="max-w-md mx-auto min-h-screen bg-[#FFF8F0] dark:bg-[#0D0A1A] shadow-2xl relative overflow-hidden">
                     <NetworkStatus />
                     <GlobalActions />

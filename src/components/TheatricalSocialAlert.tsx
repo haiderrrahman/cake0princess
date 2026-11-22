@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { 
   Sparkles, X, ArrowLeft, Eye, Clock, Phone, MapPin, 
   CheckCircle2, MessageSquare, AlertTriangle, ExternalLink,
@@ -134,8 +134,10 @@ export default function TheatricalSocialAlert() {
   // الاستماع المباشر والحي للطلبات من Firestore
   useEffect(() => {
     if (pathname?.includes("home-finance")) return;
-    const q = query(collection(db, "orders"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // فقط الطلبات المفتوحة (مو كل أرشيف الطلبات)، وبعد ثانيتين حتى ما يزاحم تحميل الصفحة
+    const q = query(collection(db, "orders"), where("status", "not-in", ["delivered", "completed", "cancelled", "rejected"]));
+    let unsubscribe: () => void = () => {};
+    const startTimer = setTimeout(() => { unsubscribe = onSnapshot(q, (snapshot) => {
       const allOrders = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as SocialOrderAlertItem[];
 
       const now = new Date();
@@ -167,9 +169,9 @@ export default function TheatricalSocialAlert() {
       }
     }, (err) => {
       console.error("Theatrical alert snapshot error:", err);
-    });
+    }); }, 2000);
 
-    return () => unsubscribe();
+    return () => { clearTimeout(startTimer); unsubscribe(); };
   }, [dismissedOrderIds]);
 
   const handleDismiss = () => {

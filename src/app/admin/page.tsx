@@ -390,7 +390,7 @@ export default function AdminDashboard() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-10 pb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-12 h-12 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center shrink-0">
-              <img src="/cp-logo.png" alt="كيك الأميرة" className="w-9 h-9 object-contain" />
+              <img src="/cp-logo-sm.png" alt="كيك الأميرة" className="w-9 h-9 object-contain" />
             </div>
             <div className="min-w-0">
               <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white leading-tight">لوحة الإدارة</h1>

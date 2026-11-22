@@ -4652,7 +4652,7 @@ setEditTrip(null);
             </Link>
             
             <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-lg border-2 border-white/80 shrink-0 bg-white/95 p-1 flex items-center justify-center ring-4 ring-white/10">
-              <img src="/cp-logo.png" alt="كيك الأميرة" className="w-full h-full object-contain" />
+              <img src="/cp-logo-sm.png" alt="كيك الأميرة" className="w-full h-full object-contain" />
             </div>
 
             <div className="flex-1">
