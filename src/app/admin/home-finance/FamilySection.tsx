@@ -576,7 +576,7 @@ export default function FamilySection({
           </button>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 custom-scrollbar">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:flex-wrap items-center gap-2 pt-1">
           {FAMILY_MEMBERS_LIST.map(m => {
             const isSelected = activeMember === m.name;
             const stats = memberStats[m.name] || { duties: 0, health: 0, purchases: 0, needs: 0 };
@@ -592,7 +592,7 @@ export default function FamilySection({
                     setHealthSubView("records");
                   }
                 }}
-                className={`flex-shrink-0 px-4 py-2.5 rounded-2xl font-black text-xs transition-all flex items-center gap-2.5 active:scale-95 cursor-pointer relative ${
+                className={`px-3.5 py-2.5 rounded-2xl font-black text-xs transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer relative ${
                   isSelected
                     ? "bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white shadow-md shadow-indigo-500/25 scale-[1.02]"
                     : "bg-gray-50 dark:bg-zinc-800/70 text-gray-700 dark:text-gray-300 border border-gray-200/80 dark:border-zinc-700/80 hover:border-indigo-300"

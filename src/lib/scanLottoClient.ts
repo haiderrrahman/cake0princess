@@ -1,40 +1,48 @@
-// Client-side Lotto image scanner using Google Gemini Vision
+// Client-side Iraq Lotto Vision Scanner using Google Gemini Vision
+// Supports all 5 loto.iq games: Loto 42, Loto 29, Sports Loto (10 matches), طابق 3 (SC500), جيب الكاس جيبه (SC1K)
+
+import { IraqLotoGameId, SportsPickChoice } from "./lotoIqService";
 
 const CANDIDATE_MODELS = [
+  "gemini-2.5-flash",
   "gemini-3.6-flash",
-  "gemini-3.7-flash",
   "gemini-3.5-flash",
-  "gemini-3.1-flash-lite"
+  "gemini-2.0-flash",
 ];
 
-export interface ScannedLottoData {
-  game: "iraq_lotto" | "super_key";
+export interface ScannedIraqLotoResult {
+  game: IraqLotoGameId;
+  mode: "ticket" | "result";
   drawNumber?: number;
   drawDate?: string;
-  winningNumbers?: number[];
-  luckyNumber?: number;
-  purchasedTickets?: {
-    numbers: number[];
-    luckyNumber?: number;
-    cost?: number;
-    status?: string;
-  }[];
+  cost?: number;
+  // Loto 42 & Loto 29
+  numbers?: number[];
+  extraNumber?: number;
+  // Sports Loto (10 matches)
+  roundName?: string;
+  sportsPicks?: Record<number, SportsPickChoice>;
+  // Scratch cards
+  scratchCells?: number[]; // SC500: 6 amounts
+  scratchWinningNums?: number[]; // SC1K: 3 winning numbers
+  scratchPlayerCells?: { num: number; prize: number }[]; // SC1K: up to 12 cells
+  detectedWinAmount?: number;
+  summaryAr?: string;
 }
 
-export async function scanLottoWithGemini(
+export async function scanIraqLotoImage(
   base64DataUrl: string,
-  targetType: "ticket" | "draw" = "ticket",
+  expectedGame?: IraqLotoGameId,
   onProgress?: (status: string) => void
-): Promise<ScannedLottoData> {
+): Promise<ScannedIraqLotoResult> {
   const apiKey =
-    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-    process.env.GEMINI_API_KEY;
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
     throw new Error("مفتاح الذكاء الاصطناعي (NEXT_PUBLIC_GEMINI_API_KEY) غير مهيأ");
   }
 
-  onProgress?.(targetType === "ticket" ? "جاري قراءة بطاقة اللوتو المشتراة 🎫..." : "جاري قراءة أرقام السحب الفائزة 🎰...");
+  onProgress?.("جاري قراءة صورة بطاقة لوتو العراق بدقة فائقة 📸...");
 
   let mimeType = "image/jpeg";
   let base64 = base64DataUrl;
@@ -50,163 +58,174 @@ export async function scanLottoWithGemini(
     mimeType = "image/jpeg";
   }
 
-  onProgress?.("جاري تحليل الأرقام وتدقيقها بالذكاء الاصطناعي...");
+  const gameHint = expectedGame
+    ? `اللعبة المتوقعة من التبويب الحالي هي: "${expectedGame}".`
+    : "حدد نوع اللعبة تلقائياً من الصورة.";
 
-  const isTicketScan = targetType === "ticket";
+  const prompt = `أنت نظام رؤية حاسوبية فائق الدقة متخصص في قراءة بطاقات ونتائج موقع "لوتو العراق الرسمي" (loto.iq) للألعاب الخمس:
+1. "loto42": لوتو 42 (6 أرقام من 1 إلى 42 + رقم إضافي اختياري، سعر البطاقة 2000 د.ع).
+2. "loto29": لوتو 29 (6 أرقام من 1 إلى 29 بدون رقم إضافي، سعر البطاقة 1500 د.ع).
+3. "sports": اللوتو الرياضي (10 مباريات كرة قدم، اختيارات كل مباراة من 1 إلى 10 هي "1" فوز المضيف أو "X" تعادل أو "2" فوز الضيف، السعر 5000 د.ع).
+4. "sc500": بطاقة كشط "طابق 3" (سعرها 500 د.ع، تحتوي على 6 مبالغ مالية؛ إذا تطابقت 3 مبالغ تربح ذلك المبلغ).
+5. "sc1k": بطاقة كشط "جيب الكاس جيبه" (سعرها 1000 د.ع، تحتوي على 3 أرقام رابحة في الأعلى و12 رقماً للاعب تحت كل منها مبلغ الجائزة؛ أي تطابق يربح المبلغ تحته).
 
-  const systemPrompt = `أنت مساعد ذكي فائق الدقة متخصص في قراءة وتحليل بطاقات ونتائج لوتو العراق (سوبر كي 42 ولوتو العراق الخيري 29).
-المطلوب في هذه الصورة هو: ${isTicketScan ? "مسح واستخراج أرقام 'البطاقة المشتراة' للمستخدم (وليس الرقم الفائز لسحب سابق)." : "مسح واستخراج 'الرقم الفائز' الرسمي للسحب."}
+${gameHint}
+تنبيه مهم لبطاقات الأرقام (loto42 و loto29): تجاهل رقم السطر التسلسلي مثل (1. أو A أو #1) واستخرج الأرقام الـ 6 الفعلية فقط!
 
-قم بتحليل الصورة المرفقة واستخرج البيانات بصيغة JSON حصراً:
+أرجع JSON نقي فقط بالشكل التالي:
 {
-  "game": "iraq_lotto", // أو "super_key" إذا كان لوتو سوبر كي (42 رقم)
-  "drawNumber": 416, // رقم السحب كرقم صحيح إن وجد
-  "drawDate": "2026-10-01", // تاريخ السحب بصيغة YYYY-MM-DD
-  "winningNumbers": ${isTicketScan ? "null" : "[13, 14, 18, 19, 20, 25]"}, // الأرقام الستة الفائزة الرسمية فقط إذا كان المطلوب سحب رسمي
-  "luckyNumber": null, // رقم الحظ فقط إذا كان السحب سوبر كي (من 1 إلى 42) وإلا null
-  "purchasedTickets": [
-    // ${isTicketScan ? "ضع هنا أرقام البطاقة المشتراة الستة بالضبط:" : "بطاقات المستخدم إن وجدت"}
-    // ملاحظة هامة: الرقم الترقيمي في بداية السطر (مثل 1. أو 2.) هو رقم السطر وليس رقم من أرقام اللوتو! بطاقة اللوتو تتكون دائماً من 6 أرقام فقط!
-    {
-      "numbers": [7, 8, 15, 19, 26, 28], // أرقام البطاقة الستة بالضبط
-      "cost": 1500, // سعر البطاقة: 1500 دينار للوتو الخيري، 2650 دينار لسوبر كي
-      "status": "pending"
-    }
-  ]
-}
+  "game": "loto42" | "loto29" | "sports" | "sc500" | "sc1k",
+  "mode": "ticket" | "result",
+  "drawNumber": number | null,
+  "drawDate": "YYYY-MM-DD" | null,
+  "cost": number | null,
+  "numbers": [6 أرقام مرتبة تصاعدياً في حال loto42 أو loto29] | null,
+  "extraNumber": number | null,
+  "roundName": "اسم جولة اللوتو الرياضي إن وجد" | null,
+  "sportsPicks": { "1": "1", "2": "X", ... } | null,
+  "scratchCells": [6 مبالغ كأرقام صحيحة لبطاقة طابق 3] | null,
+  "scratchWinningNums": [3 أرقام رابحة لبطاقة جيب الكاس جيبه] | null,
+  "scratchPlayerCells": [{ "num": number, "prize": number }] | null,
+  "detectedWinAmount": number | null,
+  "summaryAr": "وصف عربي مختصر ودقيق لما تمت قراءته والنتيجة"
+}`;
 
-قواعد صارمة:
-1. ${isTicketScan ? "هذه بطاقة مشتراة: يجب وضع أرقامها الستة في purchasedTickets حصراً ولا تضعها في winningNumbers." : "هذه نتيجة سحب: يجب وضع الأرقام الستة الفائزة في winningNumbers."}
-2. سعر بطاقة لوتو العراق الخيري (29 رقم) هو دائماً 1500 دينار.
-3. سعر بطاقة سوبر كي (42 رقم) هو دائماً 2650 دينار.
-4. أرجع كود JSON فقط بدون أي علامات markdown أو مقدمات.`;
+  onProgress?.("جاري تدقيق الأرقام والخانات بالذكاء الاصطناعي 🧠...");
 
   let resultText = "";
-  let lastError: any = null;
-
   for (const model of CANDIDATE_MODELS) {
     try {
-      const payload = {
-        contents: [
-          {
-            parts: [
-              { text: systemPrompt },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64
-                }
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          response_mime_type: "application/json"
-        }
-      };
-
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: prompt },
+                  { inline_data: { mime_type: mimeType, data: base64 } },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.1,
+              response_mime_type: "application/json",
+            },
+          }),
         }
       );
 
-      if (res.status === 200) {
-        const resData = await res.json();
-        resultText = resData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      if (res.ok) {
+        const data = await res.json();
+        resultText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
         if (resultText) break;
-      } else {
-        const errText = await res.text();
-        console.warn(`Lotto scan model ${model} status ${res.status}:`, errText.slice(0, 150));
-        lastError = errText;
       }
-    } catch (err: any) {
-      console.warn(`Lotto scan model ${model} error:`, err.message);
-      lastError = err;
+    } catch {
+      // Try next candidate model
     }
   }
 
   if (!resultText) {
-    throw new Error("تعذر قراءة صورة اللوتو بالذكاء الاصطناعي حالياً. تأكد من وضوح الصورة.");
+    throw new Error("تعذر قراءة الصورة حالياً. يرجى التأكد من وضوح إضاءة البطاقة والمحاولة مجدداً.");
   }
 
-  let cleaned = resultText.trim();
-  if (cleaned.startsWith("```json")) {
-    cleaned = cleaned.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-  } else if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```\s*/, "").replace(/\s*```$/, "");
-  }
-
+  const cleaned = resultText
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "");
   const parsed = JSON.parse(cleaned);
 
-  // Normalize numbers
-  const winningNumbers = Array.isArray(parsed.winningNumbers)
-    ? parsed.winningNumbers.map((n: any) => Number(n)).filter((n: number) => !isNaN(n) && n > 0).sort((a: number, b: number) => a - b)
-    : [];
+  const validGames: IraqLotoGameId[] = ["sports", "loto42", "loto29", "sc500", "sc1k"];
+  const game: IraqLotoGameId = validGames.includes(parsed.game)
+    ? parsed.game
+    : expectedGame || "loto42";
 
-  const isSuperKey = String(parsed.game).toLowerCase().includes("super") || parsed.game === "super_key";
-
-  const purchasedTickets = Array.isArray(parsed.purchasedTickets)
-    ? parsed.purchasedTickets.map((t: any) => {
-        let nums = Array.isArray(t.numbers)
-          ? t.numbers.map((n: any) => Number(n)).filter((n: number) => !isNaN(n) && n > 0)
-          : [];
-        // If 7 numbers detected and first number is 1 or 2, remove line number
-        if (nums.length === 7 && (nums[0] === 1 || nums[0] === 2 || nums[0] === 3 || nums[0] === 4)) {
-          nums = nums.slice(1);
-        }
-        return {
-          numbers: nums.sort((a: number, b: number) => a - b),
-          luckyNumber: t.luckyNumber ? Number(t.luckyNumber) : undefined,
-          cost: Number(t.cost) || (isSuperKey ? 2650 : 1500),
-          status: String(t.status || "")
-        };
-      }).filter((t: any) => t.numbers.length === 6)
-    : [];
-
-  // Fallback: If user wanted a ticket scan but model put numbers in winningNumbers
-  if (targetType === "ticket" && purchasedTickets.length === 0 && winningNumbers.length === 6) {
-    purchasedTickets.push({
-      numbers: winningNumbers,
-      luckyNumber: parsed.luckyNumber ? Number(parsed.luckyNumber) : undefined,
-      cost: Number(parsed.cost) || (isSuperKey ? 2650 : 1500),
-      status: "pending"
-    });
+  // Normalize numbers for Loto 42 / Loto 29
+  let numbers: number[] | undefined;
+  if (Array.isArray(parsed.numbers)) {
+    const maxN = game === "loto29" ? 29 : 42;
+    let rawNums = parsed.numbers
+      .map((n: any) => Number(n))
+      .filter((n: number) => Number.isFinite(n) && n >= 1 && n <= maxN);
+    if (rawNums.length === 7 && rawNums[0] <= 4) {
+      rawNums = rawNums.slice(1);
+    }
+    if (rawNums.length >= 6) {
+      numbers = Array.from(new Set<number>(rawNums))
+        .slice(0, 6)
+        .sort((a, b) => a - b);
+    }
   }
 
-  // Fallback: If user wanted a draw scan but model put numbers in purchasedTickets
-  let finalWinningNumbers = winningNumbers;
-  if (targetType === "draw" && finalWinningNumbers.length !== 6 && purchasedTickets.length > 0) {
-    finalWinningNumbers = purchasedTickets[0].numbers;
-  }
-
-  // Parse date properly (convert e.g. "Thu 01 October 2026" or "2026-10-01" to YYYY-MM-DD)
-  let dateStr = new Date().toISOString().split("T")[0];
-  if (parsed.drawDate) {
-    const raw = String(parsed.drawDate);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-      dateStr = raw;
-    } else {
-      const d = new Date(raw);
-      if (!isNaN(d.getTime())) {
-        const yr = d.getFullYear();
-        const mo = String(d.getMonth() + 1).padStart(2, "0");
-        const da = String(d.getDate()).padStart(2, "0");
-        dateStr = `${yr}-${mo}-${da}`;
+  // Normalize Sports picks
+  let sportsPicks: Record<number, SportsPickChoice> | undefined;
+  if (parsed.sportsPicks && typeof parsed.sportsPicks === "object") {
+    sportsPicks = {};
+    for (const [k, v] of Object.entries(parsed.sportsPicks)) {
+      const pos = Number(k);
+      const val = String(v).toUpperCase();
+      if (pos >= 1 && pos <= 10 && (val === "1" || val === "X" || val === "2")) {
+        sportsPicks[pos] = val;
       }
     }
   }
 
+  // Exact verification for Scratch cards (never trust hallucinated math — compute exact match!)
+  let detectedWinAmount: number | undefined =
+    typeof parsed.detectedWinAmount === "number" ? parsed.detectedWinAmount : undefined;
+
+  let scratchCells: number[] | undefined;
+  if (Array.isArray(parsed.scratchCells)) {
+    const cells: number[] = parsed.scratchCells
+      .map((n: any) => Number(n))
+      .filter((n: number) => Number.isFinite(n) && n > 0);
+    scratchCells = cells;
+    // Exact 3-of-a-kind verification for SC500 (طابق 3)
+    const freq: Record<number, number> = {};
+    for (const amt of cells) {
+      freq[amt] = (freq[amt] || 0) + 1;
+    }
+    const winningAmts = Object.entries(freq)
+      .filter(([, cnt]) => cnt >= 3)
+      .map(([amt]) => Number(amt));
+    detectedWinAmount = winningAmts.length > 0 ? Math.max(...winningAmts) : 0;
+  }
+
+  let scratchWinningNums: number[] | undefined;
+  let scratchPlayerCells: { num: number; prize: number }[] | undefined;
+  if (Array.isArray(parsed.scratchWinningNums) && Array.isArray(parsed.scratchPlayerCells)) {
+    const winNums: number[] = parsed.scratchWinningNums
+      .map((n: any) => Number(n))
+      .filter((n: number) => Number.isFinite(n));
+    const playerCells: { num: number; prize: number }[] = parsed.scratchPlayerCells
+      .map((c: any) => ({ num: Number(c?.num), prize: Number(c?.prize) || 0 }))
+      .filter((c: { num: number; prize: number }) => Number.isFinite(c.num));
+    scratchWinningNums = winNums;
+    scratchPlayerCells = playerCells;
+    const winSet = new Set(winNums);
+    detectedWinAmount = playerCells
+      .filter((c) => winSet.has(c.num))
+      .reduce((sum, c) => sum + c.prize, 0);
+  }
+
   return {
-    game: isSuperKey ? "super_key" : "iraq_lotto",
+    game,
+    mode: parsed.mode === "result" ? "result" : "ticket",
     drawNumber: parsed.drawNumber ? Number(parsed.drawNumber) : undefined,
-    drawDate: dateStr,
-    winningNumbers: finalWinningNumbers.length === 6 ? finalWinningNumbers : undefined,
-    luckyNumber: parsed.luckyNumber ? Number(parsed.luckyNumber) : undefined,
-    purchasedTickets
+    drawDate: typeof parsed.drawDate === "string" ? parsed.drawDate : undefined,
+    cost: parsed.cost ? Number(parsed.cost) : undefined,
+    numbers,
+    extraNumber:
+      game === "loto42" && parsed.extraNumber ? Number(parsed.extraNumber) : undefined,
+    roundName: parsed.roundName ? String(parsed.roundName) : undefined,
+    sportsPicks,
+    scratchCells,
+    scratchWinningNums,
+    scratchPlayerCells,
+    detectedWinAmount,
+    summaryAr: parsed.summaryAr ? String(parsed.summaryAr) : undefined,
   };
 }

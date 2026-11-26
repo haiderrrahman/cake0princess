@@ -21,7 +21,7 @@ import { db, storage } from "@/lib/firebase";
 
 const FamilyCompetition = dynamic(() => import("./FamilyCompetition"), { ssr: false });
 const FamilyCompetitionOverview = dynamic(() => import("./FamilyCompetitionOverview"), { ssr: false });
-const LottoTracker = dynamic(() => import("./LottoTracker"), { ssr: false });
+const IraqLottoHub = dynamic(() => import("./IraqLottoHub"), { ssr: false });
 const WomenCycleCare = dynamic(() => import("./WomenCycleCare"), { ssr: false });
 const FamilySection = dynamic(() => import("./FamilySection"), { ssr: false });
 import { FamilyHealthRecord } from "./familyTypes";
@@ -519,7 +519,7 @@ function mergeById<T extends { id?: string }>(localList: T[], remoteList: T[]): 
 }
 
 export default function HomeFinanceDashboard() {
-  const [activeTab, setActiveTab] = useState<"overview" | "expenses" | "income" | "installments" | "needs" | "bills" | "debts" | "inventory" | "car" | "travel" | "familyNeeds" | "futurePlans">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "expenses" | "iraqLotto" | "income" | "installments" | "needs" | "bills" | "debts" | "inventory" | "car" | "travel" | "familyNeeds" | "futurePlans">("overview");
 
   // Data state - Synchronous 0ms cached hydration on render #0
   const [cakeSalaryDebt, setCakeSalaryDebt] = useState<number>(() => getCachedHf("cakeSalaryDebt", 0));
@@ -696,7 +696,6 @@ export default function HomeFinanceDashboard() {
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [expenseItems, setExpenseItems] = useState<ExpenseItem[]>([]);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
-  const [showLottoTrackerModal, setShowLottoTrackerModal] = useState(false);
   const [wallet, setWallet] = useState<WalletState>({ bankBalance: 410000, cashBalance: 50000 });
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [walletBankInput, setWalletBankInput] = useState<number>(410000);
@@ -2921,13 +2920,13 @@ setEditFuturePlan(null);
         }
       }
 
-      // If it's lotto related, show notification offering lotto center
+      // If it's lotto related, show notification offering Iraq Lotto tab
       if (isLottoRelated) {
         setTimeout(() => {
-          toast("يمكنك توقع الأرقام القادمة ومتابعة نتيجة السحب في مركز اللوتو 🎰", {
+          toast("يمكنك متابعة السحوبات الحية والتنبؤ الذكي في تبويب لوتو العراق 🎰", {
             action: {
-              label: "فتح المركز",
-              onClick: () => setShowLottoTrackerModal(true)
+              label: "فتح لوتو العراق",
+              onClick: () => setActiveTab("iraqLotto")
             }
           });
         }, 600);
@@ -4536,6 +4535,7 @@ setEditTrip(null);
     { key: "overview",      label: "نظرة عامة",          emoji: "🏠", icon: BarChart3, badge: 0 },
     { key: "income",        label: "الدخل",               emoji: "💵", icon: PiggyBank, badge: 0, amount: balance, isBalance: true },
     { key: "expenses",      label: "المصاريف",            emoji: "💸", icon: Wallet, badge: 0, amount: totalExpensesAmt },
+    { key: "iraqLotto",     label: "لوتو العراق",         emoji: "🎰", icon: Sparkles, badge: 0 },
     { key: "needs",         label: "النواقص",             emoji: "🛒", icon: ShoppingCart, badge: totalShortages },
     { key: "inventory",     label: "موجودات البيت",       emoji: "📦", icon: Package, badge: inventory.length },
     { key: "bills",         label: "الفواتير",            emoji: "🧾", icon: Receipt, badge: unpaidBillsCount },
@@ -4787,7 +4787,7 @@ setEditTrip(null);
         const SECTIONS: { key: string; label: string; emoji: string; hint: string; tabs: string[] }[] = [
           { key: "home",   label: "الرئيسية",   emoji: "🏠", hint: "الراتب والتنبؤ والتنبيهات", tabs: ["overview"] },
           { key: "money",  label: "الراتب",      emoji: "💼", hint: "الدخل والالتزامات الخارجية", tabs: ["income", "bills", "installments", "debts"] },
-          { key: "spend",  label: "المصاريف",    emoji: "🧾", hint: "السجل والفواتير والميزانيات", tabs: ["expenses"] },
+          { key: "spend",  label: "المصاريف",    emoji: "🧾", hint: "المصاريف ولوتو العراق المباشر", tabs: ["expenses", "iraqLotto"] },
           { key: "house",  label: "البيت",       emoji: "🛋️", hint: "الموجودات والنواقص والعائلة", tabs: ["needs", "inventory", "familyNeeds", "car"] },
           { key: "future", label: "المستقبل",    emoji: "🚀", hint: "الخطط والسفر والادخار", tabs: ["futurePlans", "travel"] },
         ];
@@ -4827,11 +4827,23 @@ setEditTrip(null);
               })}
             </div>
 
-            <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]">
-              {current.tabs.length === 1 ? (
+            {current.tabs.length === 1 ? (
+              <div className="mt-2">
                 <span className="text-[11px] font-bold text-gray-400 px-1">{current.hint}</span>
-              ) : (
-                current.tabs.map(k => {
+              </div>
+            ) : (
+              <div
+                role="tablist"
+                aria-label={`تبويبات قسم ${current.label}`}
+                className={`mt-2.5 grid gap-2 ${
+                  current.tabs.length >= 4
+                    ? "grid-cols-2 sm:grid-cols-4"
+                    : current.tabs.length === 3
+                    ? "grid-cols-3"
+                    : "grid-cols-2"
+                }`}
+              >
+                {current.tabs.map(k => {
                   const t = tabByKey[k];
                   if (!t) return null;
                   const on = activeTab === k;
@@ -4840,11 +4852,13 @@ setEditTrip(null);
                     <button
                       key={k}
                       type="button"
+                      role="tab"
+                      aria-selected={on}
                       onClick={() => setActiveTab(k as any)}
-                      className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-black border transition active:scale-95 ${
+                      className={`relative w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl text-xs font-black border-2 transition active:scale-95 cursor-pointer aria-selected:after:content-[''] aria-selected:after:absolute aria-selected:after:inset-x-4 aria-selected:after:bottom-0 aria-selected:after:border-b-[3px] aria-selected:after:border-current ${
                         on
                           ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
-                          : "bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 text-gray-700 dark:text-gray-200"
+                          : "bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 text-gray-700 dark:text-gray-200 hover:border-indigo-400"
                       }`}
                     >
                       <span>{t.emoji}</span>
@@ -4858,9 +4872,9 @@ setEditTrip(null);
                       ) : null}
                     </button>
                   );
-                })
-              )}
-            </div>
+                })}
+              </div>
+            )}
           </div>
         );
       })()}
@@ -4901,7 +4915,7 @@ setEditTrip(null);
 
         {/* STATS BANNER (المتوفر والنواقص في كل صفحة) */}
         {(() => {
-          if (activeTab === "overview" || activeTab === "futurePlans" || activeTab === "familyNeeds") return null;
+          if (activeTab === "overview" || activeTab === "futurePlans" || activeTab === "familyNeeds" || activeTab === "iraqLotto") return null;
 
           let availCard = { title: "المتوفر", count: 0, countLabel: "عنصر/قطعة", value: 0, color: "emerald", icon: "✨" };
           let shortCard = { title: "النواقص", count: 0, countLabel: "ناقص/معلق", value: 0, color: "orange", icon: "⚠️" };
@@ -5270,13 +5284,6 @@ setEditTrip(null);
                 >
                   <BrainCircuit className="w-3.5 h-3.5 text-amber-200" />
                   <span>دراسة التبذير والترشيد 🧠</span>
-                </button>
-                <button 
-                  onClick={() => setShowLottoTrackerModal(true)}
-                  className="bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white text-xs font-black px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-purple-500/20 hover:opacity-95 active:scale-95 transition"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  <span>مركز اللوتو</span>
                 </button>
                 <button onClick={() => setShowProductSearchModal(true)}
                   className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 active:scale-95 transition">
@@ -5774,6 +5781,26 @@ setEditTrip(null);
         );
       })()}
           </div>
+        )}
+
+        {/* ═══════════════ IRAQ LOTTO LIVE TAB (لوتو العراق) ═══════════════ */}
+        {activeTab === "iraqLotto" && (
+          <IraqLottoHub
+            onAddExpenseLinked={(amount, desc, date) => {
+              const item: Expense = {
+                id: Date.now().toString(),
+                name: desc,
+                category: "ألعاب ويانصيب",
+                amount,
+                date: date || today(),
+                createdAt: new Date().toISOString()
+              };
+              const updated = [item, ...expenses];
+              setExpenses(updated);
+              syncToFirebase("expenses", updated);
+              toast.success("تم تسجيل المصروف تلقائياً في سجل المصاريف!");
+            }}
+          />
         )}
 
         {/* ═══════════════ INSTALLMENTS TAB ═══════════════ */}
@@ -7340,12 +7367,12 @@ setEditTrip(null);
                 </div>
               </div>
 
-              {/* Sub-tab Navigation */}
-              <div className="bg-gray-100/90 dark:bg-zinc-800/80 p-1.5 rounded-2xl flex items-center shadow-inner gap-1">
+              {/* Sub-tab Navigation (All Visible Grid - No Slider) */}
+              <div className="bg-gray-100/90 dark:bg-zinc-800/80 p-1.5 rounded-2xl grid grid-cols-1 sm:grid-cols-3 shadow-inner gap-1.5">
                 <button
                   type="button"
                   onClick={() => setCarSubTab("expenses")}
-                  className={`flex-1 py-2 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-2 px-2 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
                     carSubTab === "expenses"
                       ? "bg-white shadow-sm dark:bg-zinc-700 text-blue-600 dark:text-blue-400"
                       : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
@@ -7360,7 +7387,7 @@ setEditTrip(null);
                 <button
                   type="button"
                   onClick={() => setCarSubTab("inventory")}
-                  className={`flex-1 py-2 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-2 px-2 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
                     carSubTab === "inventory"
                       ? "bg-white shadow-sm dark:bg-zinc-700 text-blue-600 dark:text-blue-400"
                       : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
@@ -7375,7 +7402,7 @@ setEditTrip(null);
                 <button
                   type="button"
                   onClick={() => setCarSubTab("shopping")}
-                  className={`flex-1 py-2 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-2 px-2 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
                     carSubTab === "shopping"
                       ? "bg-white shadow-sm dark:bg-zinc-700 text-blue-600 dark:text-blue-400"
                       : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
@@ -7410,9 +7437,9 @@ setEditTrip(null);
               {/* ─── TAB 1: CAR EXPENSES LOG ─── */}
               {carSubTab === "expenses" && (
                 <div className="space-y-3">
-                  {/* Category filter pills for car expenses */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs custom-scrollbar">
-                    <span className="text-[10px] font-bold text-gray-400 shrink-0">التصنيف:</span>
+                  {/* Category filter pills for car expenses (All Visible) */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="text-[10px] font-bold text-gray-400">التصنيف:</span>
                     {[
                       { id: "all", label: `الكل (${searchedExpenses.length})` },
                       { id: "fuel", label: `⛽ بنزين ووقود (${searchedExpenses.filter(e => isCarFuelExpense(e)).length})` },
@@ -7423,7 +7450,7 @@ setEditTrip(null);
                         key={f.id}
                         type="button"
                         onClick={() => setCarExpenseFilter(f.id as any)}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold transition active:scale-95 shrink-0 ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer ${
                           carExpenseFilter === f.id
                             ? "bg-blue-600 text-white shadow-xs font-black"
                             : "bg-white dark:bg-zinc-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-zinc-800 hover:border-blue-300"
@@ -8961,10 +8988,10 @@ setEditTrip(null);
                     <span className="text-2xl">🎰</span>
                     <div>
                       <span className="font-black text-xs text-purple-700 dark:text-purple-300 block">
-                        مركز لوتو سوبر كي ولوتو العراق
+                        تبويب لوتو العراق المباشر (الألعاب الخمس)
                       </span>
                       <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-bold block">
-                        توقع الأرقام القادمة، إدارة البطاقات، ومطابقة نتائج السحب
+                        تحديث حي من الموقع والتنبؤ الذكي للوتو الرياضي و42 و29 وطابق 3 وجيب الكاس
                       </span>
                     </div>
                   </div>
@@ -8972,11 +8999,11 @@ setEditTrip(null);
                     type="button"
                     onClick={() => {
                       setShowExpenseModal(false);
-                      setShowLottoTrackerModal(true);
+                      setActiveTab("iraqLotto");
                     }}
                     className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl text-xs hover:shadow-md transition active:scale-95 shrink-0"
                   >
-                    فتح المركز ↗
+                    فتح لوتو العراق ↗
                   </button>
                 </div>
               )}
@@ -13131,27 +13158,6 @@ setEditFuturePlan(null); setFuturePlanSteps([]); }} className="text-gray-400 hov
           </div>
         );
       })()}
-
-      {showLottoTrackerModal && (
-        <LottoTracker
-          isOpen={showLottoTrackerModal}
-          onClose={() => setShowLottoTrackerModal(false)}
-          onAddExpenseLinked={(amount, desc, date) => {
-            const item: Expense = {
-              id: Date.now().toString(),
-              name: desc,
-              category: "ألعاب ويانصيب",
-              amount,
-              date: date || today(),
-              createdAt: new Date().toISOString()
-            };
-            const updated = [item, ...expenses];
-            setExpenses(updated);
-            syncToFirebase("expenses", updated);
-            toast.success("تم تسجيل المصروف تلقائياً في سجل المصاريف!");
-          }}
-        />
-      )}
 
     </div>
   );
