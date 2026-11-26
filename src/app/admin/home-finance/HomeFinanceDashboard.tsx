@@ -22,6 +22,7 @@ import { db, storage } from "@/lib/firebase";
 const FamilyCompetition = dynamic(() => import("./FamilyCompetition"), { ssr: false });
 const FamilyCompetitionOverview = dynamic(() => import("./FamilyCompetitionOverview"), { ssr: false });
 const IraqLottoHub = dynamic(() => import("./IraqLottoHub"), { ssr: false });
+import { computeImminentDrawAlerts, BASELINE_SNAPSHOT } from "@/lib/lotoIqService";
 const WomenCycleCare = dynamic(() => import("./WomenCycleCare"), { ssr: false });
 const FamilySection = dynamic(() => import("./FamilySection"), { ssr: false });
 import { FamilyHealthRecord } from "./familyTypes";
@@ -4535,7 +4536,18 @@ setEditTrip(null);
     { key: "overview",      label: "نظرة عامة",          emoji: "🏠", icon: BarChart3, badge: 0 },
     { key: "income",        label: "الدخل",               emoji: "💵", icon: PiggyBank, badge: 0, amount: balance, isBalance: true },
     { key: "expenses",      label: "المصاريف",            emoji: "💸", icon: Wallet, badge: 0, amount: totalExpensesAmt },
-    { key: "iraqLotto",     label: "لوتو العراق",         emoji: "🎰", icon: Sparkles, badge: 0 },
+    {
+      key: "iraqLotto",
+      label: "لوتو العراق",
+      emoji: "🎰",
+      icon: Sparkles,
+      badge: 0,
+      isUrgentLotto: computeImminentDrawAlerts(
+        BASELINE_SNAPSHOT.loto42Current,
+        BASELINE_SNAPSHOT.loto29Current,
+        BASELINE_SNAPSHOT.sportsRounds
+      ).some(a => a.urgency === "critical" || a.urgency === "soon")
+    },
     { key: "needs",         label: "النواقص",             emoji: "🛒", icon: ShoppingCart, badge: totalShortages },
     { key: "inventory",     label: "موجودات البيت",       emoji: "📦", icon: Package, badge: inventory.length },
     { key: "bills",         label: "الفواتير",            emoji: "🧾", icon: Receipt, badge: unpaidBillsCount },
@@ -4863,7 +4875,11 @@ setEditTrip(null);
                     >
                       <span>{t.emoji}</span>
                       <span>{t.label}</span>
-                      {!dataLoading && t.amount !== undefined && (t.isBalance || t.amount > 0) ? (
+                      {t.isUrgentLotto ? (
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${on ? "bg-amber-400 text-slate-950" : "bg-gradient-to-r from-amber-500 to-rose-500 text-white animate-pulse"}`}>
+                          🔥 سحب قريب
+                        </span>
+                      ) : !dataLoading && t.amount !== undefined && (t.isBalance || t.amount > 0) ? (
                         <span className={`text-[10px] px-1.5 rounded-full ${on ? "bg-white/20" : t.isBalance && t.amount < 0 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"}`}>
                           {shortAmount(t.amount)}
                         </span>

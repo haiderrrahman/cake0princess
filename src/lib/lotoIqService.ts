@@ -1,4 +1,14 @@
-// Live data types, archive seed, and resilient multi-layer synchronization with https://loto.iq/
+// Live data types, verified baseline snapshot, imminent-draw detector, and resilient sync with https://loto.iq/
+
+import {
+  VERIFIED_LOTO42_CURRENT,
+  VERIFIED_LOTO42_DRAWS_OFFICIAL,
+  VERIFIED_LOTO29_CURRENT,
+  VERIFIED_LOTO29_DRAWS_OFFICIAL,
+  VERIFIED_SPORTS_ROUNDS,
+  VERIFIED_SCRATCH_CARDS,
+  VERIFIED_RECENT_WINNERS,
+} from "./lotoIqBaselineData";
 
 export type IraqLotoGameId = "sports" | "loto42" | "loto29" | "sc500" | "sc1k";
 
@@ -40,12 +50,11 @@ export interface SportsMatch {
   home: SportsTeamInfo;
   away: SportsTeamInfo;
   kickoffAt: number;
-  venue?: string;
-  status: string; // "scheduled" | "finished" | "in_play" | ...
-  phase?: string | null;
-  score?: { home: number; away: number } | string | null;
+  venue?: string | null;
+  status: string; // "scheduled" | "played" | "in_play" | ...
+  phase?: string | null; // "finished" | null
+  score?: { home: number; away: number } | null;
   minute?: number | null;
-  resultPick?: "1" | "X" | "2" | null;
 }
 
 export interface SportsPrizeTier {
@@ -53,6 +62,12 @@ export interface SportsPrizeTier {
   amount: number;
   perTicket: boolean;
   grows: boolean;
+}
+
+export interface SportsOutcomeTier {
+  correct: number;
+  winners: number;
+  perWinner: number;
 }
 
 export interface SportsRound {
@@ -68,7 +83,7 @@ export interface SportsRound {
   maxTicketsPerPlayer?: number;
   jackpot: number;
   tiers: SportsPrizeTier[];
-  outcome?: ("1" | "X" | "2" | string)[] | null;
+  outcome?: SportsOutcomeTier[] | ("1" | "X" | "2" | string)[] | null;
   matches: SportsMatch[];
 }
 
@@ -89,7 +104,7 @@ export interface RecentWinnerItem {
   tier: number;
   prize: number;
   name: string;
-  governorate: string;
+  governorate: string | null;
   drawNumber: number;
   drawAt: number;
 }
@@ -105,22 +120,19 @@ export interface UserLotoTicket {
   status: "pending" | "won" | "lost";
   prizeWon?: number;
   prizeLabel?: string;
-  // For loto42 & loto29
   drawNumber?: number;
   drawDate?: string;
   numbers?: number[];
   extraNumber?: number;
   matchedNumbers?: number[];
   extraMatched?: boolean;
-  // For sports
   roundId?: string;
   roundName?: string;
-  sportsPicks?: Record<number, SportsPickChoice>; // position (1..10) -> "1"|"X"|"2"
+  sportsPicks?: Record<number, SportsPickChoice>;
   correctMatchesCount?: number;
-  // For scratch cards (sc500 / sc1k)
-  scratchCells?: number[]; // sc500 6 amounts
-  scratchWinningNums?: number[]; // sc1k 3 numbers
-  scratchPlayerCells?: { num: number; prize: number }[]; // sc1k 12 cells
+  scratchCells?: number[];
+  scratchWinningNums?: number[];
+  scratchPlayerCells?: { num: number; prize: number }[];
 }
 
 export interface LiveLotoSnapshot {
@@ -133,6 +145,22 @@ export interface LiveLotoSnapshot {
   sportsRounds: SportsRound[];
   scratchCards: ScratchCardLive[];
   recentWinners: RecentWinnerItem[];
+}
+
+export type UrgencyLevel = "critical" | "soon" | "normal";
+
+export interface ImminentDrawAlert {
+  id: string;
+  game: IraqLotoGameId;
+  roundId?: string;
+  titleAr: string;
+  subtitleAr: string;
+  closesAtMs: number;
+  drawAtMs: number;
+  remainingMs: number;
+  jackpot: number;
+  price: number;
+  urgency: UrgencyLevel;
 }
 
 // Official Scratch Card Specs from https://loto.iq/scratch/sc500 & /scratch/sc1k
@@ -207,75 +235,37 @@ export const SCRATCH_SPECS: Record<
   },
 };
 
-// Official Prize Tiers for Loto 42 & Loto 29
 export const LOTO_42_PRIZE_TIERS = [
-  { match: "6 أرقام متطابقة", label: "الجائزة الكبرى (الجاكبوت المتراكم)", dynamic: "jackpot" as const, fixedAmount: 101_666_930 },
-  { match: "5 أرقام + الرقم الإضافي", label: "الجائزة الثانية (ميني جاكبوت)", dynamic: "miniJackpot" as const, fixedAmount: 39_761_980 },
+  { match: "6 أرقام متطابقة", label: "الجائزة الكبرى (الجاكبوت المتراكم)", dynamic: "jackpot" as const, fixedAmount: 101_696_960 },
+  { match: "5 أرقام + الرقم الإضافي", label: "الجائزة الثانية (ميني جاكبوت)", dynamic: "miniJackpot" as const, fixedAmount: 39_770_560 },
   { match: "5 أرقام متطابقة", label: "الجائزة الثالثة", dynamic: null, fixedAmount: 2_500_000 },
   { match: "4 أرقام متطابقة", label: "الجائزة الرابعة", dynamic: null, fixedAmount: 150_000 },
   { match: "3 أرقام متطابقة", label: "الجائزة الخامسة", dynamic: null, fixedAmount: 5_000 },
 ];
 
 export const LOTO_29_PRIZE_TIERS = [
-  { match: "6 أرقام متطابقة", label: "الجائزة الكبرى (الجاكبوت المتراكم)", dynamic: "jackpot" as const, fixedAmount: 116_885_315 },
+  { match: "6 أرقام متطابقة", label: "الجائزة الكبرى (الجاكبوت المتراكم)", dynamic: "jackpot" as const, fixedAmount: 116_955_342 },
   { match: "5 أرقام متطابقة", label: "الجائزة الثانية", dynamic: null, fixedAmount: 150_000 },
   { match: "4 أرقام متطابقة", label: "الجائزة الثالثة", dynamic: null, fixedAmount: 15_000 },
   { match: "3 أرقام متطابقة", label: "الجائزة الرابعة (استرداد البطاقة)", dynamic: null, fixedAmount: 1_500 },
 ];
 
-// Historical Archive Baseline so offline / 0ms initial load always has deep history,
-// which is then merged seamlessly by `drawNumber` with live `loto.iq` responses!
-function makeArchDraw(
-  gameCode: "42_PLUS_1" | "6_29",
-  drawNumber: number,
-  dateStr: string,
-  winningNumbers: number[],
-  extraNumber: number | null = null
-): LotoDrawOfficial {
+function makeArchDraw29(drawNumber: number, dateStr: string, winningNumbers: number[]): LotoDrawOfficial {
   return {
-    id: `arch-${gameCode}-${drawNumber}`,
+    id: `arch-6_29-${drawNumber}`,
     drawNumber,
-    gameCode,
+    gameCode: "6_29",
     status: "finalized",
     drawAt: new Date(`${dateStr}T20:50:00+03:00`).getTime(),
-    price: gameCode === "42_PLUS_1" ? 2000 : 1500,
-    jackpot: gameCode === "42_PLUS_1" ? 100_000_000 : 115_000_000,
-    miniJackpot: gameCode === "42_PLUS_1" ? 38_000_000 : null,
+    price: 1500,
+    jackpot: 90_000_000,
+    miniJackpot: null,
     winningNumbers: [...winningNumbers].sort((a, b) => a - b),
-    extraNumber,
+    extraNumber: null,
   };
 }
 
-export const BASELINE_LOTO42_DRAWS: LotoDrawOfficial[] = [
-  makeArchDraw("42_PLUS_1", 39, "2026-11-25", [1, 20, 21, 33, 34, 39], 27),
-  makeArchDraw("42_PLUS_1", 29, "2026-10-21", [2, 13, 30, 31, 32, 34], 16),
-  makeArchDraw("42_PLUS_1", 23, "2026-09-30", [3, 4, 10, 24, 28, 39], 20),
-  makeArchDraw("42_PLUS_1", 22, "2026-09-26", [7, 8, 17, 18, 35, 38], 21),
-  makeArchDraw("42_PLUS_1", 21, "2026-09-23", [3, 22, 29, 35, 37, 42], 34),
-  makeArchDraw("42_PLUS_1", 20, "2026-09-19", [3, 4, 15, 26, 39, 41], 1),
-  makeArchDraw("42_PLUS_1", 19, "2026-09-16", [1, 11, 15, 20, 24, 29], 23),
-  makeArchDraw("42_PLUS_1", 18, "2026-09-12", [5, 15, 21, 31, 36, 37], 3),
-  makeArchDraw("42_PLUS_1", 17, "2026-09-09", [4, 6, 12, 14, 36, 38], 15),
-  makeArchDraw("42_PLUS_1", 16, "2026-09-05", [8, 9, 20, 25, 33, 35], 21),
-  makeArchDraw("42_PLUS_1", 15, "2026-09-02", [2, 8, 18, 32, 38, 40], 37),
-  makeArchDraw("42_PLUS_1", 14, "2026-08-29", [3, 8, 17, 25, 39, 40], 19),
-  makeArchDraw("42_PLUS_1", 13, "2026-08-26", [5, 11, 16, 18, 29, 40], 19),
-  makeArchDraw("42_PLUS_1", 12, "2026-08-22", [15, 16, 20, 26, 30, 39], 7),
-  makeArchDraw("42_PLUS_1", 11, "2026-08-19", [6, 7, 10, 14, 22, 31], 24),
-  makeArchDraw("42_PLUS_1", 10, "2026-08-15", [2, 5, 7, 14, 37, 40], 26),
-  makeArchDraw("42_PLUS_1", 9, "2026-08-12", [15, 17, 18, 26, 30, 40], 8),
-  makeArchDraw("42_PLUS_1", 8, "2026-08-08", [3, 13, 17, 32, 37, 40], 24),
-  makeArchDraw("42_PLUS_1", 7, "2026-08-05", [2, 16, 24, 25, 29, 30], 32),
-  makeArchDraw("42_PLUS_1", 6, "2026-08-01", [6, 8, 22, 23, 27, 31], 42),
-  makeArchDraw("42_PLUS_1", 5, "2026-07-29", [7, 14, 17, 18, 26, 37], 33),
-  makeArchDraw("42_PLUS_1", 4, "2026-07-25", [12, 14, 15, 17, 25, 41], 16),
-  makeArchDraw("42_PLUS_1", 3, "2026-07-22", [1, 5, 13, 22, 33, 34], 9),
-  makeArchDraw("42_PLUS_1", 2, "2026-07-18", [7, 9, 10, 19, 33, 40], 20),
-  makeArchDraw("42_PLUS_1", 1, "2026-07-15", [20, 23, 29, 36, 38, 41], 42),
-];
-
-const HISTORICAL_29_TUPLES: [number, string, number[]][] = [
-  [431, "2026-11-23", [6, 16, 17, 19, 24, 29]],
+const OLDER_HISTORICAL_29: [number, string, number[]][] = [
   [416, "2026-10-01", [13, 14, 18, 19, 20, 25]],
   [415, "2026-09-28", [6, 12, 14, 18, 24, 26]],
   [414, "2026-09-24", [2, 5, 13, 19, 24, 27]],
@@ -323,77 +313,27 @@ const HISTORICAL_29_TUPLES: [number, string, number[]][] = [
   [372, "2026-04-30", [3, 10, 14, 18, 20, 21]],
   [371, "2026-04-27", [2, 6, 12, 13, 15, 28]],
   [370, "2026-04-23", [4, 9, 13, 19, 20, 22]],
-  [369, "2026-04-20", [2, 6, 7, 16, 24, 27]],
-  [368, "2026-04-16", [1, 4, 6, 17, 21, 24]],
-  [367, "2026-04-13", [2, 10, 11, 12, 23, 28]],
-  [366, "2026-04-09", [1, 7, 12, 22, 26, 27]],
-  [365, "2026-04-06", [3, 4, 7, 11, 24, 28]],
-  [364, "2026-04-02", [2, 11, 14, 25, 28, 29]],
-  [363, "2026-03-30", [1, 2, 5, 20, 23, 28]],
-  [362, "2026-03-26", [3, 5, 13, 19, 20, 21]],
-  [361, "2026-03-23", [9, 13, 19, 22, 27, 29]],
-  [360, "2026-03-19", [10, 13, 16, 19, 28, 29]],
-  [359, "2026-03-16", [9, 10, 11, 20, 28, 29]],
-  [358, "2026-03-12", [1, 6, 8, 9, 22, 27]],
-  [357, "2026-03-09", [1, 4, 8, 11, 12, 23]],
-  [356, "2026-03-05", [3, 15, 21, 22, 25, 27]],
-  [355, "2026-03-02", [2, 3, 9, 13, 16, 21]],
-  [354, "2026-02-26", [4, 7, 8, 13, 14, 24]],
-  [353, "2026-02-23", [6, 7, 8, 10, 17, 29]],
-  [352, "2026-02-19", [1, 4, 19, 20, 23, 24]],
-  [351, "2026-02-16", [4, 9, 15, 20, 22, 27]],
-  [350, "2026-02-12", [1, 4, 8, 12, 13, 28]],
 ];
 
-export const BASELINE_LOTO29_DRAWS: LotoDrawOfficial[] = HISTORICAL_29_TUPLES.map(
-  ([num, dateStr, balls]) => makeArchDraw("6_29", num, dateStr, balls, null)
-);
+export const BASELINE_LOTO42_DRAWS: LotoDrawOfficial[] = VERIFIED_LOTO42_DRAWS_OFFICIAL;
+
+export const BASELINE_LOTO29_DRAWS: LotoDrawOfficial[] = [
+  ...VERIFIED_LOTO29_DRAWS_OFFICIAL,
+  ...OLDER_HISTORICAL_29.map(([n, dt, balls]) => makeArchDraw29(n, dt, balls)),
+];
+
+export const BASELINE_SPORTS_ROUNDS: SportsRound[] = VERIFIED_SPORTS_ROUNDS;
 
 export const BASELINE_SNAPSHOT: LiveLotoSnapshot = {
-  fetchedAt: 0,
-  source: "baseline",
-  loto42Current: {
-    selling: {
-      id: "drw_baseline_40",
-      drawNumber: 40,
-      gameCode: "42_PLUS_1",
-      status: "open",
-      drawAt: 1795888200000,
-      salesCloseAt: 1795886400000,
-      price: 2000,
-      jackpot: 101_666_930,
-      miniJackpot: 39_761_980,
-      ticketsSold: 786,
-      winningNumbers: null,
-      extraNumber: null,
-    },
-    awaiting: null,
-  },
+  fetchedAt: 1795710408000,
+  source: "loto.iq-verified",
+  loto42Current: VERIFIED_LOTO42_CURRENT,
   loto42Draws: BASELINE_LOTO42_DRAWS,
-  loto29Current: {
-    selling: {
-      id: "drw_baseline_432",
-      drawNumber: 432,
-      gameCode: "6_29",
-      status: "open",
-      drawAt: 1795715400000,
-      salesCloseAt: 1795713600000,
-      price: 1500,
-      jackpot: 116_885_315,
-      miniJackpot: null,
-      ticketsSold: 5486,
-      winningNumbers: null,
-      extraNumber: null,
-    },
-    awaiting: null,
-  },
+  loto29Current: VERIFIED_LOTO29_CURRENT,
   loto29Draws: BASELINE_LOTO29_DRAWS,
-  sportsRounds: [],
-  scratchCards: [
-    { code: "SC500", price: 500, topPrize: 10_000_000, onSale: true, topRemaining: 1 },
-    { code: "SC1K", price: 1000, topPrize: 20_000_000, onSale: true, topRemaining: 1 },
-  ],
-  recentWinners: [],
+  sportsRounds: BASELINE_SPORTS_ROUNDS,
+  scratchCards: VERIFIED_SCRATCH_CARDS,
+  recentWinners: VERIFIED_RECENT_WINNERS,
 };
 
 export function mergeDrawsDeduplicated(
@@ -428,33 +368,158 @@ export function mergeDrawsDeduplicated(
 
   ingest(baselineDraws, false);
   ingest(existingDraws, true);
-  ingest(liveDraws, true); // Live official API wins over everything
+  ingest(liveDraws, true);
 
   return Array.from(byNumber.values()).sort((a, b) => b.drawNumber - a.drawNumber);
 }
 
-// Fallback CORS JSON fetchers for purely static hosting environments (Vercel `out/` or Capacitor)
+export function mergeSportsRoundsDeduplicated(
+  liveRounds: SportsRound[],
+  existingRounds: SportsRound[],
+  baselineRounds: SportsRound[]
+): SportsRound[] {
+  const byId = new Map<string, SportsRound>();
+  const ingest = (list: SportsRound[], priority: boolean) => {
+    for (const r of list || []) {
+      if (!r || !r.id || !Array.isArray(r.matches)) continue;
+      if (priority || !byId.has(r.id)) {
+        byId.set(r.id, r);
+      }
+    }
+  };
+  ingest(baselineRounds, false);
+  ingest(existingRounds, true);
+  ingest(liveRounds, true);
+
+  // Sort open rounds by nearest `closesAt` first, then settled rounds by newest `closesAt`
+  return Array.from(byId.values()).sort((a, b) => {
+    const aOpen = a.status === "open" ? 0 : 1;
+    const bOpen = b.status === "open" ? 0 : 1;
+    if (aOpen !== bOpen) return aOpen - bOpen;
+    if (a.status === "open") return a.closesAt - b.closesAt;
+    return b.closesAt - a.closesAt;
+  });
+}
+
+/**
+ * Extracts actual "1" | "X" | "2" match outcome from a finished SportsMatch score
+ */
+export function getMatchActualOutcome(match: SportsMatch): SportsPickChoice | null {
+  if (
+    match.score &&
+    typeof match.score === "object" &&
+    (match.phase === "finished" || match.status === "played" || match.status === "finished")
+  ) {
+    const h = Number(match.score.home);
+    const a = Number(match.score.away);
+    if (Number.isFinite(h) && Number.isFinite(a)) {
+      return h > a ? "1" : h < a ? "2" : "X";
+    }
+  }
+  return null;
+}
+
+/**
+ * Computes all imminent draws & rounds sorted by closest closing deadline.
+ * - `critical`: closing in <= 6 hours (e.g., tonight's draw!)
+ * - `soon`: closing in <= 30 hours (e.g., tomorrow's draw / round!)
+ */
+export function computeImminentDrawAlerts(
+  loto42Current: LotoCurrentState | null,
+  loto29Current: LotoCurrentState | null,
+  sportsRounds: SportsRound[],
+  nowMs = Date.now()
+): ImminentDrawAlert[] {
+  const alerts: ImminentDrawAlert[] = [];
+
+  const pushDrawAlert = (
+    game: "loto42" | "loto29",
+    titleAr: string,
+    selling?: LotoDrawOfficial | null
+  ) => {
+    if (!selling) return;
+    const closeMs = selling.salesCloseAt || selling.drawAt;
+    const rem = closeMs - nowMs;
+    if (rem <= 0) return;
+    const hours = rem / 3_600_000;
+    const urgency: UrgencyLevel =
+      hours <= 6 ? "critical" : hours <= 30 ? "soon" : "normal";
+    alerts.push({
+      id: `alert-${game}-${selling.drawNumber}`,
+      game,
+      titleAr: `${titleAr} — سحب #${selling.drawNumber}`,
+      subtitleAr:
+        urgency === "critical"
+          ? "يسحب الليلة! التوليفة الذهبية جاهزة للاستعمال قبل إغلاق المبيعات"
+          : "سحب قريب — التوليفة المحسوبة جاهزة للاستعمال",
+      closesAtMs: closeMs,
+      drawAtMs: selling.drawAt,
+      remainingMs: rem,
+      jackpot: selling.jackpot,
+      price: selling.price,
+      urgency,
+    });
+  };
+
+  pushDrawAlert("loto42", "لوتو 42", loto42Current?.selling);
+  pushDrawAlert("loto29", "لوتو 29", loto29Current?.selling);
+
+  for (const r of sportsRounds) {
+    if (r.status !== "open") continue;
+    const rem = r.closesAt - nowMs;
+    if (rem <= 0) continue;
+    const hours = rem / 3_600_000;
+    const urgency: UrgencyLevel =
+      hours <= 6 ? "critical" : hours <= 30 ? "soon" : "normal";
+    alerts.push({
+      id: `alert-sports-${r.id}`,
+      game: "sports",
+      roundId: r.id,
+      titleAr: `اللوتو الرياضي — ${r.nameAr}`,
+      subtitleAr:
+        urgency === "critical"
+          ? "تغلق الجولة خلال ساعات قليلة! توقعات الـ 10 مباريات جاهزة"
+          : "جولة قريبة الإغلاق — قسيمة الـ 10 مباريات جاهزة للاستعمال",
+      closesAtMs: r.closesAt,
+      drawAtMs: r.closesAt,
+      remainingMs: rem,
+      jackpot: r.jackpot,
+      price: r.price,
+      urgency,
+    });
+  }
+
+  return alerts.sort((a, b) => a.remainingMs - b.remainingMs);
+}
+
+// Fallback CORS JSON fetchers for Capacitor mobile builds
 async function fetchViaCorsRelay(targetUrl: string): Promise<any | null> {
-  const relays = [
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  const relays: { build: (u: string) => string; unwrap?: boolean }[] = [
+    {
+      build: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+      unwrap: true,
+    },
+    {
+      build: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    },
   ];
 
-  for (const buildRelayUrl of relays) {
+  for (const relay of relays) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(() => controller.abort(), 8500);
     try {
-      const res = await fetch(buildRelayUrl(targetUrl), {
+      const res = await fetch(relay.build(targetUrl), {
         method: "GET",
         cache: "no-store",
         signal: controller.signal,
       });
       if (res.ok) {
-        const text = await res.text();
-        const parsed = JSON.parse(text);
-        if (parsed && typeof parsed === "object") {
-          return parsed;
+        const json = await res.json();
+        const payload = relay.unwrap && typeof json?.contents === "string"
+          ? JSON.parse(json.contents)
+          : json;
+        if (payload && typeof payload === "object") {
+          return payload;
         }
       }
     } catch {
@@ -468,38 +533,26 @@ async function fetchViaCorsRelay(targetUrl: string): Promise<any | null> {
 
 async function fetchLiveViaClientRelays(): Promise<LiveLotoSnapshot | null> {
   const base = "https://loto.iq";
-  const [
-    loto42Current,
-    loto42P1,
-    loto42P2,
-    loto42P3,
-    loto42P4,
-    loto29Current,
-    loto29P1,
-    sportsData,
-    scratchData,
-    winnersData,
-  ] = await Promise.all([
+  // Small staggered batches to avoid 429 rate-limits on public relays
+  const [loto42Current, loto29Current, sportsData] = await Promise.all([
     fetchViaCorsRelay(`${base}/api/draws/current`),
-    fetchViaCorsRelay(`${base}/api/draws/past?page=1`),
-    fetchViaCorsRelay(`${base}/api/draws/past?page=2`),
-    fetchViaCorsRelay(`${base}/api/draws/past?page=3`),
-    fetchViaCorsRelay(`${base}/api/draws/past?page=4`),
     fetchViaCorsRelay(`${base}/api/draws/current?game=29`),
-    fetchViaCorsRelay(`${base}/api/draws/past?game=29&page=1`),
     fetchViaCorsRelay(`${base}/api/sports/rounds`),
+  ]);
+
+  const [loto42P1, loto29P1, scratchData, winnersData] = await Promise.all([
+    fetchViaCorsRelay(`${base}/api/draws/past?page=1`),
+    fetchViaCorsRelay(`${base}/api/draws/past?game=29&page=1`),
     fetchViaCorsRelay(`${base}/api/scratch/lobby`),
     fetchViaCorsRelay(`${base}/api/winners/recent`),
   ]);
 
-  const loto42Draws = [
-    ...(Array.isArray(loto42P1?.draws) ? loto42P1.draws : []),
-    ...(Array.isArray(loto42P2?.draws) ? loto42P2.draws : []),
-    ...(Array.isArray(loto42P3?.draws) ? loto42P3.draws : []),
-    ...(Array.isArray(loto42P4?.draws) ? loto42P4.draws : []),
-  ];
+  const loto42Draws = Array.isArray(loto42P1?.draws) ? loto42P1.draws : [];
   const loto29Draws = Array.isArray(loto29P1?.draws) ? loto29P1.draws : [];
-  const sportsRounds = Array.isArray(sportsData?.rounds) ? sportsData.rounds : [];
+  const sportsRounds = [
+    ...(Array.isArray(sportsData?.rounds) ? sportsData.rounds : []),
+    ...(Array.isArray(sportsData?.played) ? sportsData.played : []),
+  ];
   const scratchCards = Array.isArray(scratchData?.cards) ? scratchData.cards : [];
   const recentWinners = Array.isArray(winnersData?.winners) ? winnersData.winners : [];
 
@@ -528,17 +581,16 @@ async function fetchLiveViaClientRelays(): Promise<LiveLotoSnapshot | null> {
 
 /**
  * Fetches live up-to-the-second data from https://loto.iq/ across all 5 games.
- * 1) Tries our own Next.js server route POST `/api/loto-iq` first (zero CORS, fastest).
- * 2) Automatically falls back to multi-provider CORS relays when running in static export (`out/` / mobile).
+ * 1) Calls Next.js Serverless Route `/api/loto-iq` (now active on Vercel & local dev!).
+ * 2) Falls back to staggered CORS relays on Capacitor static mobile builds.
  */
 export async function fetchLiveLotoIqSnapshot(): Promise<LiveLotoSnapshot | null> {
-  // 1. Try server route first
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12000);
-    const res = await fetch("/api/loto-iq", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const res = await fetch(`/api/loto-iq?t=${Date.now()}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
       cache: "no-store",
       signal: controller.signal,
     });
@@ -548,7 +600,7 @@ export async function fetchLiveLotoIqSnapshot(): Promise<LiveLotoSnapshot | null
       if (data && data.ok) {
         return {
           fetchedAt: data.fetchedAt || Date.now(),
-          source: data.source || "loto.iq-direct",
+          source: data.source || "loto.iq-live",
           loto42Current: data.loto42Current || null,
           loto42Draws: Array.isArray(data.loto42Draws) ? data.loto42Draws : [],
           loto29Current: data.loto29Current || null,
@@ -560,10 +612,9 @@ export async function fetchLiveLotoIqSnapshot(): Promise<LiveLotoSnapshot | null
       }
     }
   } catch {
-    // Proceed to static/mobile relay fallback
+    // Proceed to relay fallback
   }
 
-  // 2. Fallback to CORS JSON relays
   return fetchLiveViaClientRelays();
 }
 
@@ -677,19 +728,9 @@ export function evaluateUserTicket(
     let resolvedCount = 0;
     let correct = 0;
 
-    round.matches.forEach((m, idx) => {
+    round.matches.forEach((m) => {
       const userPick = ticket.sportsPicks?.[m.position];
-      let actual: SportsPickChoice | null = null;
-      if (Array.isArray(round.outcome) && round.outcome[idx]) {
-        const o = String(round.outcome[idx]).toUpperCase();
-        if (o === "1" || o === "X" || o === "2") actual = o;
-      } else if (m.score && typeof m.score === "object") {
-        const h = Number((m.score as any).home);
-        const a = Number((m.score as any).away);
-        if (Number.isFinite(h) && Number.isFinite(a) && m.status === "finished") {
-          actual = h > a ? "1" : h < a ? "2" : "X";
-        }
-      }
+      const actual = getMatchActualOutcome(m);
       if (actual) {
         resolvedCount++;
         if (userPick === actual) correct++;

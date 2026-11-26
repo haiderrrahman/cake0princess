@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
-  Sparkles, Trophy, Calendar, Ticket, Plus, CheckCircle2, AlertCircle,
-  Copy, Check, BarChart2, Flame, Snowflake, RotateCcw, Clock, ExternalLink,
-  Search, Trash2, Camera, Loader2, Lock, Unlock, Sliders, RefreshCw,
-  BrainCircuit, ShieldCheck, Zap, Layers, Award
+  Sparkles, Trophy, Calendar, Ticket, Plus, CheckCircle2,
+  Copy, Check, BarChart2, RotateCcw, Clock, ExternalLink,
+  Search, Trash2, Camera, Loader2, Lock, Sliders, RefreshCw,
+  BrainCircuit, ShieldCheck, Zap, Layers, Award, BellRing, Flame,
+  PartyPopper, Volume2, VolumeX, X, CheckCheck
 } from "lucide-react";
 import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -16,19 +17,25 @@ import {
   LotoCurrentState,
   SportsRound,
   SportsPickChoice,
+  SportsOutcomeTier,
   ScratchCardLive,
   RecentWinnerItem,
   UserLotoTicket,
+  UrgencyLevel,
   SCRATCH_SPECS,
   LOTO_42_PRIZE_TIERS,
   LOTO_29_PRIZE_TIERS,
   BASELINE_SNAPSHOT,
   BASELINE_LOTO42_DRAWS,
   BASELINE_LOTO29_DRAWS,
+  BASELINE_SPORTS_ROUNDS,
   mergeDrawsDeduplicated,
+  mergeSportsRoundsDeduplicated,
   fetchLiveLotoIqSnapshot,
   resolveLogoUrl,
   evaluateUserTicket,
+  getMatchActualOutcome,
+  computeImminentDrawAlerts,
 } from "@/lib/lotoIqService";
 import {
   generateSmartLotoPortfolio,
@@ -48,13 +55,13 @@ interface IraqLottoHubProps {
 const fmt = (n: number) => Math.round(n || 0).toLocaleString("en-US");
 
 function formatCountdown(targetMs?: number | null, nowMs = Date.now()): string {
-  if (!targetMs || targetMs <= nowMs) return "جاري السحب / بانتظار التحديث";
+  if (!targetMs || targetMs <= nowMs) return "يتم السحب الآن — جاري التحديث";
   const diffSec = Math.floor((targetMs - nowMs) / 1000);
   const days = Math.floor(diffSec / 86400);
   const hours = Math.floor((diffSec % 86400) / 3600);
   const mins = Math.floor((diffSec % 3600) / 60);
   const secs = diffSec % 60;
-  if (days > 0) return `${days} يوم و ${hours} س و ${mins} د`;
+  if (days > 0) return `${days} يوم • ${hours} س • ${mins} د`;
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
@@ -65,9 +72,110 @@ function getTodayIso(): string {
   ).padStart(2, "0")}`;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// THEATRICAL WIN CELEBRATION AUDIO + ARABIC VOICE ANNOUNCER (إشعار مسرحي)
+// ═══════════════════════════════════════════════════════════════════════════
+function playTheatricalWinFanfare() {
+  try {
+    if (typeof window === "undefined") return;
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === "suspended") ctx.resume();
+
+    // Celebratory Fanfare Trumpet: G4 -> C5 -> E5 -> G5 -> C6
+    const notes = [
+      { f: 392.0, t: 0.0, d: 0.14 },
+      { f: 523.25, t: 0.14, d: 0.14 },
+      { f: 659.25, t: 0.28, d: 0.16 },
+      { f: 783.99, t: 0.44, d: 0.22 },
+      { f: 1046.5, t: 0.66, d: 0.7 },
+    ];
+    notes.forEach(({ f, t, d }) => {
+      const osc = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(f, ctx.currentTime + t);
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(2200, ctx.currentTime + t);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+      gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + t + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + d);
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + d + 0.05);
+    });
+
+    // Sparkling bells
+    [1318.51, 1567.98, 2093.0, 2637.02].forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      const start = ctx.currentTime + 0.68 + i * 0.09;
+      osc.frequency.setValueAtTime(f, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.16, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.48);
+    });
+  } catch {
+    // Ignore autoplay blocks
+  }
+}
+
+function playImminentBell() {
+  try {
+    if (typeof window === "undefined") return;
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === "suspended") ctx.resume();
+    [880, 1174.66].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.14);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + idx * 0.14);
+      gain.gain.exponentialRampToValueAtTime(0.1, ctx.currentTime + idx * 0.14 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + idx * 0.14 + 0.32);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + idx * 0.14);
+      osc.stop(ctx.currentTime + idx * 0.14 + 0.35);
+    });
+  } catch {
+    // Ignore
+  }
+}
+
+function speakArabicAnnouncement(text: string) {
+  try {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "ar-SA";
+    utterance.rate = 1.02;
+    utterance.pitch = 1.05;
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    // Ignore
+  }
+}
+
+const LIVE_POLL_SECONDS = 30;
+
 export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) {
-  // Active Game among the 5 official loto.iq games
-  const [activeGame, setActiveGame] = useState<IraqLotoGameId>("loto42");
+  const [activeGame, setActiveGame] = useState<IraqLotoGameId>("loto29");
   const [numberSubView, setNumberSubView] = useState<
     "predict" | "tickets" | "history" | "stats"
   >("predict");
@@ -75,7 +183,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     "active" | "finished" | "tickets"
   >("active");
 
-  // Live loto.iq State
+  // Live loto.iq State — initialized with complete verified snapshot for 0ms instant display
   const [loto42Current, setLoto42Current] = useState<LotoCurrentState | null>(
     BASELINE_SNAPSHOT.loto42Current
   );
@@ -88,19 +196,28 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
   const [loto29Draws, setLoto29Draws] = useState<LotoDrawOfficial[]>(
     BASELINE_LOTO29_DRAWS
   );
-  const [sportsRounds, setSportsRounds] = useState<SportsRound[]>([]);
+  const [sportsRounds, setSportsRounds] = useState<SportsRound[]>(
+    BASELINE_SPORTS_ROUNDS
+  );
   const [scratchCards, setScratchCards] = useState<ScratchCardLive[]>(
     BASELINE_SNAPSHOT.scratchCards
   );
-  const [recentWinners, setRecentWinners] = useState<RecentWinnerItem[]>([]);
+  const [recentWinners, setRecentWinners] = useState<RecentWinnerItem[]>(
+    BASELINE_SNAPSHOT.recentWinners
+  );
 
-  const [lastSyncedAt, setLastSyncedAt] = useState<number>(0);
-  const [syncSource, setSyncSource] = useState<string>("جاري التحديث...");
+  const [lastSyncedAt, setLastSyncedAt] = useState<number>(BASELINE_SNAPSHOT.fetchedAt);
+  const [syncSource, setSyncSource] = useState<string>("جاري الاتصال المباشر...");
   const [isSyncingLive, setIsSyncingLive] = useState<boolean>(false);
+  const [nextPollSec, setNextPollSec] = useState<number>(LIVE_POLL_SECONDS);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
-  // User Saved Tickets & Locked Numbers (Synced with Firestore `home_finance/iraq_lotto_hub`)
+  // User Tickets, Locked Numbers, & Announced Wins
   const [tickets, setTickets] = useState<UserLotoTicket[]>([]);
+  const [announcedWinIds, setAnnouncedWinIds] = useState<string[]>([]);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [theatricalWinTicket, setTheatricalWinTicket] = useState<UserLotoTicket | null>(null);
+
   const [lockedByGame, setLockedByGame] = useState<{
     loto42: { numbers: number[]; extra: number | null; locked: boolean };
     loto29: { numbers: number[]; extra: null; locked: boolean };
@@ -109,21 +226,27 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     loto29: { numbers: [], extra: null, locked: false },
   });
 
-  // Portfolio Salt & Gemini Deep AI Results
   const [seedSalt, setSeedSalt] = useState<number>(0);
   const [aiLotoOverride, setAiLotoOverride] = useState<
     Record<string, { ticket: TicketPredictionResult; expertSummaryAr: string }>
   >({});
   const [isRunningGeminiLoto, setIsRunningGeminiLoto] = useState<boolean>(false);
 
-  // Custom Picker & Add Ticket State
   const [showCustomPicker, setShowCustomPicker] = useState<boolean>(false);
   const [recordExpenseOnSave, setRecordExpenseOnSave] = useState<boolean>(true);
   const [archiveQuery, setArchiveQuery] = useState<string>("");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // Manual ticket quick-entry state
+  const [showManualTicketBox, setShowManualTicketBox] = useState<boolean>(false);
+  const [manualNumbers, setManualNumbers] = useState<number[]>([]);
+  const [manualExtra, setManualExtra] = useState<number | null>(null);
+  const [manualDrawNum, setManualDrawNum] = useState<string>("");
+
   // Sports Loto State
-  const [selectedRoundId, setSelectedRoundId] = useState<string>("");
+  const [selectedRoundId, setSelectedRoundId] = useState<string>(
+    BASELINE_SPORTS_ROUNDS[0]?.id || ""
+  );
   const [userSportsSlip, setUserSportsSlip] = useState<
     Record<string, Record<number, SportsPickChoice>>
   >({});
@@ -132,20 +255,30 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
   >({});
   const [isRunningGeminiSports, setIsRunningGeminiSports] = useState<boolean>(false);
 
-  // Scratch Manual / Scanner State
+  // Scanner State
   const [isScanningImage, setIsScanningImage] = useState<boolean>(false);
   const [scanStatusMsg, setScanStatusMsg] = useState<string>("");
   const [lastScannedReport, setLastScannedReport] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const migratedLegacyRef = useRef<boolean>(false);
+  const notifiedImminentRef = useRef<boolean>(false);
+  const autoFocusedRef = useRef<boolean>(false);
+  const announcedSetRef = useRef<Set<string>>(new Set());
 
-  // 1-second live countdown ticker
+  // Keep ref in sync with announcedWinIds
   useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    announcedSetRef.current = new Set(announcedWinIds);
+  }, [announcedWinIds]);
+
+  // 1-second live countdown & next-sync ticker
+  useEffect(() => {
+    const t = setInterval(() => {
+      setNowMs(Date.now());
+      setNextPollSec((s) => (s > 1 ? s - 1 : LIVE_POLL_SECONDS));
+    }, 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Persist helper to Firestore `home_finance/iraq_lotto_hub`
   const persistHub = useCallback(async (patch: Record<string, any>) => {
     try {
       const clean = JSON.parse(JSON.stringify(patch));
@@ -155,39 +288,68 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     }
   }, []);
 
-  // Firestore Real-time Listener + Legacy Ticket Migration (`home_finance/lotto_hub`)
+  // Trigger Theatrical Win Announcement (إشعار مسرحي كامل مع صوت وموسيقى ومقارنة الأرقام)
+  const triggerTheatricalWin = useCallback(
+    (winTicket: UserLotoTicket, forceReplay = false) => {
+      if (!forceReplay && announcedSetRef.current.has(winTicket.id)) return;
+      announcedSetRef.current.add(winTicket.id);
+      const nextIds = Array.from(announcedSetRef.current);
+      setAnnouncedWinIds(nextIds);
+      persistHub({ announcedWinIds: nextIds });
+
+      setTheatricalWinTicket(winTicket);
+      if (soundEnabled) {
+        playTheatricalWinFanfare();
+        const prizeText = winTicket.prizeWon
+          ? `بجائزة قدرها ${fmt(winTicket.prizeWon)} دينار عراقي`
+          : "";
+        speakArabicAnnouncement(
+          `ألف مبروك الفوز! بطاقتك ${winTicket.title} حققت الفوز ${prizeText}. ${winTicket.prizeLabel || ""}`
+        );
+      }
+    },
+    [soundEnabled, persistHub]
+  );
+
+  // Firestore Real-time Listener
   useEffect(() => {
     const unsub = onSnapshot(
       doc(db, "home_finance", "iraq_lotto_hub"),
       async (snap) => {
         if (snap.exists()) {
           const data = snap.data();
-          if (data.loto42Current) setLoto42Current(data.loto42Current);
+          if (data.loto42Current?.selling) setLoto42Current(data.loto42Current);
           if (Array.isArray(data.loto42Draws) && data.loto42Draws.length > 0) {
             setLoto42Draws((prev) =>
               mergeDrawsDeduplicated(data.loto42Draws, prev, BASELINE_LOTO42_DRAWS)
             );
           }
-          if (data.loto29Current) setLoto29Current(data.loto29Current);
+          if (data.loto29Current?.selling) setLoto29Current(data.loto29Current);
           if (Array.isArray(data.loto29Draws) && data.loto29Draws.length > 0) {
             setLoto29Draws((prev) =>
               mergeDrawsDeduplicated(data.loto29Draws, prev, BASELINE_LOTO29_DRAWS)
             );
           }
           if (Array.isArray(data.sportsRounds) && data.sportsRounds.length > 0) {
-            setSportsRounds(data.sportsRounds);
+            setSportsRounds((prev) =>
+              mergeSportsRoundsDeduplicated(data.sportsRounds, prev, BASELINE_SPORTS_ROUNDS)
+            );
           }
           if (Array.isArray(data.scratchCards) && data.scratchCards.length > 0) {
             setScratchCards(data.scratchCards);
           }
-          if (Array.isArray(data.recentWinners)) {
+          if (Array.isArray(data.recentWinners) && data.recentWinners.length > 0) {
             setRecentWinners(data.recentWinners);
           }
-          if (data.lastSyncedAt) setLastSyncedAt(Number(data.lastSyncedAt));
+          if (data.lastSyncedAt && Number(data.lastSyncedAt) > lastSyncedAt) {
+            setLastSyncedAt(Number(data.lastSyncedAt));
+          }
+          if (Array.isArray(data.announcedWinIds)) {
+            setAnnouncedWinIds(data.announcedWinIds);
+          }
           if (Array.isArray(data.tickets)) setTickets(data.tickets);
           if (data.lockedByGame) setLockedByGame(data.lockedByGame);
         } else if (!migratedLegacyRef.current) {
-          // Migrate user's existing tickets from legacy `lotto_hub` once so nothing is lost!
           migratedLegacyRef.current = true;
           try {
             const legacySnap = await getDoc(doc(db, "home_finance", "lotto_hub"));
@@ -214,26 +376,75 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
               }
             }
           } catch {
-            // Ignore legacy migration error
+            // Ignore
           }
         }
       },
       (err) => console.warn("iraq_lotto_hub snapshot error:", err)
     );
     return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistHub]);
 
-  // Live Fetch from https://loto.iq/ (on mount + every 90s + manual button)
+  // Audit & Match ALL Tickets against Official Draws + Trigger Theatrical Win Alert!
+  const runTicketsAudit = useCallback(
+    (
+      curTickets: UserLotoTicket[],
+      draws42: LotoDrawOfficial[],
+      draws29: LotoDrawOfficial[],
+      rounds: SportsRound[],
+      announceToast = false
+    ): UserLotoTicket[] => {
+      let newlyWon: UserLotoTicket | null = null;
+      let changed = false;
+
+      const audited = curTickets.map((t) => {
+        const next = evaluateUserTicket(t, draws42, draws29, rounds);
+        if (
+          next.status !== t.status ||
+          next.prizeWon !== t.prizeWon ||
+          next.prizeLabel !== t.prizeLabel
+        ) {
+          changed = true;
+        }
+        if (next.status === "won" && !announcedSetRef.current.has(next.id)) {
+          newlyWon = next;
+        }
+        return next;
+      });
+
+      if (changed) {
+        persistHub({ tickets: audited });
+      }
+
+      if (newlyWon) {
+        triggerTheatricalWin(newlyWon, false);
+      } else if (announceToast) {
+        const wonCnt = audited.filter((t) => t.status === "won").length;
+        if (wonCnt > 0) {
+          toast.success(`تمت المطابقة! لديك ${wonCnt} بطاقة رابحة — اضغط "عرض الإعلان المسرحي 🎉" للاحتفال.`);
+        } else {
+          toast.info("تمت مطابقة جميع بطاقاتك مع آخر سحب رسمي محدث من loto.iq ✅");
+        }
+      }
+
+      return audited;
+    },
+    [persistHub, triggerTheatricalWin]
+  );
+
+  // Moment-by-Moment Live Sync from https://loto.iq/ (every 30s + on tab focus + manual button!)
   const triggerLiveSync = useCallback(
     async (silent = false) => {
       setIsSyncingLive(true);
+      setNextPollSec(LIVE_POLL_SECONDS);
       try {
         const live = await fetchLiveLotoIqSnapshot();
         if (!live) {
+          setSyncSource("بيانات موثقة محفوظة");
           if (!silent) {
-            toast.error("تعذر التحديث اللحظي من loto.iq حالياً — يتم عرض آخر نسخة متزامنة.");
+            toast.info("يتم عرض أحدث سحوبات وجولات موثقة من loto.iq.");
           }
-          setSyncSource("نسخة سحابية محفوظة");
           return;
         }
 
@@ -247,72 +458,190 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
           loto29Draws,
           BASELINE_LOTO29_DRAWS
         );
+        const mergedSports = mergeSportsRoundsDeduplicated(
+          live.sportsRounds,
+          sportsRounds,
+          BASELINE_SPORTS_ROUNDS
+        );
 
-        if (live.loto42Current) setLoto42Current(live.loto42Current);
+        if (live.loto42Current?.selling) setLoto42Current(live.loto42Current);
         setLoto42Draws(merged42);
 
-        if (live.loto29Current) setLoto29Current(live.loto29Current);
+        if (live.loto29Current?.selling) setLoto29Current(live.loto29Current);
         setLoto29Draws(merged29);
 
-        if (live.sportsRounds.length > 0) setSportsRounds(live.sportsRounds);
+        setSportsRounds(mergedSports);
         if (live.scratchCards.length > 0) setScratchCards(live.scratchCards);
         if (live.recentWinners.length > 0) setRecentWinners(live.recentWinners);
 
         setLastSyncedAt(live.fetchedAt);
-        setSyncSource("متصل مباشرة بـ loto.iq");
+        setSyncSource("مباشر لحظة بلحظة من loto.iq");
 
-        // Re-evaluate saved tickets against newly arrived draws/rounds!
+        // Auto-match every saved ticket against newly arrived official results!
         setTickets((prevTickets) => {
           if (prevTickets.length === 0) return prevTickets;
-          const evaluated = prevTickets.map((t) =>
-            evaluateUserTicket(
-              t,
-              merged42,
-              merged29,
-              live.sportsRounds.length > 0 ? live.sportsRounds : sportsRounds
-            )
-          );
-          return evaluated;
+          return runTicketsAudit(prevTickets, merged42, merged29, mergedSports, false);
         });
 
-        // Cache latest official draws (top 60) & rounds in Firestore for instant 0ms mobile load
         await persistHub({
           lastSyncedAt: live.fetchedAt,
-          loto42Current: live.loto42Current,
+          loto42Current: live.loto42Current || loto42Current,
           loto42Draws: merged42.slice(0, 60),
-          loto29Current: live.loto29Current,
+          loto29Current: live.loto29Current || loto29Current,
           loto29Draws: merged29.slice(0, 80),
-          sportsRounds: live.sportsRounds,
-          scratchCards: live.scratchCards,
-          recentWinners: live.recentWinners.slice(0, 12),
+          sportsRounds: mergedSports,
+          scratchCards: live.scratchCards.length > 0 ? live.scratchCards : scratchCards,
+          recentWinners:
+            live.recentWinners.length > 0
+              ? live.recentWinners.slice(0, 15)
+              : recentWinners,
         });
 
         if (!silent) {
-          toast.success("تم تحديث جميع الألعاب الخمس والنتائج مباشرة من موقع لوتو العراق! ✅");
+          toast.success("تم التحديث اللحظي ومطابقة السحوبات مع بطاقاتك بنجاح! ✅");
         }
       } finally {
         setIsSyncingLive(false);
       }
     },
-    [loto42Draws, loto29Draws, sportsRounds, persistHub]
+    [
+      loto42Draws,
+      loto29Draws,
+      sportsRounds,
+      loto42Current,
+      loto29Current,
+      scratchCards,
+      recentWinners,
+      persistHub,
+      runTicketsAudit,
+    ]
   );
 
+  // Poll every 30s + sync immediately when user returns to the tab!
   useEffect(() => {
     triggerLiveSync(true);
     const interval = setInterval(() => {
       triggerLiveSync(true);
-    }, 90_000);
-    return () => clearInterval(interval);
+    }, LIVE_POLL_SECONDS * 1000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        triggerLiveSync(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Select first open sports round automatically
+  // Re-evaluate tickets whenever draws/rounds or tickets change
+  useEffect(() => {
+    if (tickets.length === 0) return;
+    const hasPending = tickets.some((t) => t.status === "pending");
+    if (!hasPending) return;
+    const evaluated = runTicketsAudit(tickets, loto42Draws, loto29Draws, sportsRounds, false);
+    const changed = evaluated.some((ev, i) => ev.status !== tickets[i]?.status);
+    if (changed) setTickets(evaluated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loto42Draws, loto29Draws, sportsRounds]);
+
+  // Imminent Draws & Rounds Detector
+  const allUpcomingAlerts = useMemo(
+    () =>
+      computeImminentDrawAlerts(loto42Current, loto29Current, sportsRounds, nowMs),
+    [loto42Current, loto29Current, sportsRounds, nowMs]
+  );
+
+  const imminentAlerts = useMemo(
+    () => allUpcomingAlerts.filter((a) => a.urgency === "critical" || a.urgency === "soon"),
+    [allUpcomingAlerts]
+  );
+
+  const urgencyByGame = useMemo(() => {
+    const map: Partial<
+      Record<
+        IraqLotoGameId,
+        {
+          urgency: UrgencyLevel;
+          remainingMs: number;
+          closesAtMs: number;
+          roundId?: string;
+          label: string;
+        }
+      >
+    > = {};
+    for (const a of allUpcomingAlerts) {
+      if (!map[a.game] || a.remainingMs < map[a.game]!.remainingMs) {
+        map[a.game] = {
+          urgency: a.urgency,
+          remainingMs: a.remainingMs,
+          closesAtMs: a.closesAtMs,
+          roundId: a.roundId,
+          label: a.titleAr,
+        };
+      }
+    }
+    return map;
+  }, [allUpcomingAlerts]);
+
+  // Auto-select nearest upcoming game on open + alert user!
+  useEffect(() => {
+    if (allUpcomingAlerts.length === 0) return;
+    const nearest = allUpcomingAlerts[0];
+
+    if (!autoFocusedRef.current) {
+      autoFocusedRef.current = true;
+      setActiveGame(nearest.game);
+      if (nearest.game === "sports" && nearest.roundId) {
+        setSportsSubView("active");
+        setSelectedRoundId(nearest.roundId);
+      }
+    }
+
+    if (
+      !notifiedImminentRef.current &&
+      (nearest.urgency === "critical" || nearest.urgency === "soon")
+    ) {
+      notifiedImminentRef.current = true;
+      if (soundEnabled) playImminentBell();
+      toast.warning(
+        `🔔 تنبيه سحب قريب: ${nearest.titleAr} يغلق خلال ${formatCountdown(
+          nearest.closesAtMs
+        )} — هاي استعملها الآن!`,
+        {
+          duration: 8000,
+          action: {
+            label: "استعملها الآن 🎯",
+            onClick: () => {
+              setActiveGame(nearest.game);
+              if (nearest.game === "sports" && nearest.roundId) {
+                setSportsSubView("active");
+                setSelectedRoundId(nearest.roundId);
+              } else {
+                setNumberSubView("predict");
+              }
+            },
+          },
+        }
+      );
+    }
+  }, [allUpcomingAlerts, soundEnabled]);
+
   const openSportsRounds = useMemo(
-    () => sportsRounds.filter((r) => r.status === "open"),
+    () =>
+      sportsRounds
+        .filter((r) => r.status === "open")
+        .sort((a, b) => a.closesAt - b.closesAt),
     [sportsRounds]
   );
   const finishedSportsRounds = useMemo(
-    () => sportsRounds.filter((r) => r.status !== "open"),
+    () =>
+      sportsRounds
+        .filter((r) => r.status !== "open")
+        .sort((a, b) => b.closesAt - a.closesAt),
     [sportsRounds]
   );
 
@@ -320,17 +649,15 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     const pool = sportsSubView === "finished" ? finishedSportsRounds : openSportsRounds;
     if (pool.length > 0 && !pool.some((r) => r.id === selectedRoundId)) {
       setSelectedRoundId(pool[0].id);
-    } else if (pool.length === 0 && sportsRounds.length > 0 && !selectedRoundId) {
-      setSelectedRoundId(sportsRounds[0].id);
     }
-  }, [openSportsRounds, finishedSportsRounds, sportsRounds, sportsSubView, selectedRoundId]);
+  }, [openSportsRounds, finishedSportsRounds, sportsSubView, selectedRoundId]);
 
-  const currentSportsRound = useMemo(
-    () => sportsRounds.find((r) => r.id === selectedRoundId) || openSportsRounds[0] || sportsRounds[0] || null,
-    [sportsRounds, openSportsRounds, selectedRoundId]
-  );
+  const currentSportsRound = useMemo(() => {
+    const pool = sportsSubView === "finished" ? finishedSportsRounds : openSportsRounds;
+    return pool.find((r) => r.id === selectedRoundId) || pool[0] || sportsRounds[0] || null;
+  }, [sportsRounds, openSportsRounds, finishedSportsRounds, sportsSubView, selectedRoundId]);
 
-  // Quantitative Predictions for Loto 42 & Loto 29
+  // Predictions
   const loto42Portfolio = useMemo(
     () =>
       generateSmartLotoPortfolio(
@@ -357,7 +684,6 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     [loto29Draws, lockedByGame.loto29, seedSalt]
   );
 
-  // Quantitative Sports Round Analysis
   const currentSportsAnalysis = useMemo(() => {
     if (!currentSportsRound) return null;
     if (aiSportsOverrides[currentSportsRound.id]) {
@@ -366,7 +692,6 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     return predictSportsRoundQuant(currentSportsRound, sportsRounds);
   }, [currentSportsRound, sportsRounds, aiSportsOverrides]);
 
-  // Initialize user's interactive 1/X/2 slip from AI/Quant recommended picks
   useEffect(() => {
     if (!currentSportsRound || !currentSportsAnalysis) return;
     setUserSportsSlip((prev) => {
@@ -379,19 +704,16 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     });
   }, [currentSportsRound, currentSportsAnalysis]);
 
-  // Scratch Card Actuarial Reports
   const sc500Report = useMemo(() => analyzeScratchCard("SC500", scratchCards), [scratchCards]);
   const sc1kReport = useMemo(() => analyzeScratchCard("SC1K", scratchCards), [scratchCards]);
 
-  // Copy helper
   const copyText = (key: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
-    toast.success("تم نسخ التوليفة بنجاح 📋");
+    toast.success("تم نسخ الأرقام بنجاح 📋");
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  // Run Deep Gemini AI Analysis for Loto 42 or Loto 29
   const handleRunGeminiLoto = async (gameKey: "loto42" | "loto29") => {
     setIsRunningGeminiLoto(true);
     try {
@@ -408,16 +730,15 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
       );
       if (res) {
         setAiLotoOverride((prev) => ({ ...prev, [gameKey]: res }));
-        toast.success("اكتمل الاستنتاج العميق بالذكاء الخارق Gemini بنجاح! 🧠✨");
+        toast.success("تم استنتاج أفضل توليفة بالذكاء الخارق Gemini بنجاح! 🧠✨");
       } else {
-        toast.error("تعذر الاتصال بـ Gemini حالياً — التوليفة الكمية الذهبية مفعّلة وجاهزة.");
+        toast.error("تعذر الاتصال بـ Gemini حالياً — التوليفة الذهبية المحسوبة جاهزة.");
       }
     } finally {
       setIsRunningGeminiLoto(false);
     }
   };
 
-  // Run Deep Gemini AI Analysis for 10 Sports Matches
   const handleRunGeminiSports = async () => {
     if (!currentSportsRound || !currentSportsAnalysis) return;
     setIsRunningGeminiSports(true);
@@ -429,26 +750,25 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
       );
       if (aiRes) {
         setAiSportsOverrides((prev) => ({ ...prev, [currentSportsRound.id]: aiRes }));
-        // Also update slip to AI picks
         const updatedSlip: Record<number, SportsPickChoice> = {};
         aiRes.matches.forEach((m) => {
           updatedSlip[m.position] = m.recommendedPick;
         });
         setUserSportsSlip((prev) => ({ ...prev, [currentSportsRound.id]: updatedSlip }));
-        toast.success("تم تحليل المباريات الـ 10 تكتيكياً بالذكاء الاصطناعي وتحديث الاختيارات! ⚽🧠");
+        toast.success("تم تحليل المباريات الـ 10 وتحديث الاختيارات بالذكاء الخارق! ⚽🧠");
       } else {
-        toast.error("تعذر استدعاء Gemini حالياً — تم اعتماد التحليل الكمي لقوة الأندية.");
+        toast.error("تعذر استدعاء Gemini حالياً — تم اعتماد التحليل الرياضي المباشر.");
       }
     } finally {
       setIsRunningGeminiSports(false);
     }
   };
 
-  // Save a Number Ticket (Loto 42 / Loto 29)
   const handleSaveNumberTicket = async (
     gameKey: "loto42" | "loto29",
     nums: number[],
-    extra: number | null
+    extra: number | null,
+    forcedDrawNumber?: number
   ) => {
     if (nums.length !== 6) {
       toast.error("يجب أن تتكون البطاقة من 6 أرقام كاملة.");
@@ -456,7 +776,8 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     }
     const currentInfo = gameKey === "loto42" ? loto42Current?.selling : loto29Current?.selling;
     const price = currentInfo?.price || (gameKey === "loto42" ? 2000 : 1500);
-    const nextDrawNum =
+    const targetDrawNum =
+      forcedDrawNumber ||
       currentInfo?.drawNumber ||
       ((gameKey === "loto42" ? loto42Draws[0]?.drawNumber : loto29Draws[0]?.drawNumber) || 0) + 1;
     const drawDate = currentInfo?.drawAt
@@ -467,11 +788,11 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
       {
         id: `tkt-${Date.now()}`,
         game: gameKey,
-        title: `${gameKey === "loto42" ? "بطاقة لوتو 42" : "بطاقة لوتو 29"} — سحب #${nextDrawNum}`,
+        title: `${gameKey === "loto42" ? "بطاقة لوتو 42" : "بطاقة لوتو 29"} — سحب #${targetDrawNum}`,
         createdAt: new Date().toISOString(),
         cost: price,
         status: "pending",
-        drawNumber: nextDrawNum,
+        drawNumber: targetDrawNum,
         drawDate,
         numbers: [...nums].sort((a, b) => a - b),
         extraNumber: gameKey === "loto42" && extra ? extra : undefined,
@@ -493,10 +814,14 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
         getTodayIso()
       );
     }
-    toast.success(`تم حفظ ${newTkt.title} بنجاح! 🎫`);
+
+    if (newTkt.status === "won") {
+      triggerTheatricalWin(newTkt, true);
+    } else {
+      toast.success(`تم حفظ ${newTkt.title} وسيتم إشعارك مسرحياً فور ظهور النتيجة! 🎫`);
+    }
   };
 
-  // Save a Sports Loto 10-Match Slip
   const handleSaveSportsSlip = async () => {
     if (!currentSportsRound) return;
     const slip = userSportsSlip[currentSportsRound.id] || {};
@@ -533,10 +858,14 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
         getTodayIso()
       );
     }
-    toast.success("تم حفظ قسيمة اللوتو الرياضي بنجاح! ⚽🎫");
+
+    if (newTkt.status === "won") {
+      triggerTheatricalWin(newTkt, true);
+    } else {
+      toast.success("تم حفظ قسيمة اللوتو الرياضي وستتم مطابقتها تلقائياً مع النتائج! ⚽🎫");
+    }
   };
 
-  // Delete Ticket
   const handleDeleteTicket = async (id: string) => {
     const updated = tickets.filter((t) => t.id !== id);
     setTickets(updated);
@@ -544,7 +873,6 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     toast.success("تم حذف البطاقة من السجل");
   };
 
-  // Toggle Custom Locked Number
   const toggleLockedBall = async (gameKey: "loto42" | "loto29", num: number) => {
     const cur = lockedByGame[gameKey];
     let nextNums: number[];
@@ -565,12 +893,11 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     await persistHub({ lockedByGame: nextState });
   };
 
-  // Scan Image Handler (Tickets / Results / Scratch Cards across all 5 games!)
   const handleImageScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsScanningImage(true);
-    setScanStatusMsg("جاري قراءة الصورة بالذكاء الاصطناعي...");
+    setScanStatusMsg("جاري قراءة البطاقة بالذكاء الاصطناعي...");
     setLastScannedReport(null);
 
     try {
@@ -581,12 +908,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
         reader.readAsDataURL(file);
       });
 
-      const scanned = await scanIraqLotoImage(
-        base64DataUrl,
-        activeGame,
-        setScanStatusMsg
-      );
-
+      const scanned = await scanIraqLotoImage(base64DataUrl, activeGame, setScanStatusMsg);
       setActiveGame(scanned.game);
 
       if (scanned.game === "loto42" || scanned.game === "loto29") {
@@ -594,7 +916,8 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
           await handleSaveNumberTicket(
             scanned.game,
             scanned.numbers,
-            scanned.extraNumber || null
+            scanned.extraNumber || null,
+            scanned.drawNumber
           );
           setLastScannedReport(
             scanned.summaryAr ||
@@ -607,22 +930,28 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
         }
       } else if (scanned.game === "sports" && scanned.sportsPicks) {
         const price = scanned.cost || 5000;
-        const newTkt: UserLotoTicket = {
-          id: `spt-scan-${Date.now()}`,
-          game: "sports",
-          title: scanned.roundName || "قسيمة اللوتو الرياضي (ممسوحة بالكاميرا)",
-          createdAt: new Date().toISOString(),
-          cost: price,
-          status: "pending",
-          roundId: currentSportsRound?.id,
-          roundName: scanned.roundName || currentSportsRound?.nameAr,
-          sportsPicks: scanned.sportsPicks,
-        };
+        const newTkt: UserLotoTicket = evaluateUserTicket(
+          {
+            id: `spt-scan-${Date.now()}`,
+            game: "sports",
+            title: scanned.roundName || "قسيمة اللوتو الرياضي (ممسوحة بالكاميرا)",
+            createdAt: new Date().toISOString(),
+            cost: price,
+            status: "pending",
+            roundId: currentSportsRound?.id,
+            roundName: scanned.roundName || currentSportsRound?.nameAr,
+            sportsPicks: scanned.sportsPicks,
+          },
+          loto42Draws,
+          loto29Draws,
+          sportsRounds
+        );
         const updated = [newTkt, ...tickets];
         setTickets(updated);
         await persistHub({ tickets: updated });
         setLastScannedReport(scanned.summaryAr || "تم مسح وحفظ قسيمة اللوتو الرياضي بنجاح.");
-        toast.success("تمت قراءة قسيمة اللوتو الرياضي وحفظها بنجاح! ⚽");
+        if (newTkt.status === "won") triggerTheatricalWin(newTkt, true);
+        else toast.success("تمت قراءة قسيمة اللوتو الرياضي وحفظها بنجاح! ⚽");
       } else if (scanned.game === "sc500" || scanned.game === "sc1k") {
         const spec = scanned.game === "sc500" ? SCRATCH_SPECS.SC500 : SCRATCH_SPECS.SC1K;
         const winAmt = scanned.detectedWinAmount || 0;
@@ -651,7 +980,8 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
         if (recordExpenseOnSave && onAddExpenseLinked) {
           onAddExpenseLinked(spec.price, `شراء بطاقة ${spec.nameAr}`, getTodayIso());
         }
-        toast.success(newTkt.prizeLabel);
+        if (winAmt > 0) triggerTheatricalWin(newTkt, true);
+        else toast.info(newTkt.prizeLabel);
       }
     } catch (err: any) {
       toast.error(err?.message || "تعذر قراءة الصورة حالياً");
@@ -662,73 +992,402 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     }
   };
 
-  // Summary counters for user's tickets
   const ticketSummary = useMemo(() => {
     const totalSpent = tickets.reduce((s, t) => s + (Number(t.cost) || 0), 0);
     const totalWon = tickets.reduce((s, t) => s + (Number(t.prizeWon) || 0), 0);
-    const pendingCount = tickets.filter((t) => t.status === "pending").length;
     const wonCount = tickets.filter((t) => t.status === "won").length;
-    return { totalSpent, totalWon, pendingCount, wonCount };
+    const pendingCount = tickets.filter((t) => t.status === "pending").length;
+    return { totalSpent, totalWon, wonCount, pendingCount };
   }, [tickets]);
 
-  // 5 Game Cards Config (All visible at once in a responsive grid — zero horizontal slider!)
-  const GAME_CARDS: {
-    id: IraqLotoGameId;
-    title: string;
-    emoji: string;
-    badge: string;
-    jackpotText: string;
-    priceText: string;
-    accent: string;
-  }[] = [
-    {
-      id: "sports",
-      title: "اللوتو الرياضي",
-      emoji: "⚽",
-      badge: openSportsRounds.length > 0 ? `${openSportsRounds.length} جولات مفتوحة` : "10 مباريات",
-      jackpotText: `${fmt(currentSportsRound?.jackpot || 5_000_000)} د.ع`,
-      priceText: "5,000 د.ع",
-      accent: "from-emerald-600 to-teal-600",
-    },
-    {
-      id: "loto42",
-      title: "لوتو 42",
-      emoji: "🟣",
-      badge: `سحب #${loto42Current?.selling?.drawNumber || (loto42Draws[0]?.drawNumber || 39) + 1}`,
-      jackpotText: `${fmt(loto42Current?.selling?.jackpot || 101_666_930)} د.ع`,
-      priceText: `${fmt(loto42Current?.selling?.price || 2000)} د.ع`,
-      accent: "from-purple-600 to-indigo-600",
-    },
-    {
-      id: "loto29",
-      title: "لوتو 29",
-      emoji: "🔴",
-      badge: `سحب #${loto29Current?.selling?.drawNumber || (loto29Draws[0]?.drawNumber || 431) + 1}`,
-      jackpotText: `${fmt(loto29Current?.selling?.jackpot || 116_885_315)} د.ع`,
-      priceText: `${fmt(loto29Current?.selling?.price || 1500)} د.ع`,
-      accent: "from-rose-600 to-pink-600",
-    },
-    {
-      id: "sc500",
-      title: "طابق 3",
-      emoji: "🎫",
-      badge: `متبقي كبرى: ${sc500Report.topRemaining}`,
-      jackpotText: `${fmt(sc500Report.topPrize)} د.ع`,
-      priceText: `${fmt(sc500Report.price)} د.ع`,
-      accent: "from-amber-500 to-orange-600",
-    },
-    {
-      id: "sc1k",
-      title: "جيب الكاس جيبه",
-      emoji: "🏆",
-      badge: `متبقي كبرى: ${sc1kReport.topRemaining}`,
-      jackpotText: `${fmt(sc1kReport.topPrize)} د.ع`,
-      priceText: `${fmt(sc1kReport.price)} د.ع`,
-      accent: "from-yellow-500 to-amber-600",
-    },
-  ];
+  // 5 Game Cards DYNAMICALLY SORTED BY NEAREST UPCOMING DRAW ("تظهر حسب القريبة السحب مالتها")!
+  const SORTED_GAME_CARDS = useMemo(() => {
+    const raw: {
+      id: IraqLotoGameId;
+      title: string;
+      shortDesc: string;
+      emoji: string;
+      badge: string;
+      jackpotText: string;
+      priceText: string;
+      selectedGradient: string;
+      sortOrderMs: number;
+    }[] = [
+      {
+        id: "loto29",
+        title: "لوتو 29",
+        shortDesc: "6 أرقام من 29 • سحب الاثنين والخميس",
+        emoji: "🔴",
+        badge: `سحب #${loto29Current?.selling?.drawNumber || 432}`,
+        jackpotText: `${fmt(loto29Current?.selling?.jackpot || 116_955_342)} د.ع`,
+        priceText: `${fmt(loto29Current?.selling?.price || 1500)} د.ع`,
+        selectedGradient: "from-rose-600 to-pink-700",
+        sortOrderMs: urgencyByGame.loto29?.remainingMs ?? Number.MAX_SAFE_INTEGER - 200,
+      },
+      {
+        id: "loto42",
+        title: "لوتو 42",
+        shortDesc: "6 أرقام من 42 + إضافي • السبت والأربعاء",
+        emoji: "🟣",
+        badge: `سحب #${loto42Current?.selling?.drawNumber || 40}`,
+        jackpotText: `${fmt(loto42Current?.selling?.jackpot || 101_696_960)} د.ع`,
+        priceText: `${fmt(loto42Current?.selling?.price || 2000)} د.ع`,
+        selectedGradient: "from-purple-600 to-indigo-700",
+        sortOrderMs: urgencyByGame.loto42?.remainingMs ?? Number.MAX_SAFE_INTEGER - 150,
+      },
+      {
+        id: "sports",
+        title: "اللوتو الرياضي",
+        shortDesc: "توقع 10 مباريات • فوز يبدأ من 7/10",
+        emoji: "⚽",
+        badge: `${openSportsRounds.length} جولات مفتوحة`,
+        jackpotText: `${fmt(openSportsRounds[0]?.jackpot || 5_000_000)} د.ع`,
+        priceText: "5,000 د.ع",
+        selectedGradient: "from-emerald-600 to-teal-700",
+        sortOrderMs: urgencyByGame.sports?.remainingMs ?? Number.MAX_SAFE_INTEGER - 100,
+      },
+      {
+        id: "sc1k",
+        title: "جيب الكاس جيبه",
+        shortDesc: "كشط فوري • طابق الأرقام الرابحة",
+        emoji: "🏆",
+        badge: `متبقي كبرى: ${sc1kReport.topRemaining}`,
+        jackpotText: `${fmt(sc1kReport.topPrize)} د.ع`,
+        priceText: `${fmt(sc1kReport.price)} د.ع`,
+        selectedGradient: "from-yellow-500 to-amber-600",
+        sortOrderMs: Number.MAX_SAFE_INTEGER - 2,
+      },
+      {
+        id: "sc500",
+        title: "طابق 3",
+        shortDesc: "كشط فوري • طابق 3 مبالغ متشابهة",
+        emoji: "🎫",
+        badge: `متبقي كبرى: ${sc500Report.topRemaining}`,
+        jackpotText: `${fmt(sc500Report.topPrize)} د.ع`,
+        priceText: `${fmt(sc500Report.price)} د.ع`,
+        selectedGradient: "from-amber-500 to-orange-600",
+        sortOrderMs: Number.MAX_SAFE_INTEGER - 1,
+      },
+    ];
+    return raw.sort((a, b) => a.sortOrderMs - b.sortOrderMs);
+  }, [loto29Current, loto42Current, openSportsRounds, sc1kReport, sc500Report, urgencyByGame]);
 
-  // Shared Number-Game Renderer (used for both Loto 42 and Loto 29!)
+  // Shared Tickets & Draw-Matching Panel
+  const renderTicketsPanel = (filterGame?: IraqLotoGameId) => {
+    const list = filterGame ? tickets.filter((t) => t.game === filterGame) : tickets;
+    const isNumberGame = filterGame === "loto42" || filterGame === "loto29";
+    const maxN = filterGame === "loto29" ? 29 : 42;
+
+    return (
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-black text-base text-gray-900 dark:text-white flex items-center gap-2">
+              <Ticket className="w-5 h-5 text-indigo-500" />
+              <span>بطاقاتي المشتراة ومطابقة الفوز التلقائية ({list.length})</span>
+            </h3>
+            <p className="text-xs text-gray-500 font-bold mt-0.5">
+              إجمالي الشراء: <strong>{fmt(ticketSummary.totalSpent)} د.ع</strong> • إجمالي الجوائز:{" "}
+              <strong className="text-emerald-600">{fmt(ticketSummary.totalWon)} د.ع</strong> ({ticketSummary.wonCount} رابحة)
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const audited = runTicketsAudit(
+                  tickets,
+                  loto42Draws,
+                  loto29Draws,
+                  sportsRounds,
+                  true
+                );
+                setTickets(audited);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              <CheckCheck className="w-4 h-4" />
+              <span>طابق كل بطاقاتي مع السحب الآن</span>
+            </button>
+
+            {isNumberGame && (
+              <button
+                type="button"
+                onClick={() => {
+                  setManualNumbers([]);
+                  setManualExtra(null);
+                  setManualDrawNum("");
+                  setShowManualTicketBox((v) => !v);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>أضف بطاقة اشتريتها يدوياً</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isScanningImage}
+              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              {isScanningImage ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Camera className="w-3.5 h-3.5" />
+              )}
+              <span>{isScanningImage ? scanStatusMsg : "صوّر بطاقتك بالكاميرا 📸"}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Manual Ticket Entry Box */}
+        {isNumberGame && showManualTicketBox && (
+          <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border-2 border-indigo-200 dark:border-indigo-800 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-black text-indigo-900 dark:text-indigo-200">
+                ✍️ اختر الـ 6 أرقام الموجودة في بطاقتك ({manualNumbers.length} / 6):
+              </span>
+              <input
+                type="number"
+                value={manualDrawNum}
+                onChange={(e) => setManualDrawNum(e.target.value)}
+                placeholder="رقم السحب (اختياري، مثلاً 432)"
+                className="bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-1.5 text-xs font-bold w-48"
+              />
+            </div>
+
+            <div className="grid grid-cols-7 sm:grid-cols-11 gap-1.5" dir="ltr">
+              {Array.from({ length: maxN }, (_, i) => i + 1).map((n) => {
+                const picked = manualNumbers.includes(n);
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => {
+                      if (picked) setManualNumbers((p) => p.filter((x) => x !== n));
+                      else if (manualNumbers.length < 6)
+                        setManualNumbers((p) => [...p, n].sort((a, b) => a - b));
+                    }}
+                    className={`h-9 rounded-xl font-black text-xs border cursor-pointer transition ${
+                      picked
+                        ? "bg-indigo-600 text-white border-indigo-700 shadow"
+                        : "bg-white dark:bg-zinc-800 text-gray-800 dark:text-white border-gray-200 dark:border-zinc-700"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <label className="flex items-center gap-1.5 text-xs font-bold text-gray-600 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={recordExpenseOnSave}
+                  onChange={(e) => setRecordExpenseOnSave(e.target.checked)}
+                  className="rounded accent-rose-500"
+                />
+                <span>تسجيل سعر البطاقة تلقائياً في المصاريف</span>
+              </label>
+
+              <button
+                type="button"
+                disabled={manualNumbers.length !== 6}
+                onClick={async () => {
+                  await handleSaveNumberTicket(
+                    filterGame,
+                    manualNumbers,
+                    manualExtra,
+                    manualDrawNum ? Number(manualDrawNum) : undefined
+                  );
+                  setShowManualTicketBox(false);
+                  setManualNumbers([]);
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-black cursor-pointer"
+              >
+                حفظ ومطابقة فوراً ✅
+              </button>
+            </div>
+          </div>
+        )}
+
+        {lastScannedReport && (
+          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-black text-emerald-800 dark:text-emerald-200">
+            ✅ {lastScannedReport}
+          </div>
+        )}
+
+        {list.length === 0 ? (
+          <div className="p-8 text-center rounded-2xl bg-gray-50 dark:bg-zinc-800/40 border border-dashed border-gray-200 dark:border-zinc-700">
+            <p className="text-sm font-black text-gray-600 dark:text-gray-300">
+              لا توجد بطاقات مسجلة هنا بعد.
+            </p>
+            <p className="text-xs font-bold text-gray-400 mt-1">
+              اضغط «اعتماد وحفظ في بطاقاتي» من التنبؤ الذكي أو أضف بطاقتك يدوياً أو بالكاميرا ليطابقها النظام تلقائياً ويعلن الفوز بإشعار مسرحي!
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {list.map((t) => {
+              const matchedDraw =
+                t.game === "loto42"
+                  ? loto42Draws.find((d) => d.drawNumber === t.drawNumber)
+                  : t.game === "loto29"
+                  ? loto29Draws.find((d) => d.drawNumber === t.drawNumber)
+                  : undefined;
+
+              return (
+                <div
+                  key={t.id}
+                  className={`p-4 rounded-2xl border-2 flex flex-col gap-2.5 ${
+                    t.status === "won"
+                      ? "bg-gradient-to-br from-emerald-50 to-amber-50/70 dark:from-emerald-950/40 dark:to-amber-950/20 border-emerald-400 shadow-md"
+                      : t.status === "lost"
+                      ? "bg-gray-50 dark:bg-zinc-800/40 border-gray-200 dark:border-zinc-800"
+                      : "bg-amber-50/40 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/60"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-sm font-black text-gray-900 dark:text-white block">
+                        {t.title}
+                      </span>
+                      <span className="text-[11px] text-gray-500 font-bold">
+                        السعر: {fmt(t.cost)} د.ع •{" "}
+                        {new Date(t.createdAt).toLocaleDateString("ar-IQ")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-[11px] font-black px-2.5 py-0.5 rounded-full ${
+                          t.status === "won"
+                            ? "bg-emerald-600 text-white animate-pulse"
+                            : t.status === "lost"
+                            ? "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300"
+                            : "bg-amber-500 text-white"
+                        }`}
+                      >
+                        {t.status === "won"
+                          ? `🎉 فائزة (${fmt(t.prizeWon || 0)} د.ع)`
+                          : t.status === "lost"
+                          ? "تمت المطابقة"
+                          : "⏳ بانتظار السحب"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTicket(t.id)}
+                        className="p-1 text-gray-400 hover:text-rose-500 transition cursor-pointer"
+                        title="حذف"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* User Ticket Balls */}
+                  {t.numbers && t.numbers.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-black text-gray-500 block">
+                        أرقام بطاقتك (الأخضر = مطابق للسحب الرسمي):
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap" dir="ltr">
+                        {t.numbers.map((n) => {
+                          const hit = t.matchedNumbers?.includes(n);
+                          return (
+                            <span
+                              key={n}
+                              className={`w-8 h-8 rounded-xl text-xs font-black flex items-center justify-center ${
+                                hit
+                                  ? "bg-emerald-500 text-white ring-2 ring-emerald-300 shadow"
+                                  : "bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 text-gray-800 dark:text-white"
+                              }`}
+                            >
+                              {n}
+                            </span>
+                          );
+                        })}
+                        {t.extraNumber && (
+                          <span
+                            className={`w-8 h-8 rounded-xl text-xs font-black flex items-center justify-center ${
+                              t.extraMatched
+                                ? "bg-amber-400 text-slate-950 ring-2 ring-amber-200 shadow"
+                                : "bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200"
+                            }`}
+                          >
+                            +{t.extraNumber}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Official Draw Numbers Comparison if finalized */}
+                  {matchedDraw && Array.isArray(matchedDraw.winningNumbers) && (
+                    <div className="pt-2 border-t border-gray-200/70 dark:border-zinc-700/70">
+                      <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 block mb-1">
+                        نتيجة السحب الرسمي #{matchedDraw.drawNumber}:
+                      </span>
+                      <div className="flex items-center gap-1 flex-wrap" dir="ltr">
+                        {matchedDraw.winningNumbers.map((w) => (
+                          <span
+                            key={w}
+                            className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200 text-xs font-black flex items-center justify-center"
+                          >
+                            {w}
+                          </span>
+                        ))}
+                        {matchedDraw.extraNumber && (
+                          <span className="w-7 h-7 rounded-lg bg-amber-300 text-slate-950 text-xs font-black flex items-center justify-center">
+                            +{matchedDraw.extraNumber}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {t.sportsPicks && (
+                    <div className="flex flex-wrap gap-1 text-[10px] font-black" dir="ltr">
+                      {Object.entries(t.sportsPicks).map(([pos, pick]) => (
+                        <span
+                          key={pos}
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700"
+                        >
+                          M{pos}:{pick}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {t.prizeLabel && (
+                    <div className="text-xs font-black text-gray-800 dark:text-gray-200">
+                      {t.prizeLabel}
+                    </div>
+                  )}
+
+                  {t.status === "won" && (
+                    <button
+                      type="button"
+                      onClick={() => triggerTheatricalWin(t, true)}
+                      className="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow cursor-pointer"
+                    >
+                      <PartyPopper className="w-4 h-4" />
+                      <span>عرض إعلان الفوز المسرحي 🎉</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Number Game Renderer (Loto 42 & Loto 29) — Clean, Clear Arabic Hierarchy
   const renderNumberGame = (gameKey: "loto42" | "loto29") => {
     const is42 = gameKey === "loto42";
     const maxN: 42 | 29 = is42 ? 42 : 29;
@@ -741,6 +1400,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     const latestDraw = draws[0];
     const gameTickets = tickets.filter((t) => t.game === gameKey);
     const prizeTiers = is42 ? LOTO_42_PRIZE_TIERS : LOTO_29_PRIZE_TIERS;
+    const gameUrgency = urgencyByGame[gameKey];
 
     const filteredDraws = !archiveQuery.trim()
       ? draws
@@ -753,62 +1413,57 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
 
     return (
       <div className="space-y-4">
-        {/* Live Draw & Jackpot Hero Card */}
+        {/* Clear Summary Banner for Selected Game */}
         <div
-          className={`rounded-3xl p-4 sm:p-5 text-white shadow-xl border border-white/10 bg-gradient-to-br ${
-            is42
-              ? "from-purple-950 via-indigo-950 to-slate-950"
-              : "from-rose-950 via-pink-950 to-slate-950"
+          className={`rounded-3xl p-5 text-white shadow-xl border ${
+            gameUrgency?.urgency === "critical"
+              ? "bg-gradient-to-br from-amber-600 via-rose-700 to-purple-950 border-amber-300 ring-2 ring-amber-400/70"
+              : is42
+              ? "bg-gradient-to-br from-purple-950 via-indigo-950 to-slate-950 border-white/10"
+              : "bg-gradient-to-br from-rose-950 via-pink-950 to-slate-950 border-white/10"
           }`}
         >
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-3 py-1 rounded-full bg-white/15 text-amber-300 text-xs font-black border border-white/15">
-                  {is42 ? "🟣 لوتو 42 الرسمي (6 من 42 + إضافي)" : "🔴 لوتو 29 الرسمي (6 من 29)"}
+                <span className="px-3 py-1 rounded-full bg-white/15 text-amber-300 text-xs font-black">
+                  {is42 ? "🟣 لوتو 42 (6 أرقام من 1–42)" : "🔴 لوتو 29 (6 أرقام من 1–29)"}
                 </span>
-                <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-black border border-emerald-400/30">
+                <span className="px-2.5 py-1 rounded-full bg-emerald-500/25 text-emerald-200 text-xs font-black">
                   السحب القادم #{currentObj?.drawNumber || (latestDraw?.drawNumber || 0) + 1}
                 </span>
-                {currentObj?.ticketsSold !== undefined && (
-                  <span className="px-2.5 py-1 rounded-full bg-white/10 text-white/90 text-[11px] font-bold">
-                    التذاكر المباعة الآن: {fmt(currentObj.ticketsSold)}
+                {gameUrgency && (gameUrgency.urgency === "critical" || gameUrgency.urgency === "soon") && (
+                  <span className="px-3 py-1 rounded-full bg-amber-400 text-slate-950 text-xs font-black animate-pulse">
+                    🔥 سحب قريب — استعمل هذه اللعبة الآن
                   </span>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-baseline gap-3 pt-1">
+              <div className="flex flex-wrap items-baseline gap-4">
                 <div>
-                  <span className="text-[11px] text-white/70 font-bold block">
-                    الجائزة الكبرى الحالية (مباشر من الموقع)
-                  </span>
-                  <span className="text-2xl sm:text-4xl font-black text-amber-300 tracking-tight">
-                    {fmt(currentObj?.jackpot || (is42 ? 101_666_930 : 116_885_315))}{" "}
-                    <span className="text-sm font-bold text-white/80">د.ع</span>
+                  <span className="text-xs text-white/75 font-bold block">الجائزة الكبرى الآن:</span>
+                  <span className="text-3xl sm:text-4xl font-black text-amber-300">
+                    {fmt(currentObj?.jackpot || (is42 ? 101_696_960 : 116_955_342))}{" "}
+                    <span className="text-sm font-bold text-white/85">د.ع</span>
                   </span>
                 </div>
-
                 {is42 && currentObj?.miniJackpot && (
-                  <div className="bg-white/10 rounded-2xl px-3.5 py-2 border border-white/10">
-                    <span className="text-[10px] text-purple-200 font-bold block">
-                      الجائزة الثانية (5 + الإضافي)
-                    </span>
-                    <span className="text-base sm:text-lg font-black text-white">
-                      {fmt(currentObj.miniJackpot)} <span className="text-[10px]">د.ع</span>
-                    </span>
+                  <div className="bg-white/10 rounded-2xl px-3.5 py-2">
+                    <span className="text-[11px] text-purple-200 font-bold block">الجائزة الثانية (5 + الإضافي)</span>
+                    <span className="text-base font-black text-white">{fmt(currentObj.miniJackpot)} د.ع</span>
                   </div>
                 )}
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end gap-2">
-              <div className="bg-black/30 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-white/15 text-center sm:text-right">
-                <div className="text-[10px] text-amber-200 font-bold flex items-center gap-1.5 justify-center sm:justify-start">
+              <div className="bg-black/35 backdrop-blur-md rounded-2xl px-4 py-2.5 border border-white/20 text-center sm:text-right">
+                <div className="text-[11px] text-amber-200 font-bold flex items-center gap-1.5 justify-center sm:justify-start">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>العد التنازلي لإغلاق البيع والسحب (8:50 م):</span>
+                  <span>الوقت المتبقي لإغلاق السحب:</span>
                 </div>
-                <div className="text-lg font-black text-white font-mono mt-0.5" dir="ltr">
-                  {formatCountdown(currentObj?.drawAt, nowMs)}
+                <div className="text-xl font-black text-white font-mono mt-0.5" dir="ltr">
+                  {formatCountdown(currentObj?.salesCloseAt || currentObj?.drawAt, nowMs)}
                 </div>
               </div>
 
@@ -816,64 +1471,54 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                 href={is42 ? "https://loto.iq/play" : "https://loto.iq/29/play"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-black flex items-center justify-center gap-1.5 border border-white/20 transition"
+                className="px-4 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-black flex items-center justify-center gap-1.5 border border-white/25 transition"
               >
                 <ExternalLink className="w-3.5 h-3.5 text-amber-300" />
-                <span>فتح صفحة {is42 ? "لوتو 42" : "لوتو 29"} في loto.iq</span>
+                <span>الذهاب للشراء في موقع loto.iq</span>
               </a>
             </div>
           </div>
 
-          {/* Latest Official Winning Result Strip */}
           {latestDraw && Array.isArray(latestDraw.winningNumbers) && (
             <div className="mt-4 pt-3.5 border-t border-white/15 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-black text-emerald-300">
-                  🏆 آخر نتيجة رسمية مسحوبة (#{latestDraw.drawNumber} —{" "}
-                  {new Date(latestDraw.drawAt).toLocaleDateString("ar-IQ")}):
+                  🏆 آخر سحب فائز (#{latestDraw.drawNumber} — {new Date(latestDraw.drawAt).toLocaleDateString("ar-IQ")}):
                 </span>
                 <div className="flex items-center gap-1.5 flex-wrap" dir="ltr">
                   {latestDraw.winningNumbers.map((n) => (
                     <span
                       key={n}
-                      className="w-8 h-8 rounded-xl bg-white text-slate-900 font-black text-xs flex items-center justify-center shadow"
+                      className="w-8 h-8 rounded-xl bg-white text-slate-900 font-black text-sm flex items-center justify-center shadow"
                     >
                       {n}
                     </span>
                   ))}
                   {is42 && latestDraw.extraNumber && (
                     <>
-                      <span className="text-amber-300 font-black text-xs px-0.5">+</span>
-                      <span
-                        className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shadow ring-2 ring-amber-200"
-                        title="الرقم الإضافي"
-                      >
+                      <span className="text-amber-300 font-black text-xs">+</span>
+                      <span className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center shadow">
                         {latestDraw.extraNumber}
                       </span>
                     </>
                   )}
                 </div>
               </div>
-              <span className="text-[11px] text-white/75 font-bold">
-                إجمالي السحوبات المحللة بالمحرك: {portfolioObj.stats.totalDraws} سحبة رسمية
+              <span className="text-xs text-white/80 font-bold">
+                مبني على تحليل {portfolioObj.stats.totalDraws} سحبة رسمية
               </span>
             </div>
           )}
         </div>
 
-        {/* ALL-VISIBLE 4 Sub-Tabs Grid (No horizontal slider!) */}
-        <div
-          role="tablist"
-          aria-label="أقسام لعبة الأرقام"
-          className="grid grid-cols-2 sm:grid-cols-4 gap-2"
-        >
+        {/* 4 Clear Sub-Tabs */}
+        <div role="tablist" aria-label="أقسام لعبة الأرقام" className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
-            { id: "predict", label: "التنبؤ الذكي الفائق", icon: Sparkles, count: 3 },
-            { id: "tickets", label: "بطاقاتي والنتائج", icon: Ticket, count: gameTickets.length },
-            { id: "history", label: "أرشيف السحوبات", icon: Calendar, count: draws.length },
-            { id: "stats", label: "الخريطة الحرارية والجوائز", icon: BarChart2, count: maxN },
+            { id: "predict", label: "🎯 التنبؤ والأرقام المقترحة", count: 3 },
+            { id: "tickets", label: "🎫 بطاقاتي ومطابقة الفوز", count: gameTickets.length },
+            { id: "history", label: "📅 السحوبات السابقة", count: draws.length },
+            { id: "stats", label: "📊 الإحصاء والجوائز", count: maxN },
           ].map((tab) => {
-            const Icon = tab.icon;
             const selected = numberSubView === tab.id;
             return (
               <button
@@ -888,7 +1533,6 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                     : "bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 text-gray-700 dark:text-gray-200 hover:border-indigo-400"
                 }`}
               >
-                <Icon className="w-3.5 h-3.5 shrink-0" />
                 <span>{tab.label}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full ${
@@ -904,23 +1548,19 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
           })}
         </div>
 
-        {/* SUBVIEW 1: SUPER PREDICTION ENGINE */}
+        {/* SUBVIEW 1: CLEAR PREDICTION */}
         {numberSubView === "predict" && (
-          <div className="space-y-4">
-            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-6 border border-gray-200/80 dark:border-zinc-800 shadow-sm space-y-5">
-              {/* Controls Header */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-6 border border-gray-200/80 dark:border-zinc-800 shadow-sm space-y-5">
+            {/* Primary Recommended Ticket */}
+            <div className="rounded-3xl p-5 bg-gradient-to-br from-indigo-50 via-purple-50/70 to-amber-50/60 dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-zinc-900 border-2 border-indigo-300 dark:border-indigo-500/40 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
-                      🧠 محرك التنبؤ الهجين (7 عوامل رياضية + الذكاء الخارق)
-                    </h3>
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[11px] font-black">
-                      دقة التطابق الهيكلي: {primaryPred.qualityScore}%
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 font-bold mt-0.5">
-                    يحلل التردد الموزون زمنياً (EWMA)، فجوات الارتداد، نطاقات المراكز الستة، وتآزر الأزواج على {portfolioObj.stats.totalDraws} سحبة حقيقية.
+                  <span className="text-sm sm:text-base font-black text-indigo-950 dark:text-indigo-100 flex items-center gap-1.5">
+                    <Award className="w-5 h-5 text-amber-500" />
+                    <span>الأرقام الموصى بها للسحب القادم (دقة التوازن {primaryPred.qualityScore}%)</span>
+                  </span>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 font-bold mt-0.5">
+                    انسخ هذه الأرقام أو احفظها في «بطاقاتي» ليراقب النظام السحب ويعلن لك الفوز تلقائياً.
                   </p>
                 </div>
 
@@ -929,35 +1569,27 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                     type="button"
                     onClick={() => handleRunGeminiLoto(gameKey)}
                     disabled={isRunningGeminiLoto}
-                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 hover:opacity-95 text-white text-xs font-black shadow-md flex items-center gap-1.5 transition active:scale-95 disabled:opacity-60 cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white text-xs font-black shadow flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
                   >
                     {isRunningGeminiLoto ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
-                      <BrainCircuit className="w-3.5 h-3.5 text-amber-200" />
+                      <BrainCircuit className="w-4 h-4 text-amber-200" />
                     )}
-                    <span>استنتاج عميق بالذكاء الخارق Gemini</span>
+                    <span>استشارة الذكاء الخارق Gemini</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setShowCustomPicker((v) => !v)}
-                    className={`px-3 py-2 rounded-xl text-xs font-black border transition flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-2 rounded-xl text-xs font-black border flex items-center gap-1 cursor-pointer ${
                       showCustomPicker || lockState.numbers.length > 0
                         ? "bg-amber-500 text-white border-amber-500"
-                        : "bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-zinc-700"
+                        : "bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-zinc-700"
                     }`}
                   >
-                    {lockState.numbers.length > 0 ? (
-                      <Lock className="w-3.5 h-3.5" />
-                    ) : (
-                      <Sliders className="w-3.5 h-3.5" />
-                    )}
-                    <span>
-                      {lockState.numbers.length > 0
-                        ? `مثبت (${lockState.numbers.length}/6)`
-                        : "تثبيت أرقام مفضلة"}
-                    </span>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>{lockState.numbers.length > 0 ? `مثبت (${lockState.numbers.length})` : "ثبّت أرقامك"}</span>
                   </button>
 
                   <button
@@ -969,261 +1601,213 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                         return next;
                       });
                       setSeedSalt((s) => s + 1);
-                      toast.success("تم توليد محفظة تنبؤات إحصائية جديدة 🎯");
+                      toast.success("تم توليد أرقام بديلة جديدة 🎯");
                     }}
-                    className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200 text-xs font-black flex items-center gap-1.5 transition cursor-pointer"
+                    className="px-3 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-800 dark:text-gray-200 text-xs font-black flex items-center gap-1 cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    <span>توليفة بديلة</span>
+                    <span>تغيير</span>
                   </button>
                 </div>
               </div>
 
-              {/* Custom Number Lock Matrix */}
-              {showCustomPicker && (
-                <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-black text-amber-900 dark:text-amber-200">
-                      🔒 اختر من 1 إلى 6 أرقام لتثبيتها، وسيقوم المحرك ببناء أفضل الأرقام المكملة حولها علمياً:
+              {/* Big Clear Numbers */}
+              <div className="flex flex-wrap items-center justify-center gap-3 py-3" dir="ltr">
+                {primaryPred.numbers.map((num) => {
+                  const isHot = portfolioObj.stats.hotNumbers.includes(num);
+                  const isDue = portfolioObj.stats.overdueNumbers.includes(num);
+                  return (
+                    <div key={num} className="flex flex-col items-center gap-1">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-rose-600 text-white font-black text-2xl flex items-center justify-center shadow-lg ring-2 ring-white dark:ring-zinc-800">
+                        {num}
+                      </div>
+                      <span className="text-[10px] font-black text-gray-600 dark:text-gray-300">
+                        {isHot ? "🔥 متكرر" : isDue ? "⚡ متأخر" : "⚖️ متوازن"}
+                      </span>
+                    </div>
+                  );
+                })}
+                {is42 && primaryPred.extraNumber && (
+                  <div className="flex flex-col items-center gap-1 pl-3 border-l-2 border-indigo-200 dark:border-zinc-700">
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-slate-950 font-black text-2xl flex items-center justify-center shadow-lg ring-2 ring-amber-200">
+                      {primaryPred.extraNumber}
+                    </div>
+                    <span className="text-[10px] font-black text-amber-600 dark:text-amber-400">
+                      ⭐ الإضافي
                     </span>
-                    {lockState.numbers.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const next = {
-                            ...lockedByGame,
-                            [gameKey]: { numbers: [], extra: null, locked: false },
-                          };
-                          setLockedByGame(next);
-                          await persistHub({ lockedByGame: next });
-                        }}
-                        className="text-xs font-black text-rose-600 hover:underline"
-                      >
-                        إلغاء التثبيت بالكامل
-                      </button>
-                    )}
                   </div>
-                  <div className="grid grid-cols-7 sm:grid-cols-10 md:grid-cols-14 gap-1.5" dir="ltr">
-                    {Array.from({ length: maxN }, (_, i) => i + 1).map((num) => {
-                      const isLockedBall = lockState.numbers.includes(num);
-                      const isHot = portfolioObj.stats.hotNumbers.includes(num);
-                      const isDue = portfolioObj.stats.overdueNumbers.includes(num);
-                      return (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => toggleLockedBall(gameKey, num)}
-                          className={`h-9 rounded-xl font-black text-xs flex items-center justify-center relative border transition cursor-pointer ${
-                            isLockedBall
-                              ? "bg-amber-500 border-amber-600 text-white shadow scale-105"
-                              : isHot
-                              ? "bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200"
-                              : isDue
-                              ? "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-300 dark:border-cyan-800 text-cyan-800 dark:text-cyan-200"
-                              : "bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 text-gray-800 dark:text-gray-200"
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      );
-                    })}
-                  </div>
+                )}
+              </div>
+
+              {/* Primary Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleSaveNumberTicket(gameKey, primaryPred.numbers, primaryPred.extraNumber)
+                  }
+                  className="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black flex items-center justify-center gap-2 shadow-md cursor-pointer active:scale-[0.99] transition"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>اعتمد هذه الأرقام واحفظها في بطاقاتي (للمطابقة والإعلان)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyText(
+                      "primary",
+                      `${primaryPred.numbers.join(" - ")}${
+                        primaryPred.extraNumber ? ` | الإضافي: ${primaryPred.extraNumber}` : ""
+                      }`
+                    )
+                  }
+                  className="py-3 px-4 rounded-2xl bg-white dark:bg-zinc-800 border-2 border-indigo-200 dark:border-zinc-700 text-gray-900 dark:text-white text-sm font-black flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {copiedKey === "primary" ? (
+                    <Check className="w-4 h-4 text-emerald-500" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                  <span>نسخ الأرقام للشراء في الموقع</span>
+                </button>
+              </div>
+
+              {aiData?.expertSummaryAr && (
+                <div className="p-3.5 rounded-2xl bg-purple-600/10 border border-purple-400/30 text-xs font-bold text-purple-950 dark:text-purple-200 leading-relaxed">
+                  🧠 <strong>رأي الذكاء الخارق Gemini:</strong> {aiData.expertSummaryAr}
                 </div>
               )}
 
-              {/* Primary Golden / AI Prediction Display */}
-              <div className="rounded-3xl p-5 bg-gradient-to-br from-indigo-50 via-purple-50/70 to-amber-50/50 dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-zinc-900 border-2 border-indigo-200 dark:border-indigo-500/40 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs sm:text-sm font-black text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
-                    <Award className="w-4 h-4 text-amber-500" />
-                    <span>{primaryPred.label}</span>
+              {/* Simple Arabic Reasons */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-center">
+                <div className="bg-white/90 dark:bg-zinc-900/90 p-2.5 rounded-2xl border border-gray-200/70 dark:border-zinc-800">
+                  <span className="text-[11px] text-gray-500 font-bold block">مجموع الأرقام</span>
+                  <span className="text-xs font-black text-gray-900 dark:text-white">
+                    {primaryPred.sum} (المثالي {portfolioObj.stats.goldenSumRange[0]}–
+                    {portfolioObj.stats.goldenSumRange[1]})
                   </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        copyText(
-                          "primary",
-                          `${primaryPred.numbers.join(" - ")}${
-                            primaryPred.extraNumber ? ` | الإضافي: ${primaryPred.extraNumber}` : ""
-                          }`
-                        )
-                      }
-                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-xs font-black text-gray-700 dark:text-gray-200 flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedKey === "primary" ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-500" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
-                      <span>نسخ الأرقام</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleSaveNumberTicket(
-                          gameKey,
-                          primaryPred.numbers,
-                          primaryPred.extraNumber
-                        )
-                      }
-                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1 shadow-sm cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>اعتماد وحفظ في بطاقاتي</span>
-                    </button>
-                  </div>
                 </div>
-
-                {/* The 6 Balls + Extra Ball */}
-                <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3.5 py-2" dir="ltr">
-                  {primaryPred.numbers.map((num) => {
-                    const isHot = portfolioObj.stats.hotNumbers.includes(num);
-                    const isDue = portfolioObj.stats.overdueNumbers.includes(num);
-                    return (
-                      <div key={num} className="flex flex-col items-center gap-1">
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-rose-600 text-white font-black text-lg sm:text-xl flex items-center justify-center shadow-lg ring-2 ring-white dark:ring-zinc-800">
-                          {num}
-                        </div>
-                        <span className="text-[9px] font-black text-gray-500 dark:text-gray-400">
-                          {isHot ? "🔥 ساخن" : isDue ? "❄️ ارتداد" : "⚖️ محوري"}
-                        </span>
-                      </div>
-                    );
-                  })}
-
-                  {is42 && primaryPred.extraNumber && (
-                    <div className="flex flex-col items-center gap-1 pl-2 border-l border-indigo-200 dark:border-zinc-700">
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-slate-950 font-black text-lg sm:text-xl flex items-center justify-center shadow-lg ring-2 ring-amber-200">
-                        {primaryPred.extraNumber}
-                      </div>
-                      <span className="text-[9px] font-black text-amber-600 dark:text-amber-400">
-                        ⭐ الإضافي
-                      </span>
-                    </div>
-                  )}
+                <div className="bg-white/90 dark:bg-zinc-900/90 p-2.5 rounded-2xl border border-gray-200/70 dark:border-zinc-800">
+                  <span className="text-[11px] text-gray-500 font-bold block">توازن الفردي والزوجي</span>
+                  <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                    {primaryPred.oddEven}
+                  </span>
                 </div>
-
-                {aiData?.expertSummaryAr && (
-                  <div className="p-3 rounded-2xl bg-purple-600/10 border border-purple-400/30 text-xs font-bold text-purple-950 dark:text-purple-200 leading-relaxed">
-                    🧠 <strong>تقرير الذكاء الخارق Gemini:</strong> {aiData.expertSummaryAr}
-                  </div>
-                )}
-
-                {/* 5 Quantitative Proof Pills */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
-                  <div className="bg-white/90 dark:bg-zinc-900/90 p-2.5 rounded-2xl border border-gray-200/70 dark:border-zinc-800">
-                    <span className="text-[10px] text-gray-400 font-bold block">مجموع الأرقام</span>
-                    <span className="text-xs font-black text-gray-900 dark:text-white">
-                      {primaryPred.sum} (الذهبي {portfolioObj.stats.goldenSumRange[0]}–
-                      {portfolioObj.stats.goldenSumRange[1]})
-                    </span>
-                  </div>
-                  <div className="bg-white/90 dark:bg-zinc-900/90 p-2.5 rounded-2xl border border-gray-200/70 dark:border-zinc-800">
-                    <span className="text-[10px] text-gray-400 font-bold block">الفردي / الزوجي</span>
-                    <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
-                      {primaryPred.oddEven}
-                    </span>
-                  </div>
-                  <div className="bg-white/90 dark:bg-zinc-900/90 p-2.5 rounded-2xl border border-gray-200/70 dark:border-zinc-800">
-                    <span className="text-[10px] text-gray-400 font-bold block">التوزيع الموضعي</span>
-                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
-                      {primaryPred.positionalFitPct}% مطابق للمراكز
-                    </span>
-                  </div>
-                  <div className="bg-white/90 dark:bg-zinc-900/90 p-2.5 rounded-2xl border border-gray-200/70 dark:border-zinc-800">
-                    <span className="text-[10px] text-gray-400 font-bold block">تآزر الأزواج</span>
-                    <span className="text-xs font-black text-amber-600 dark:text-amber-400">
-                      +{primaryPred.pairSynergy} رابط تاريخي
-                    </span>
-                  </div>
-                  <div className="bg-white/90 dark:bg-zinc-900/90 p-2.5 rounded-2xl border border-gray-200/70 dark:border-zinc-800 col-span-2 sm:col-span-1">
-                    <span className="text-[10px] text-gray-400 font-bold block">اختبار الأثر الرجعي</span>
-                    <span className="text-xs font-black text-rose-600 dark:text-rose-400">
-                      {primaryPred.backtestHits3Plus} مرات 3+ أرقام
-                    </span>
-                  </div>
-                </div>
-
-                {/* Detailed Scientific Reasons */}
-                <div className="space-y-1 pt-1">
-                  {primaryPred.reasonsAr.map((r, idx) => (
-                    <div
-                      key={idx}
-                      className="text-[11px] font-bold text-gray-700 dark:text-gray-300 flex items-start gap-1.5"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                      <span>{r}</span>
-                    </div>
-                  ))}
+                <div className="bg-white/90 dark:bg-zinc-900/90 p-2.5 rounded-2xl border border-gray-200/70 dark:border-zinc-800">
+                  <span className="text-[11px] text-gray-500 font-bold block">تطابق سابق (3+ أرقام)</span>
+                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                    حققت فوزاً {primaryPred.backtestHits3Plus} مرات بالتجربة الرجعية
+                  </span>
                 </div>
               </div>
+            </div>
 
-              {/* Secondary Complementary Coverage Portfolio (Tickets 2 & 3) */}
-              <div className="space-y-2.5">
-                <h4 className="text-xs font-black text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-purple-500" />
-                  <span>التوليفات الرديفة لتغطية طيف الأرقام (بدون تكرار مفرط مع التوليفة الأولى):</span>
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {portfolioObj.portfolio.slice(1).map((alt, i) => (
-                    <div
-                      key={i}
-                      className="rounded-2xl p-3.5 bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/80 dark:border-zinc-700/80 flex flex-col gap-2.5"
+            {showCustomPicker && (
+              <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-black text-amber-900 dark:text-amber-200">
+                    🔒 اضغط على أي رقم لتثبيته في التوليفة (البرتقالي الذهبي = الأقوى حالياً):
+                  </span>
+                  {lockState.numbers.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const next = {
+                          ...lockedByGame,
+                          [gameKey]: { numbers: [], extra: null, locked: false },
+                        };
+                        setLockedByGame(next);
+                        await persistHub({ lockedByGame: next });
+                      }}
+                      className="text-xs font-black text-rose-600 hover:underline"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-black text-gray-800 dark:text-white">
-                          {alt.label}
-                        </span>
-                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                          كفاءة {alt.qualityScore}%
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap" dir="ltr">
-                        {alt.numbers.map((n) => (
-                          <span
-                            key={n}
-                            className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-600 font-black text-xs text-gray-900 dark:text-white flex items-center justify-center"
-                          >
-                            {n}
-                          </span>
-                        ))}
-                        {is42 && alt.extraNumber && (
-                          <span className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center">
-                            +{alt.extraNumber}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 font-bold">
-                        <span>المجموع: {alt.sum} | {alt.oddEven}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleSaveNumberTicket(gameKey, alt.numbers, alt.extraNumber)
-                          }
-                          className="text-emerald-600 dark:text-emerald-400 font-black hover:underline cursor-pointer"
-                        >
-                          + حفظ ببطاقاتي
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                      إلغاء كل التثبيت
+                    </button>
+                  )}
                 </div>
+                <div className="grid grid-cols-7 sm:grid-cols-10 md:grid-cols-14 gap-1.5" dir="ltr">
+                  {Array.from({ length: maxN }, (_, i) => i + 1).map((num) => {
+                    const isLockedBall = lockState.numbers.includes(num);
+                    const isPrimeImminent = portfolioObj.stats.primeZoneNumbers.slice(0, 6).includes(num);
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => toggleLockedBall(gameKey, num)}
+                        className={`h-9 rounded-xl font-black text-xs flex items-center justify-center border transition cursor-pointer ${
+                          isLockedBall
+                            ? "bg-indigo-600 border-indigo-700 text-white shadow scale-105"
+                            : isPrimeImminent
+                            ? "bg-amber-400 border-amber-500 text-slate-950 shadow-sm"
+                            : "bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 text-gray-800 dark:text-gray-200"
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 2 Backup Options */}
+            <div className="space-y-2.5">
+              <h4 className="text-xs font-black text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-purple-500" />
+                <span>توليفتان إضافيتان (في حال أردت شراء أكثر من بطاقة لتوسيع فرص الفوز):</span>
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {portfolioObj.portfolio.slice(1).map((alt, i) => (
+                  <div
+                    key={i}
+                    className="rounded-2xl p-3.5 bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/80 dark:border-zinc-700/80 flex flex-col gap-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-black text-gray-800 dark:text-white">{alt.label}</span>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                        توازن {alt.qualityScore}%
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap" dir="ltr">
+                      {alt.numbers.map((n) => (
+                        <span
+                          key={n}
+                          className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-600 font-black text-xs text-gray-900 dark:text-white flex items-center justify-center"
+                        >
+                          {n}
+                        </span>
+                      ))}
+                      {is42 && alt.extraNumber && (
+                        <span className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center">
+                          +{alt.extraNumber}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] font-bold text-gray-500">
+                      <span>المجموع: {alt.sum}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveNumberTicket(gameKey, alt.numbers, alt.extraNumber)}
+                        className="text-emerald-600 dark:text-emerald-400 font-black hover:underline cursor-pointer"
+                      >
+                        + حفظ في بطاقاتي
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* SUBVIEW 2: SAVED TICKETS FOR THIS GAME */}
         {numberSubView === "tickets" && renderTicketsPanel(gameKey)}
 
-        {/* SUBVIEW 3: OFFICIAL DRAWS ARCHIVE */}
         {numberSubView === "history" && (
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white">
-                📅 أرشيف السحوبات الرسمية ({draws.length} سحبة موثقة)
+                📅 أرشيف السحوبات الرسمية ({draws.length} سحبة)
               </h3>
               <div className="relative w-full sm:w-64">
                 <Search className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -1272,62 +1856,47 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
           </div>
         )}
 
-        {/* SUBVIEW 4: HEATMAP STATS & PRIZE TIERS */}
         {numberSubView === "stats" && (
           <div className="space-y-4">
             <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-4">
-              <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white">
-                🔥 الخريطة الحرارية ومؤشر القوة لكل رقم (1 إلى {maxN})
-              </h3>
-              <div className="grid grid-cols-4 sm:grid-cols-7 md:grid-cols-10 gap-2" dir="ltr">
-                {portfolioObj.stats.metrics.map((m) => (
-                  <div
-                    key={m.number}
-                    className={`p-2 rounded-2xl border text-center ${
-                      m.tag === "hot"
-                        ? "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800"
-                        : m.tag === "overdue"
-                        ? "bg-cyan-50 dark:bg-cyan-950/30 border-cyan-300 dark:border-cyan-800"
-                        : m.tag === "prime_zone"
-                        ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800"
-                        : "bg-gray-50 dark:bg-zinc-800/50 border-gray-200 dark:border-zinc-700"
-                    }`}
-                  >
-                    <div className="text-sm font-black text-gray-900 dark:text-white">
-                      {m.number}
-                    </div>
-                    <div className="text-[9px] font-bold text-gray-500 dark:text-gray-400">
-                      ظهور: {m.count} ({m.frequencyPct}%)
-                    </div>
-                    <div className="text-[9px] font-black text-indigo-600 dark:text-indigo-400">
-                      غاب: {m.drawsSinceLastSeen} سحب
-                    </div>
-                  </div>
-                ))}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white">
+                  🔥 الأرقام الأقوى والأقرب للظهور (من 1 إلى {maxN})
+                </h3>
+                <span className="text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-400 text-slate-950">
+                  ⭐ البرتقالي الذهبي = الأقوى ترجيحاً للسحب القادم
+                </span>
               </div>
-
-              {/* Top Co-occurring Pairs */}
-              <div className="pt-3 border-t border-gray-100 dark:border-zinc-800">
-                <h4 className="text-xs font-black text-gray-700 dark:text-gray-300 mb-2">
-                  🔗 أقوى الثنائيات المتلازمة في السحوبات الرسمية:
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {portfolioObj.stats.topPairs.map((p, i) => (
-                    <span
-                      key={i}
-                      className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-xs font-black text-indigo-800 dark:text-indigo-200"
+              <div className="grid grid-cols-4 sm:grid-cols-7 md:grid-cols-10 gap-2" dir="ltr">
+                {portfolioObj.stats.metrics.map((m) => {
+                  const isTopImminent = portfolioObj.stats.primeZoneNumbers.slice(0, 6).includes(m.number);
+                  return (
+                    <div
+                      key={m.number}
+                      className={`p-2 rounded-2xl border text-center ${
+                        isTopImminent
+                          ? "bg-gradient-to-br from-amber-300 to-orange-400 border-amber-500 text-slate-950 shadow-md ring-2 ring-amber-300"
+                          : m.tag === "hot"
+                          ? "bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800"
+                          : m.tag === "overdue"
+                          ? "bg-cyan-50 dark:bg-cyan-950/30 border-cyan-300 dark:border-cyan-800"
+                          : "bg-gray-50 dark:bg-zinc-800/50 border-gray-200 dark:border-zinc-700"
+                      }`}
                     >
-                      ({p.pair[0]} + {p.pair[1]}) ← {p.count} مرات
-                    </span>
-                  ))}
-                </div>
+                      <div className="text-sm font-black">
+                        {m.number} {isTopImminent ? "⭐" : ""}
+                      </div>
+                      <div className="text-[9px] font-bold opacity-80">ظهور: {m.count}</div>
+                      <div className="text-[9px] font-black">غاب: {m.drawsSinceLastSeen}</div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Official Prize Table */}
             <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-2.5">
               <h3 className="font-black text-sm text-gray-900 dark:text-white">
-                🏆 جدول فئات الجوائز الرسمية ({is42 ? "لوتو 42" : "لوتو 29"})
+                🏆 جدول الجوائز الرسمية ({is42 ? "لوتو 42" : "لوتو 29"})
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {prizeTiers.map((t, i) => {
@@ -1343,9 +1912,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                       className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/60 dark:border-zinc-700 flex items-center justify-between"
                     >
                       <div>
-                        <span className="text-xs font-black text-gray-900 dark:text-white block">
-                          {t.match}
-                        </span>
+                        <span className="text-xs font-black text-gray-900 dark:text-white block">{t.match}</span>
                         <span className="text-[10px] text-gray-500 font-bold">{t.label}</span>
                       </div>
                       <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
@@ -1362,169 +1929,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     );
   };
 
-  // Shared Tickets Panel (supports filtering by current game or viewing all)
-  const renderTicketsPanel = (filterGame?: IraqLotoGameId) => {
-    const list = filterGame ? tickets.filter((t) => t.game === filterGame) : tickets;
-    return (
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white">
-              🎫 سجل بطاقاتي الموثقة وفحص الفوز التلقائي ({list.length})
-            </h3>
-            <p className="text-xs text-gray-500 font-bold">
-              إجمالي الشراء: {fmt(ticketSummary.totalSpent)} د.ع | إجمالي الجوائز المحققة:{" "}
-              <span className="text-emerald-600 font-black">{fmt(ticketSummary.totalWon)} د.ع</span>
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-gray-600 dark:text-gray-300 cursor-pointer bg-gray-50 dark:bg-zinc-800 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-zinc-700">
-              <input
-                type="checkbox"
-                checked={recordExpenseOnSave}
-                onChange={(e) => setRecordExpenseOnSave(e.target.checked)}
-                className="rounded accent-rose-500"
-              />
-              <span>ربط الشراء بسجل المصاريف تلقائياً</span>
-            </label>
-
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isScanningImage}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              {isScanningImage ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Camera className="w-3.5 h-3.5" />
-              )}
-              <span>{isScanningImage ? scanStatusMsg : "مسح بطاقة بالكاميرا 📸"}</span>
-            </button>
-          </div>
-        </div>
-
-        {lastScannedReport && (
-          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-black text-emerald-800 dark:text-emerald-200">
-            ✅ {lastScannedReport}
-          </div>
-        )}
-
-        {list.length === 0 ? (
-          <div className="p-8 text-center rounded-2xl bg-gray-50 dark:bg-zinc-800/40 border border-dashed border-gray-200 dark:border-zinc-700">
-            <p className="text-sm font-black text-gray-500 dark:text-gray-400">
-              لا توجد بطاقات محفوظة في هذا القسم بعد — يمكنك اعتماد أي تنبؤ بضغطة زر أو مسح بطاقتك بالكاميرا.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {list.map((t) => (
-              <div
-                key={t.id}
-                className={`p-3.5 rounded-2xl border flex flex-col gap-2 ${
-                  t.status === "won"
-                    ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700"
-                    : t.status === "lost"
-                    ? "bg-gray-50 dark:bg-zinc-800/40 border-gray-200 dark:border-zinc-800"
-                    : "bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/50"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="text-xs font-black text-gray-900 dark:text-white block">
-                      {t.title}
-                    </span>
-                    <span className="text-[10px] text-gray-500 font-bold">
-                      التكلفة: {fmt(t.cost)} د.ع •{" "}
-                      {new Date(t.createdAt).toLocaleDateString("ar-IQ")}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                        t.status === "won"
-                          ? "bg-emerald-500 text-white"
-                          : t.status === "lost"
-                          ? "bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-gray-300"
-                          : "bg-amber-500 text-white"
-                      }`}
-                    >
-                      {t.status === "won"
-                        ? `رابحة (${fmt(t.prizeWon || 0)} د.ع)`
-                        : t.status === "lost"
-                        ? "تم الفحص"
-                        : "بانتظار السحب"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteTicket(t.id)}
-                      className="p-1 text-gray-400 hover:text-rose-500 transition cursor-pointer"
-                      title="حذف"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {t.numbers && t.numbers.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap" dir="ltr">
-                    {t.numbers.map((n) => {
-                      const hit = t.matchedNumbers?.includes(n);
-                      return (
-                        <span
-                          key={n}
-                          className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center ${
-                            hit
-                              ? "bg-emerald-500 text-white ring-2 ring-emerald-300"
-                              : "bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 text-gray-800 dark:text-white"
-                          }`}
-                        >
-                          {n}
-                        </span>
-                      );
-                    })}
-                    {t.extraNumber && (
-                      <span
-                        className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center ${
-                          t.extraMatched
-                            ? "bg-amber-400 text-slate-950 ring-2 ring-amber-200"
-                            : "bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200"
-                        }`}
-                      >
-                        +{t.extraNumber}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {t.sportsPicks && (
-                  <div className="flex flex-wrap gap-1 text-[10px] font-black" dir="ltr">
-                    {Object.entries(t.sportsPicks).map(([pos, pick]) => (
-                      <span
-                        key={pos}
-                        className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700"
-                      >
-                        M{pos}:{pick}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {t.prizeLabel && (
-                  <div className="text-[11px] font-bold text-gray-700 dark:text-gray-300">
-                    {t.prizeLabel}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Scratch Card Renderer (طابق 3 SC500 & جيب الكاس جيبه SC1K)
+  // Scratch Game Renderer
   const renderScratchGame = (code: "SC500" | "SC1K") => {
     const spec = SCRATCH_SPECS[code];
     const report = code === "SC500" ? sc500Report : sc1kReport;
@@ -1533,48 +1938,37 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
 
     return (
       <div className="space-y-4">
-        {/* Hero Card */}
-        <div className="rounded-3xl p-4 sm:p-5 bg-gradient-to-br from-amber-950 via-orange-950 to-slate-950 text-white border border-white/10 shadow-xl">
+        <div className="rounded-3xl p-5 bg-gradient-to-br from-amber-950 via-orange-950 to-slate-950 text-white border border-white/10 shadow-xl">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-black border border-amber-300/30">
-                  {code === "SC500" ? "🎫 طابق 3 (SC500)" : "🏆 جيب الكاس جيبه (SC1K)"}
+                <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-black">
+                  {code === "SC500" ? "🎫 طابق 3 (500 د.ع)" : "🏆 جيب الكاس جيبه (1,000 د.ع)"}
                 </span>
                 <span
                   className={`px-3 py-1 rounded-full text-xs font-black ${
                     report.verdictTone === "emerald"
-                      ? "bg-emerald-500/25 text-emerald-200 border border-emerald-400/40"
-                      : "bg-rose-500/30 text-rose-200 border border-rose-400/40"
+                      ? "bg-emerald-500/25 text-emerald-200"
+                      : "bg-rose-500/30 text-rose-200"
                   }`}
                 >
                   {report.verdictBadge}
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-baseline gap-4 pt-1">
+              <div className="flex flex-wrap items-baseline gap-4">
                 <div>
-                  <span className="text-[11px] text-amber-200/80 font-bold block">
-                    الجائزة الكبرى الفورية
-                  </span>
-                  <span className="text-2xl sm:text-4xl font-black text-amber-300">
+                  <span className="text-xs text-amber-200/80 font-bold block">الجائزة الكبرى الفورية</span>
+                  <span className="text-3xl font-black text-amber-300">
                     {fmt(report.topPrize)} <span className="text-sm">د.ع</span>
                   </span>
                 </div>
-                <div className="bg-white/10 rounded-2xl px-3.5 py-2 border border-white/10">
-                  <span className="text-[10px] text-amber-200 font-bold block">سعر البطاقة</span>
-                  <span className="text-base font-black text-white">{fmt(report.price)} د.ع</span>
-                </div>
-                <div className="bg-white/10 rounded-2xl px-3.5 py-2 border border-white/10">
-                  <span className="text-[10px] text-amber-200 font-bold block">
-                    الجوائز الكبرى المتبقية الآن
-                  </span>
-                  <span className="text-base font-black text-emerald-300">
-                    {report.topRemaining} بطاقة
-                  </span>
+                <div className="bg-white/10 rounded-2xl px-3.5 py-2">
+                  <span className="text-[11px] text-amber-200 font-bold block">المتبقي من الجائزة الكبرى</span>
+                  <span className="text-base font-black text-emerald-300">{report.topRemaining} بطاقة</span>
                 </div>
               </div>
-              <p className="text-xs text-amber-100/90 font-bold pt-1">{spec.mechanicsAr}</p>
+              <p className="text-xs text-amber-100/90 font-bold">{spec.mechanicsAr}</p>
             </div>
 
             <div className="flex flex-col gap-2 shrink-0">
@@ -1585,7 +1979,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                 className="px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 shadow-lg cursor-pointer"
               >
                 <Camera className="w-4 h-4" />
-                <span>افحص بطاقة مكشوطة بالكاميرا 📸</span>
+                <span>صوّر البطاقة لفحص الفوز فوراً 📸</span>
               </button>
               <a
                 href={spec.url}
@@ -1600,90 +1994,41 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
           </div>
         </div>
 
-        {/* Actuarial Smart Decision & Comparison Card */}
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-emerald-500" />
-              <span>التحليل الاكتواري الذكي ومؤشر الجدوى الحقيقي</span>
-            </h3>
-            <span className="text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
-              إجمالي مجموع جوائز الطبعة: {fmt(report.totalPrizePoolIqd)} د.ع
-            </span>
-          </div>
+          <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-emerald-500" />
+            <span>تحليل فرص الفوز ومقارنة الجدوى مع {otherReport.nameAr}</span>
+          </h3>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
-            <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/60 dark:border-zinc-700">
-              <span className="text-[10px] text-gray-500 font-bold block">إجمالي البطاقات الرابحة</span>
-              <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
-                {fmt(report.totalWinningCardsInRun)}
-              </span>
+            <div className="p-3 rounded-2xl bg-gray-50 dark:bg-zinc-800/60">
+              <span className="text-[11px] text-gray-500 font-bold block">إجمالي البطاقات الرابحة</span>
+              <span className="text-sm font-black text-gray-900 dark:text-white">{fmt(report.totalWinningCardsInRun)}</span>
             </div>
-            <div className="p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
-              <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold block">
-                بطاقات ربح صافٍ (&gt; السعر)
-              </span>
-              <span className="text-sm sm:text-base font-black text-emerald-700 dark:text-emerald-300">
-                {fmt(report.netProfitCards)} ({report.profitAmongWinnersPct}%)
-              </span>
+            <div className="p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30">
+              <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-bold block">بطاقات ربح صافٍ</span>
+              <span className="text-sm font-black text-emerald-700 dark:text-emerald-300">{fmt(report.netProfitCards)}</span>
             </div>
-            <div className="p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800">
-              <span className="text-[10px] text-indigo-700 dark:text-indigo-300 font-bold block">
-                فئات 10,000 د.ع فأعلى
-              </span>
-              <span className="text-sm sm:text-base font-black text-indigo-700 dark:text-indigo-300">
-                {fmt(report.midHighTierCards)} بطاقة
-              </span>
+            <div className="p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30">
+              <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-bold block">فئات 10,000 د.ع فأعلى</span>
+              <span className="text-sm font-black text-indigo-700 dark:text-indigo-300">{fmt(report.midHighTierCards)}</span>
             </div>
-            <div className="p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-              <span className="text-[10px] text-amber-700 dark:text-amber-300 font-bold block">
-                مضاعف الجائزة الكبرى
-              </span>
-              <span className="text-sm sm:text-base font-black text-amber-700 dark:text-amber-300">
-                {fmt(report.maxMultiplier)}x ضعف
-              </span>
+            <div className="p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30">
+              <span className="text-[11px] text-amber-700 dark:text-amber-300 font-bold block">مضاعف الجائزة الكبرى</span>
+              <span className="text-sm font-black text-amber-700 dark:text-amber-300">{fmt(report.maxMultiplier)} ضعف</span>
             </div>
           </div>
 
-          <div className="space-y-2 p-3.5 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/25 border border-indigo-200/70 dark:border-indigo-800/40">
-            <div className="text-xs font-black text-indigo-900 dark:text-indigo-200">
-              🧠 خلاصة المستشار الذكي (مقارنة حية مع {otherReport.nameAr}):
-            </div>
+          <div className="space-y-1.5 p-3.5 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/25 border border-indigo-200/70 dark:border-indigo-800/40">
             {report.smartAdviceAr.map((adv, idx) => (
-              <div
-                key={idx}
-                className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-start gap-1.5"
-              >
+              <div key={idx} className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-start gap-1.5">
                 <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
                 <span>{adv}</span>
               </div>
             ))}
           </div>
-
-          {/* Complete Official Prize Distribution Table */}
-          <div>
-            <h4 className="text-xs font-black text-gray-800 dark:text-white mb-2">
-              📊 التوزيع الرسمي الكامل لفئات الجوائز في الطبعة:
-            </h4>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {spec.tiers.map((tier, idx) => (
-                <div
-                  key={idx}
-                  className="p-2.5 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/70 dark:border-zinc-700 flex items-center justify-between"
-                >
-                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
-                    {fmt(tier.amount)} د.ع
-                  </span>
-                  <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">
-                    × {fmt(idx === 0 ? report.topRemaining : tier.winnersCount)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* Saved/Scanned Scratch Cards */}
         {gameTickets.length > 0 && renderTicketsPanel(spec.gameId)}
       </div>
     );
@@ -1691,7 +2036,6 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200" dir="rtl">
-      {/* Hidden Camera / Image Input for AI Ticket & Scratch Scanner */}
       <input
         ref={fileInputRef}
         type="file"
@@ -1700,7 +2044,81 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
         onChange={handleImageScan}
       />
 
-      {/* Top Live Sync Header */}
+      {/* ═══════════════════════════════════════════════════════════════════
+          THEATRICAL WIN CELEBRATION MODAL (إشعار الفوز المسرحي 🎉👑)
+      ═══════════════════════════════════════════════════════════════════ */}
+      {theatricalWinTicket && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-[2.2rem] overflow-hidden bg-gradient-to-br from-amber-500 via-orange-600 to-purple-900 p-1 shadow-2xl">
+            <div className="relative bg-slate-950 rounded-[2rem] p-6 text-center text-white space-y-4 overflow-hidden">
+              <div className="absolute -top-20 -right-20 w-56 h-56 bg-amber-400/25 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-20 -left-20 w-56 h-56 bg-rose-500/25 rounded-full blur-3xl pointer-events-none" />
+
+              <button
+                type="button"
+                onClick={() => setTheatricalWinTicket(null)}
+                className="absolute top-4 left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-6xl animate-bounce">👑🎉</div>
+              <div className="space-y-1">
+                <span className="px-3.5 py-1 rounded-full bg-amber-400 text-slate-950 text-xs font-black">
+                  إعلان فوز رسمي مطابق لسحب لوتو العراق!
+                </span>
+                <h3 className="text-2xl sm:text-3xl font-black text-amber-300 pt-1">
+                  ألف مبروك! ربحت الجائزة!
+                </h3>
+                <p className="text-sm font-bold text-white/90">{theatricalWinTicket.title}</p>
+              </div>
+
+              <div className="py-4 px-5 rounded-3xl bg-gradient-to-r from-emerald-500/25 via-amber-500/25 to-rose-500/25 border-2 border-amber-400/60">
+                <span className="text-xs font-bold text-amber-200 block">قيمة الجائزة المستحقة:</span>
+                <div className="text-4xl font-black text-amber-300 mt-1">
+                  {fmt(theatricalWinTicket.prizeWon || 0)} <span className="text-lg">د.ع</span>
+                </div>
+                <div className="text-xs font-black text-emerald-300 mt-1">
+                  {theatricalWinTicket.prizeLabel}
+                </div>
+              </div>
+
+              {theatricalWinTicket.numbers && theatricalWinTicket.numbers.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-white/70 block">الأرقام المتطابقة في بطاقتك:</span>
+                  <div className="flex items-center justify-center gap-2 flex-wrap" dir="ltr">
+                    {theatricalWinTicket.numbers.map((n) => {
+                      const hit = theatricalWinTicket.matchedNumbers?.includes(n);
+                      return (
+                        <span
+                          key={n}
+                          className={`w-10 h-10 rounded-xl font-black text-base flex items-center justify-center ${
+                            hit
+                              ? "bg-emerald-500 text-white ring-2 ring-amber-300 scale-110 shadow-lg"
+                              : "bg-white/10 text-white/60"
+                          }`}
+                        >
+                          {n}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setTheatricalWinTicket(null)}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 font-black text-sm shadow-xl cursor-pointer active:scale-95 transition"
+              >
+                الحمد لله! تم توثيق الفوز ✅
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clean Top Status & Moment-by-Moment Sync Bar */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 border border-gray-200/80 dark:border-zinc-800 shadow-sm flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 via-rose-500 to-amber-500 text-white flex items-center justify-center text-2xl shadow-md">
@@ -1709,9 +2127,9 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
-                لوتو العراق الرسمي المباشر
+                لوتو العراق المباشر
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-black flex items-center gap-1">
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[11px] font-black flex items-center gap-1.5">
                 <span
                   className={`w-2 h-2 rounded-full ${
                     isSyncingLive ? "bg-amber-500 animate-ping" : "bg-emerald-500 animate-pulse"
@@ -1720,12 +2138,13 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                 <span>{syncSource}</span>
               </span>
             </div>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 font-bold">
-              تحديث تلقائي أولاً بأول من loto.iq للألعاب الخمس + تنبؤ إحصائي وذكاء خارق
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-bold mt-0.5">
+              يتحدث لحظة بلحظة كل {LIVE_POLL_SECONDS} ثانية (التحديث القادم خلال{" "}
+              <span className="font-mono text-indigo-600 dark:text-indigo-400">{nextPollSec}ث</span>)
               {lastSyncedAt > 0 && (
                 <span>
                   {" "}
-                  • آخر مزامنة:{" "}
+                  • آخر سحب:{" "}
                   {new Date(lastSyncedAt).toLocaleTimeString("ar-IQ", {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -1740,90 +2159,234 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
+            onClick={() => setSoundEnabled((s) => !s)}
+            className="p-2 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 cursor-pointer"
+            title={soundEnabled ? "إيقاف صوت الإشعارات المسرحية" : "تفعيل صوت الإشعارات المسرحية"}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-600" /> : <VolumeX className="w-4 h-4 text-gray-400" />}
+          </button>
+
+          <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isScanningImage}
-            className="px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-black flex items-center gap-1.5 hover:bg-indigo-100 transition cursor-pointer"
+            className="px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-black flex items-center gap-1.5 cursor-pointer"
           >
             <Camera className="w-3.5 h-3.5" />
-            <span>مسح بطاقة بالذكاء 📸</span>
+            <span>مسح بطاقة 📸</span>
           </button>
 
           <button
             type="button"
             onClick={() => triggerLiveSync(false)}
             disabled={isSyncingLive}
-            className="px-3.5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 text-xs font-black flex items-center gap-1.5 shadow-sm transition active:scale-95 disabled:opacity-60 cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-60"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncingLive ? "animate-spin" : ""}`} />
-            <span>{isSyncingLive ? "جاري الجلب الحي..." : "تحديث من الموقع الآن"}</span>
+            <span>{isSyncingLive ? "جاري التحديث..." : "تحديث لحظي الآن"}</span>
           </button>
         </div>
       </div>
 
-      {/* ALL 5 GAMES VISIBLE GRID (NO SLIDER!) */}
-      <div
-        role="tablist"
-        aria-label="ألعاب لوتو العراق الخمس"
-        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5"
-      >
-        {GAME_CARDS.map((g) => {
-          const isSelected = activeGame === g.id;
-          return (
-            <button
-              key={g.id}
-              type="button"
-              role="tab"
-              aria-selected={isSelected}
-              onClick={() => setActiveGame(g.id)}
-              className={`relative text-right p-3 rounded-2xl border-2 transition-all flex flex-col justify-between gap-1.5 cursor-pointer active:scale-[0.98] aria-selected:after:content-[''] aria-selected:after:absolute aria-selected:after:inset-x-4 aria-selected:after:bottom-0 aria-selected:after:border-b-[3px] aria-selected:after:border-current ${
-                isSelected
-                  ? `bg-gradient-to-br ${g.accent} text-white border-transparent shadow-lg`
-                  : "bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 text-gray-800 dark:text-gray-100 hover:border-purple-400"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1 w-full">
-                <span className="text-xl leading-none">{g.emoji}</span>
-                <span
-                  className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
-                    isSelected
-                      ? "bg-white/20 text-white"
-                      : "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300"
-                  }`}
+      {/* URGENT IMMINENT DRAW RADAR BANNER */}
+      {imminentAlerts.length > 0 && (
+        <div className="rounded-3xl p-4 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 text-white shadow-xl border-2 border-amber-300 space-y-2.5">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <BellRing className="w-5 h-5 text-amber-100 animate-bounce shrink-0" />
+              <span className="font-black text-sm">
+                🚨 السحوبات الأقرب الآن — استعمل هذه الألعاب أولاً قبل الإغلاق!
+              </span>
+            </div>
+            <span className="text-[11px] font-black bg-black/25 px-2.5 py-0.5 rounded-full">
+              الأقرب فالأقرب
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {imminentAlerts.slice(0, 4).map((al, idx) => (
+              <div
+                key={al.id}
+                className={`rounded-2xl p-3 flex items-center justify-between gap-2 backdrop-blur-md border ${
+                  idx === 0
+                    ? "bg-black/35 border-amber-200 ring-2 ring-white/40"
+                    : "bg-white/15 border-white/25"
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-black text-white truncate">
+                    #{idx + 1} {al.urgency === "critical" ? "🔥" : "⏰"} {al.titleAr}
+                  </div>
+                  <div className="text-[11px] font-black text-amber-200 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    <span>يغلق خلال:</span>
+                    <span dir="ltr" className="font-mono bg-black/30 px-1.5 rounded">
+                      {formatCountdown(al.closesAtMs, nowMs)}
+                    </span>
+                    <span className="text-white/90">• {fmt(al.jackpot)} د.ع</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveGame(al.game);
+                    if (al.game === "sports" && al.roundId) {
+                      setSportsSubView("active");
+                      setSelectedRoundId(al.roundId);
+                    } else {
+                      setNumberSubView("predict");
+                    }
+                  }}
+                  className="shrink-0 px-3 py-2 rounded-xl bg-white text-rose-700 hover:bg-amber-100 text-xs font-black shadow cursor-pointer"
                 >
-                  {g.badge}
-                </span>
+                  استعملها 🎯
+                </button>
               </div>
-              <div className="font-black text-xs sm:text-sm">{g.title}</div>
-              <div className="flex items-baseline justify-between gap-1 w-full pt-1 border-t border-current/10">
-                <span
-                  className={`text-[11px] font-black ${
-                    isSelected ? "text-amber-200" : "text-emerald-600 dark:text-emerald-400"
-                  }`}
-                >
-                  {g.jackpotText}
-                </span>
-                <span className={`text-[9px] font-bold ${isSelected ? "text-white/80" : "text-gray-400"}`}>
-                  {g.priceText}
-                </span>
-              </div>
-            </button>
-          );
-        })}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 5 GAMES DYNAMICALLY SORTED BY NEAREST DRAW TIME ("تظهر حسب القريبة السحب مالتها") */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs font-black text-gray-600 dark:text-gray-300">
+            اختر اللعبة (مرتّبة تلقائياً من الأقرب للسحب إلى الأبعد):
+          </span>
+          {ticketSummary.wonCount > 0 && (
+            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+              🏆 لديك {ticketSummary.wonCount} بطاقة فائزة ({fmt(ticketSummary.totalWon)} د.ع)
+            </span>
+          )}
+        </div>
+
+        <div
+          role="tablist"
+          aria-label="ألعاب لوتو العراق الخمس مرتبة حسب الأقرب للسحب"
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5"
+        >
+          {SORTED_GAME_CARDS.map((g, idx) => {
+            const isSelected = activeGame === g.id;
+            const urg = urgencyByGame[g.id];
+            const isCritical = urg?.urgency === "critical";
+            const isSoon = urg?.urgency === "soon";
+            const isClosestOverall = idx === 0 && (isCritical || isSoon);
+
+            let cardClasses =
+              "bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 text-gray-800 dark:text-gray-100 hover:border-purple-400";
+
+            if (isSelected && (isCritical || isClosestOverall)) {
+              cardClasses =
+                "bg-gradient-to-br from-amber-500 via-orange-600 to-rose-600 text-white border-amber-200 ring-4 ring-amber-400/50 shadow-xl";
+            } else if (isSelected) {
+              cardClasses = `bg-gradient-to-br ${g.selectedGradient} text-white border-transparent shadow-lg`;
+            } else if (isCritical || isClosestOverall) {
+              cardClasses =
+                "bg-gradient-to-br from-amber-100 via-orange-100 to-rose-100 dark:from-amber-950/90 dark:via-orange-950/80 dark:to-rose-950/80 border-amber-500 ring-2 ring-amber-400/70 text-slate-900 dark:text-white shadow-md";
+            } else if (isSoon) {
+              cardClasses =
+                "bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50/80 dark:from-amber-950/55 dark:via-yellow-950/40 dark:to-zinc-900 border-amber-400 text-slate-900 dark:text-white shadow-sm";
+            }
+
+            return (
+              <button
+                key={g.id}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                onClick={() => setActiveGame(g.id)}
+                className={`relative text-right p-3.5 rounded-2xl border-2 transition-all flex flex-col justify-between gap-1.5 cursor-pointer active:scale-[0.98] aria-selected:after:content-[''] aria-selected:after:absolute aria-selected:after:inset-x-4 aria-selected:after:bottom-0 aria-selected:after:border-b-[3px] aria-selected:after:border-current ${cardClasses}`}
+              >
+                {(isCritical || isSoon) && (
+                  <span
+                    className={`text-[10px] font-black px-2 py-0.5 rounded-full w-fit flex items-center gap-1 ${
+                      isCritical || isClosestOverall
+                        ? "bg-rose-600 text-white animate-pulse"
+                        : "bg-amber-400 text-slate-950"
+                    }`}
+                  >
+                    <Flame className="w-3 h-3 shrink-0" />
+                    <span>
+                      {isClosestOverall ? "#1 الأقرب — استعملها!" : "قريبة السحب"}
+                    </span>
+                  </span>
+                )}
+
+                <div className="flex items-center justify-between gap-1 w-full">
+                  <span className="text-xl leading-none">{g.emoji}</span>
+                  <span
+                    className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      isSelected
+                        ? "bg-white/20 text-white"
+                        : isCritical || isSoon
+                        ? "bg-amber-500/20 text-amber-900 dark:text-amber-200"
+                        : "bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300"
+                    }`}
+                  >
+                    {g.badge}
+                  </span>
+                </div>
+
+                <div>
+                  <div className="font-black text-sm">{g.title}</div>
+                  <div
+                    className={`text-[10px] font-bold mt-0.5 ${
+                      isSelected ? "text-white/85" : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    {g.shortDesc}
+                  </div>
+                </div>
+
+                {urg && (
+                  <div
+                    dir="ltr"
+                    className={`text-[10px] font-mono font-black px-2 py-1 rounded-lg text-center ${
+                      isSelected
+                        ? "bg-black/25 text-amber-200"
+                        : "bg-amber-500/15 text-rose-700 dark:text-amber-300"
+                    }`}
+                  >
+                    ⏳ {formatCountdown(urg.closesAtMs, nowMs)}
+                  </div>
+                )}
+
+                <div className="flex items-baseline justify-between gap-1 w-full pt-1 border-t border-current/10">
+                  <span
+                    className={`text-xs font-black ${
+                      isSelected
+                        ? "text-amber-200"
+                        : isCritical
+                        ? "text-rose-700 dark:text-amber-300"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    {g.jackpotText}
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold ${
+                      isSelected ? "text-white/80" : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    {g.priceText}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          GAME 1: SPORTS LOTO (اللوتو الرياضي — 10 مباريات 1 / X / 2)
-      ═══════════════════════════════════════════════════════════════════ */}
+      {/* GAME 1: SPORTS LOTO */}
       {activeGame === "sports" && (
         <div className="space-y-4">
-          {/* Visible Sub-Tabs for Sports Loto */}
           <div className="grid grid-cols-3 gap-2">
             {[
-              { id: "active", label: `الجولات المفتوحة (${openSportsRounds.length})` },
-              { id: "finished", label: `نتائج الجولات السابقة (${finishedSportsRounds.length})` },
+              { id: "active", label: `⚽ الجولات المفتوحة (${openSportsRounds.length})` },
+              { id: "finished", label: `✅ النتائج السابقة (${finishedSportsRounds.length})` },
               {
                 id: "tickets",
-                label: `قسائمي الرياضية (${tickets.filter((t) => t.game === "sports").length})`,
+                label: `🎫 قسائمي (${tickets.filter((t) => t.game === "sports").length})`,
               },
             ].map((st) => (
               <button
@@ -1845,84 +2408,78 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
             renderTicketsPanel("sports")
           ) : (
             <div className="space-y-4">
-              {/* All Rounds Visible Grid Selector (No Slider!) */}
-              {(sportsSubView === "active" ? openSportsRounds : finishedSportsRounds).length >
-                0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                  {(sportsSubView === "active"
-                    ? openSportsRounds
-                    : finishedSportsRounds
-                  ).map((r) => {
-                    const on = currentSportsRound?.id === r.id;
-                    return (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => setSelectedRoundId(r.id)}
-                        className={`p-3 rounded-2xl border-2 text-right transition cursor-pointer ${
-                          on
-                            ? "bg-emerald-950 text-white border-emerald-500 shadow-md"
-                            : "bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 text-gray-800 dark:text-white hover:border-emerald-400"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-black">{r.nameAr}</span>
-                          <span
-                            className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                              r.status === "open"
-                                ? "bg-emerald-500/20 text-emerald-400"
-                                : "bg-gray-500/20 text-gray-400"
-                            }`}
-                          >
-                            {r.status === "open" ? "مفتوحة الآن" : "منتهية"}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-[11px] mt-1.5 opacity-85 font-bold">
-                          <span>الجائزة: {fmt(r.jackpot)} د.ع</span>
-                          <span>
-                            {r.status === "open"
-                              ? `يغلق: ${formatCountdown(r.closesAt, nowMs)}`
-                              : `جولة #${r.number}`}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {(sportsSubView === "active"
+                  ? openSportsRounds
+                  : finishedSportsRounds
+                ).map((r, rIdx) => {
+                  const on = currentSportsRound?.id === r.id;
+                  const remHours = (r.closesAt - nowMs) / 3_600_000;
+                  const isRoundImminent = r.status === "open" && remHours > 0 && remHours <= 30;
+                  const isFirstOpen = sportsSubView === "active" && rIdx === 0;
 
-              {!currentSportsRound ? (
-                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 text-center border border-gray-200 dark:border-zinc-800">
-                  <Loader2 className="w-7 h-7 animate-spin text-emerald-500 mx-auto mb-2" />
-                  <p className="text-sm font-black text-gray-700 dark:text-gray-200">
-                    جاري سحب مباريات اللوتو الرياضي الحية من موقع loto.iq...
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-4">
-                  {/* Round Header & AI Controls */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-zinc-800">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
-                          ⚽ {currentSportsRound.nameAr}
-                        </h3>
-                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                          الجائزة الكبرى: {fmt(currentSportsRound.jackpot)} د.ع
-                        </span>
-                        <span className="text-xs font-bold text-gray-500">
-                          سعر القسيمة: {fmt(currentSportsRound.price)} د.ع
+                  let roundCls =
+                    "bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 text-gray-800 dark:text-white hover:border-emerald-400";
+                  if (on && (isRoundImminent || isFirstOpen)) {
+                    roundCls =
+                      "bg-gradient-to-br from-amber-600 via-orange-600 to-rose-700 text-white border-amber-300 ring-2 ring-amber-400 shadow-lg";
+                  } else if (on) {
+                    roundCls = "bg-emerald-950 text-white border-emerald-500 shadow-md";
+                  } else if (isRoundImminent || isFirstOpen) {
+                    roundCls =
+                      "bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-950/80 dark:to-orange-950/70 border-amber-500 text-slate-900 dark:text-white";
+                  }
+
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => setSelectedRoundId(r.id)}
+                      className={`p-3.5 rounded-2xl border-2 text-right transition cursor-pointer ${roundCls}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-black">{r.nameAr}</span>
+                        <span
+                          className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                            isFirstOpen || isRoundImminent
+                              ? "bg-rose-600 text-white animate-pulse"
+                              : r.status === "open"
+                              ? "bg-emerald-500/20 text-emerald-500"
+                              : "bg-gray-500/20 text-gray-400"
+                          }`}
+                        >
+                          {isFirstOpen
+                            ? "🔥 الأقرب — استعملها!"
+                            : isRoundImminent
+                            ? "⏰ قريبة الإغلاق"
+                            : r.status === "open"
+                            ? "مفتوحة"
+                            : "منتهية"}
                         </span>
                       </div>
-                      {currentSportsAnalysis && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 font-bold mt-1">
-                          ركائز مضمونة (Bankers): {currentSportsAnalysis.bankerCount} | مواجهات متكافئة:{" "}
-                          {currentSportsAnalysis.tightCount} | التوزيع التاريخي للموقع: (1:{" "}
-                          {currentSportsAnalysis.historicalHomeRate}% • X:{" "}
-                          {currentSportsAnalysis.historicalDrawRate}% • 2:{" "}
-                          {currentSportsAnalysis.historicalAwayRate}%)
-                        </p>
-                      )}
+                      <div className="flex items-center justify-between text-[11px] mt-1.5 opacity-90 font-bold">
+                        <span>الجائزة: {fmt(r.jackpot)} د.ع</span>
+                        <span dir="ltr">
+                          {r.status === "open"
+                            ? `⏳ ${formatCountdown(r.closesAt, nowMs)}`
+                            : `جولة #${r.number}`}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {currentSportsRound && (
+                <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-zinc-800">
+                    <div>
+                      <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
+                        ⚽ {currentSportsRound.nameAr} — الجائزة {fmt(currentSportsRound.jackpot)} د.ع
+                      </h3>
+                      <p className="text-xs text-gray-500 font-bold mt-0.5">
+                        الاختيار الملوّن بالأزرق هو توقعك المختار (والنجمة ⭐ هي توصية الذكاء). اضغط لتعديل أي مباراة.
+                      </p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -1931,39 +2488,52 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                           type="button"
                           onClick={handleRunGeminiSports}
                           disabled={isRunningGeminiSports}
-                          className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-60"
+                          className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-black flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-60"
                         >
                           {isRunningGeminiSports ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           ) : (
-                            <BrainCircuit className="w-3.5 h-3.5 text-amber-200" />
+                            <BrainCircuit className="w-4 h-4 text-amber-200" />
                           )}
-                          <span>تحليل تكتيكي عميق بالذكاء الخارق للمباريات الـ 10</span>
+                          <span>تحليل المباريات الـ 10 بالذكاء الخارق</span>
                         </button>
                       )}
-
                       <a
                         href={`https://loto.iq/sports/play?round=${currentSportsRound.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-3 py-2 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-gray-200 text-xs font-black flex items-center gap-1 cursor-pointer"
+                        className="px-3 py-2 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-gray-200 text-xs font-black flex items-center gap-1"
                       >
                         <ExternalLink className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>فتح الجولة في loto.iq</span>
+                        <span>فتح في loto.iq</span>
                       </a>
                     </div>
                   </div>
 
+                  {currentSportsRound.status !== "open" &&
+                    Array.isArray(currentSportsRound.outcome) && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-200 dark:border-emerald-800">
+                        {(currentSportsRound.outcome as SportsOutcomeTier[]).map((tierItem, i) => (
+                          <div key={i} className="text-center">
+                            <span className="text-[11px] font-bold text-gray-500 block">
+                              تطابق {tierItem.correct}/10
+                            </span>
+                            <span className="text-xs font-black text-emerald-700 dark:text-emerald-300">
+                              {tierItem.winners} فائز ({fmt(tierItem.perWinner)} د.ع)
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                   {currentSportsAnalysis?.aiSummaryAr && (
                     <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs font-bold text-emerald-950 dark:text-emerald-200">
-                      🧠 <strong>التحليل التكتيكي الشامل للجولة:</strong>{" "}
-                      {currentSportsAnalysis.aiSummaryAr}
+                      🧠 <strong>ملخص الذكاء الخارق للجولة:</strong> {currentSportsAnalysis.aiSummaryAr}
                     </div>
                   )}
 
-                  {/* 10 Matches Interactive Prediction List */}
                   <div className="space-y-2.5">
-                    {currentSportsRound.matches.map((m, idx) => {
+                    {currentSportsRound.matches.map((m) => {
                       const pred = currentSportsAnalysis?.matches.find(
                         (p) => p.position === m.position
                       );
@@ -1971,19 +2541,16 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                         userSportsSlip[currentSportsRound.id]?.[m.position] ||
                         pred?.recommendedPick ||
                         "1";
-                      const actualOutcome = Array.isArray(currentSportsRound.outcome)
-                        ? currentSportsRound.outcome[idx]
-                        : null;
+                      const actualOutcome = getMatchActualOutcome(m);
                       const homeLogo = resolveLogoUrl(m.home.logoUrl);
                       const awayLogo = resolveLogoUrl(m.away.logoUrl);
 
                       return (
                         <div
                           key={m.position}
-                          className="p-3.5 rounded-2xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/80 dark:border-zinc-700/70 space-y-2.5"
+                          className="p-3.5 rounded-2xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/80 dark:border-zinc-700/70 space-y-2"
                         >
                           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                            {/* Match Info & Teams */}
                             <div className="flex items-center gap-3 flex-1">
                               <span className="w-7 h-7 rounded-lg bg-emerald-600 text-white font-black text-xs flex items-center justify-center shrink-0">
                                 {m.position}
@@ -1991,77 +2558,48 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   {homeLogo && (
-                                    <img
-                                      src={homeLogo}
-                                      alt={m.home.nameAr}
-                                      className="w-5 h-5 object-contain"
-                                    />
+                                    <img src={homeLogo} alt={m.home.nameAr} className="w-5 h-5 object-contain" />
                                   )}
-                                  <span className="font-black text-xs sm:text-sm text-gray-900 dark:text-white">
+                                  <span className="font-black text-sm text-gray-900 dark:text-white">
                                     {m.home.nameAr}
                                   </span>
-                                  <span className="text-[10px] font-black text-gray-400 px-1">
-                                    ضد
-                                  </span>
-                                  {awayLogo && (
-                                    <img
-                                      src={awayLogo}
-                                      alt={m.away.nameAr}
-                                      className="w-5 h-5 object-contain"
-                                    />
+                                  {m.score && typeof m.score === "object" ? (
+                                    <span dir="ltr" className="px-2 py-0.5 rounded-lg bg-emerald-600 text-white text-xs font-black">
+                                      {m.score.home} - {m.score.away}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] font-black text-gray-400">ضد</span>
                                   )}
-                                  <span className="font-black text-xs sm:text-sm text-gray-900 dark:text-white">
+                                  {awayLogo && (
+                                    <img src={awayLogo} alt={m.away.nameAr} className="w-5 h-5 object-contain" />
+                                  )}
+                                  <span className="font-black text-sm text-gray-900 dark:text-white">
                                     {m.away.nameAr}
                                   </span>
                                 </div>
-                                <div className="text-[10px] text-gray-500 font-bold mt-0.5 flex flex-wrap items-center gap-2">
-                                  <span>{m.competition?.nameAr}</span>
-                                  <span>•</span>
-                                  <span>
-                                    {new Date(m.kickoffAt).toLocaleString("ar-IQ", {
-                                      weekday: "short",
-                                      month: "numeric",
-                                      day: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </span>
-                                  {pred && (
-                                    <span
-                                      className={`px-2 py-0.2 rounded-full font-black ${
-                                        pred.confidence === "banker"
-                                          ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300"
-                                          : pred.confidence === "tight"
-                                          ? "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300"
-                                          : "bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300"
-                                      }`}
-                                    >
-                                      {pred.confidenceLabelAr}
+                                <div className="text-[11px] text-gray-500 font-bold mt-0.5">
+                                  {new Date(m.kickoffAt).toLocaleString("ar-IQ", {
+                                    weekday: "short",
+                                    month: "numeric",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                  {pred && currentSportsRound.status === "open" && (
+                                    <span className="mr-2 text-indigo-600 dark:text-indigo-400 font-black">
+                                      • {pred.confidence === "banker" ? "مباراة مضمونة 🔒" : pred.confidence === "tight" ? "مباراة متقاربة ⚖️" : "ترجيح جيد ⚡"}
                                     </span>
                                   )}
                                 </div>
                               </div>
                             </div>
 
-                            {/* 1 / X / 2 Selector Buttons with Live Probabilities */}
                             <div className="grid grid-cols-3 gap-1.5 w-full lg:w-72 shrink-0">
                               {(
                                 [
-                                  {
-                                    code: "1" as const,
-                                    label: "1 (المضيف)",
-                                    prob: pred?.probHome ?? 45,
-                                  },
-                                  {
-                                    code: "X" as const,
-                                    label: "X (تعادل)",
-                                    prob: pred?.probDraw ?? 27,
-                                  },
-                                  {
-                                    code: "2" as const,
-                                    label: "2 (الضيف)",
-                                    prob: pred?.probAway ?? 28,
-                                  },
+                                  { code: "1" as const, label: "1 المضيف", prob: pred?.probHome ?? 45 },
+                                  { code: "X" as const, label: "X تعادل", prob: pred?.probDraw ?? 28 },
+                                  { code: "2" as const, label: "2 الضيف", prob: pred?.probAway ?? 27 },
                                 ] as const
                               ).map((opt) => {
                                 const isPicked = selectedPick === opt.code;
@@ -2071,6 +2609,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                                   <button
                                     key={opt.code}
                                     type="button"
+                                    disabled={currentSportsRound.status !== "open"}
                                     onClick={() =>
                                       setUserSportsSlip((prev) => ({
                                         ...prev,
@@ -2080,23 +2619,23 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                                         },
                                       }))
                                     }
-                                    className={`py-2 px-2 rounded-xl border text-center transition cursor-pointer relative ${
+                                    className={`py-2 px-2 rounded-xl border text-center transition cursor-pointer ${
                                       isActualWin
                                         ? "bg-emerald-500 border-emerald-600 text-white ring-2 ring-emerald-300"
-                                        : isPicked
+                                        : isPicked && currentSportsRound.status === "open"
                                         ? "bg-indigo-600 border-indigo-600 text-white shadow"
                                         : "bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-800 dark:text-gray-200"
                                     }`}
                                   >
-                                    <div className="text-[11px] font-black">{opt.label}</div>
+                                    <div className="text-xs font-black">{opt.label}</div>
                                     <div
                                       className={`text-[10px] font-bold ${
-                                        isPicked || isActualWin
+                                        isActualWin || (isPicked && currentSportsRound.status === "open")
                                           ? "text-amber-200"
                                           : "text-gray-400"
                                       }`}
                                     >
-                                      {opt.prob}% {isAiRec ? "⭐" : ""}
+                                      {isActualWin ? "✅ النتيجة" : `${opt.prob}% ${isAiRec ? "⭐" : ""}`}
                                     </div>
                                   </button>
                                 );
@@ -2104,14 +2643,9 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                             </div>
                           </div>
 
-                          {pred?.reasonAr && (
+                          {pred?.reasonAr && currentSportsRound.status === "open" && (
                             <div className="text-[11px] font-bold text-gray-600 dark:text-gray-300 pr-2 border-r-2 border-emerald-500">
                               💡 {pred.reasonAr}
-                              {pred.hedgePick && (
-                                <span className="text-amber-600 dark:text-amber-400 mr-2">
-                                  (خيار التغطية الرديف في حال القسيمة الثانية: {pred.hedgePick})
-                                </span>
-                              )}
                             </div>
                           )}
                         </div>
@@ -2119,53 +2653,52 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                     })}
                   </div>
 
-                  {/* Save / Copy Sports Slip Footer */}
-                  <div className="pt-3 border-t border-gray-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap gap-1.5 text-[11px] font-bold text-gray-500">
-                      {currentSportsRound.tiers?.map((t) => (
-                        <span
-                          key={t.correct}
-                          className="px-2.5 py-1 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300"
+                  {currentSportsRound.status === "open" && (
+                    <div className="pt-3 border-t border-gray-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap gap-1.5 text-[11px] font-bold text-gray-500">
+                        {currentSportsRound.tiers?.map((t) => (
+                          <span
+                            key={t.correct}
+                            className="px-2.5 py-1 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300"
+                          >
+                            {t.correct}/10 ← {fmt(t.amount)} د.ع
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const slip = userSportsSlip[currentSportsRound.id] || {};
+                            const lines = currentSportsRound.matches.map(
+                              (m) =>
+                                `${m.position}. ${m.home.nameAr} × ${m.away.nameAr} 👈 [${
+                                  slip[m.position] || "1"
+                                }]`
+                            );
+                            copyText(
+                              "sports-slip",
+                              `⚽ توقع اللوتو الرياضي (${currentSportsRound.nameAr}):\n${lines.join("\n")}`
+                            );
+                          }}
+                          className="px-3.5 py-2.5 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-gray-200 text-xs font-black flex items-center gap-1.5 cursor-pointer"
                         >
-                          {t.correct}/10 ← {fmt(t.amount)} د.ع
-                        </span>
-                      ))}
-                    </div>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>نسخ القسيمة</span>
+                        </button>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const slip = userSportsSlip[currentSportsRound.id] || {};
-                          const lines = currentSportsRound.matches.map(
-                            (m) =>
-                              `${m.position}. ${m.home.nameAr} × ${m.away.nameAr} 👈 [${
-                                slip[m.position] || "1"
-                              }]`
-                          );
-                          copyText(
-                            "sports-slip",
-                            `⚽ توقع اللوتو الرياضي (${currentSportsRound.nameAr}):\n${lines.join(
-                              "\n"
-                            )}`
-                          );
-                        }}
-                        className="px-3.5 py-2 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-gray-200 text-xs font-black flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>نسخ القسيمة</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleSaveSportsSlip}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>حفظ القسيمة في بطاقاتي</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveSportsSlip}
+                          className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>حفظ القسيمة لمطابقة الفوز</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2173,26 +2706,19 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          GAME 2 & 3: LOTO 42 & LOTO 29
-      ═══════════════════════════════════════════════════════════════════ */}
       {activeGame === "loto42" && renderNumberGame("loto42")}
       {activeGame === "loto29" && renderNumberGame("loto29")}
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          GAME 4 & 5: SCRATCH CARDS (طابق 3 & جيب الكاس جيبه)
-      ═══════════════════════════════════════════════════════════════════ */}
       {activeGame === "sc500" && renderScratchGame("SC500")}
       {activeGame === "sc1k" && renderScratchGame("SC1K")}
 
-      {/* Recent Official Winners Strip from loto.iq */}
+      {/* Recent Official Winners Strip */}
       {recentWinners.length > 0 && (
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 border border-gray-200/80 dark:border-zinc-800 space-y-2.5">
           <h4 className="text-xs font-black text-gray-800 dark:text-white flex items-center gap-1.5">
             <Trophy className="w-4 h-4 text-amber-500" />
-            <span>آخر الفائزين الموثقين مباشرة من موقع لوتو العراق:</span>
+            <span>آخر الفائزين الرسميين من موقع لوتو العراق:</span>
           </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {recentWinners.slice(0, 8).map((w, idx) => (
               <div
                 key={idx}
@@ -2203,7 +2729,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                   {fmt(w.prize)} د.ع
                 </div>
                 <div className="text-[10px] text-gray-400 font-bold">
-                  سحب #{w.drawNumber} • {w.governorate}
+                  سحب #{w.drawNumber} • {w.governorate || "العراق"}
                 </div>
               </div>
             ))}

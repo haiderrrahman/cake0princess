@@ -6,6 +6,7 @@ import {
   SportsPickChoice,
   ScratchCardLive,
   SCRATCH_SPECS,
+  getMatchActualOutcome,
 } from "./lotoIqService";
 
 const GEMINI_MODELS = [
@@ -722,21 +723,25 @@ export interface SportsRoundAnalysis {
 const CLUB_STRENGTH_TIERS: Record<string, number> = {
   // Iraq Stars League
   "الشرطة": 88, "al shorta": 88, "al-shorta": 88,
-  "القوة الجوية": 86, "al quwa al jawiya": 86,
+  "القوة الجوية": 86, "al quwa al jawiya": 86, "al-quwa al-jawiya": 86,
   "الزوراء": 85, "al zawraa": 85, "al-zawraa": 85,
   "زاخو": 81, "zakho": 81,
   "دهوك": 80, "duhok": 80,
-  "الطلبة": 79, "al talaba": 79,
+  "الطلبة": 79, "الطلاب": 79, "al talaba": 79, "al-talaba": 79,
   "النجف": 76, "al najaf": 76,
   "اربيل": 75, "أربيل": 75, "erbil": 75,
-  "الميناء": 74, "al minaa": 74,
+  "الميناء": 74, "al minaa": 74, "al-minaa": 74,
   "نوروز": 74, "newroz": 74,
-  "الكرمة": 74, "al karma": 74,
-  "النفط": 73, "al naft": 73,
-  "الكرخ": 72, "al karkh": 72,
+  "الكرمة": 75, "al karma": 75, "al-karma": 75,
+  "النفط": 73, "al naft": 73, "al-naft": 73,
+  "الكرخ": 72, "al karkh": 72, "al-karkh": 72,
   "نفط ميسان": 72, "naft maysan": 72,
-  "الكهرباء": 72, "al kahrabaa": 72,
+  "الكهرباء": 72, "al kahrabaa": 72, "al-kahrabaa": 72,
   "القاسم": 70, "al qasim": 70,
+  "الموصل": 71, "al-mosul": 71,
+  "الغراف": 70, "al-gharraf": 70,
+  "غاز الشمال": 69, "ghaz al-shamal": 69,
+  "الجولان": 69, "al-jolan": 69,
   "ديالى": 68, "diyala": 68,
   "كربلاء": 69, "karbala": 69,
   "الحدود": 68, "al hudood": 68,
@@ -786,23 +791,22 @@ export function predictSportsRoundQuant(
   round: SportsRound,
   allRounds: SportsRound[]
 ): SportsRoundAnalysis {
-  // 1. Compute real historical 1 / X / 2 rates from finished rounds on loto.iq
+  // 1. Compute real historical 1 / X / 2 rates from finished matches on loto.iq
   let hist1 = 0;
   let histX = 0;
   let hist2 = 0;
   for (const r of allRounds) {
-    if (Array.isArray(r.outcome)) {
-      for (const o of r.outcome) {
-        if (o === "1") hist1++;
-        else if (o === "X") histX++;
-        else if (o === "2") hist2++;
-      }
+    for (const m of r.matches || []) {
+      const actual = getMatchActualOutcome(m);
+      if (actual === "1") hist1++;
+      else if (actual === "X") histX++;
+      else if (actual === "2") hist2++;
     }
   }
   const histTotal = hist1 + histX + hist2;
   const historicalHomeRate = histTotal > 0 ? Math.round((hist1 / histTotal) * 100) : 45;
-  const historicalDrawRate = histTotal > 0 ? Math.round((histX / histTotal) * 100) : 27;
-  const historicalAwayRate = histTotal > 0 ? 100 - historicalHomeRate - historicalDrawRate : 28;
+  const historicalDrawRate = histTotal > 0 ? Math.round((histX / histTotal) * 100) : 30;
+  const historicalAwayRate = histTotal > 0 ? 100 - historicalHomeRate - historicalDrawRate : 25;
 
   const predictions: MatchPredictionItem[] = round.matches.map((m: SportsMatch) => {
     const compName = `${m.competition?.nameAr || ""} ${m.competition?.nameEn || ""}`.toLowerCase();
