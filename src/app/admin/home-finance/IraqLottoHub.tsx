@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import {
   Sparkles, Trophy, Calendar, Ticket, Plus, CheckCircle2,
   Copy, Check, BarChart2, RotateCcw, Clock, ExternalLink,
-  Search, Trash2, Camera, Loader2, Lock, Sliders, RefreshCw,
+  Search, Trash2, PenLine, Loader2, Lock, Sliders, RefreshCw,
   BrainCircuit, ShieldCheck, Zap, Layers, Award, BellRing, Flame,
   PartyPopper, Volume2, VolumeX, X, CheckCheck
 } from "lucide-react";
@@ -46,7 +46,23 @@ import {
   TicketPredictionResult,
   SportsRoundAnalysis,
 } from "@/lib/lotoPredictionEngine";
-import { scanIraqLotoImage } from "@/lib/scanLottoClient";
+
+function getNextOfficialDrawTimestamp(game: "loto42" | "loto29"): number {
+  // Official Baghdad time (UTC+3): 20:50 = 17:50 UTC
+  // Loto 42: Wednesday (3) & Saturday (6)
+  // Loto 29: Monday (1) & Thursday (4)
+  const targetDays = game === "loto42" ? [3, 6] : [1, 4];
+  const now = new Date();
+  for (let offset = 0; offset <= 7; offset++) {
+    const d = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offset, 17, 50, 0)
+    );
+    if (targetDays.includes(d.getUTCDay()) && d.getTime() > Date.now() + 60_000) {
+      return d.getTime();
+    }
+  }
+  return Date.now() + 3 * 86400 * 1000;
+}
 
 interface IraqLottoHubProps {
   onAddExpenseLinked?: (amount: number, description: string, date: string) => void;
@@ -255,11 +271,18 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
   >({});
   const [isRunningGeminiSports, setIsRunningGeminiSports] = useState<boolean>(false);
 
-  // Scanner State
-  const [isScanningImage, setIsScanningImage] = useState<boolean>(false);
-  const [scanStatusMsg, setScanStatusMsg] = useState<string>("");
-  const [lastScannedReport, setLastScannedReport] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Manual Official Draw Result Modal State (إدخال نتيجة السحب الرسمي يدوياً)
+  const [showRecordDrawModal, setShowRecordDrawModal] = useState<boolean>(false);
+  const [recordDrawGame, setRecordDrawGame] = useState<"loto42" | "loto29">("loto29");
+  const [recordDrawNumber, setRecordDrawNumber] = useState<string>("");
+  const [recordDrawNumbers, setRecordDrawNumbers] = useState<number[]>([]);
+  const [recordDrawExtra, setRecordDrawExtra] = useState<number | null>(null);
+  const [recordNextJackpot, setRecordNextJackpot] = useState<string>("");
+
+  // Manual Scratch Card Result Entry State
+  const [showScratchManualBox, setShowScratchManualBox] = useState<boolean>(false);
+  const [scratchManualWinInput, setScratchManualWinInput] = useState<string>("0");
+
   const migratedLegacyRef = useRef<boolean>(false);
   const notifiedImminentRef = useRef<boolean>(false);
   const autoFocusedRef = useRef<boolean>(false);
@@ -905,102 +928,147 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     await persistHub({ lockedByGame: nextState });
   };
 
-  const handleImageScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsScanningImage(true);
-    setScanStatusMsg("جاري قراءة البطاقة بالذكاء الاصطناعي...");
-    setLastScannedReport(null);
+  const openRecordDrawModal = (game: "loto42" | "loto29") => {
+    const curOpenNum =
+      game === "loto42"
+        ? loto42Current?.selling?.drawNumber || (loto42Draws[0]?.drawNumber || 39) + 1
+        : loto29Current?.selling?.drawNumber || (loto29Draws[0]?.drawNumber || 432) + 1;
+    setRecordDrawGame(game);
+    setRecordDrawNumber(String(curOpenNum));
+    setRecordDrawNumbers([]);
+    setRecordDrawExtra(null);
+    setRecordNextJackpot("");
+    setShowRecordDrawModal(true);
+  };
 
-    try {
-      const base64DataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+  const handleSaveOfficialDrawManual = async () => {
+    const drawNum = Number(recordDrawNumber);
+    if (!drawNum || drawNum <= 0) {
+      toast.error("يرجى إدخال رقم السحب الصحيح.");
+      return;
+    }
+    if (recordDrawNumbers.length !== 6) {
+      toast.error("يرجى اختيار 6 أرقام فائزة بالضبط.");
+      return;
+    }
+    if (recordDrawGame === "loto42" && !recordDrawExtra) {
+      toast.error("يرجى اختيار الرقم الإضافي لسحب لوتو 42.");
+      return;
+    }
 
-      const scanned = await scanIraqLotoImage(base64DataUrl, activeGame, setScanStatusMsg);
-      setActiveGame(scanned.game);
+    const sortedNums = [...recordDrawNumbers].sort((a, b) => a - b);
+    const is42 = recordDrawGame === "loto42";
+    const gameCode: "42_PLUS_1" | "6_29" = is42 ? "42_PLUS_1" : "6_29";
+    const defaultPrice = is42 ? 2000 : 1500;
+    const prevSelling = is42 ? loto42Current?.selling : loto29Current?.selling;
+    const defaultJackpot = is42 ? 101_696_960 : 117_153_024;
 
-      if (scanned.game === "loto42" || scanned.game === "loto29") {
-        if (scanned.numbers && scanned.numbers.length === 6) {
-          await handleSaveNumberTicket(
-            scanned.game,
-            scanned.numbers,
-            scanned.extraNumber || null,
-            scanned.drawNumber
-          );
-          setLastScannedReport(
-            scanned.summaryAr ||
-              `تم استخراج وحفظ أرقام البطاقة: ${scanned.numbers.join(" - ")}${
-                scanned.extraNumber ? ` (+${scanned.extraNumber})` : ""
-              }`
-          );
-        } else {
-          toast.error("لم يتم العثور على 6 أرقام واضحة في الصورة.");
-        }
-      } else if (scanned.game === "sports" && scanned.sportsPicks) {
-        const price = scanned.cost || 5000;
-        const newTkt: UserLotoTicket = evaluateUserTicket(
-          {
-            id: `spt-scan-${Date.now()}`,
-            game: "sports",
-            title: scanned.roundName || "قسيمة اللوتو الرياضي (ممسوحة بالكاميرا)",
-            createdAt: new Date().toISOString(),
-            cost: price,
-            status: "pending",
-            roundId: currentSportsRound?.id,
-            roundName: scanned.roundName || currentSportsRound?.nameAr,
-            sportsPicks: scanned.sportsPicks,
-          },
-          loto42Draws,
-          loto29Draws,
-          sportsRounds
-        );
-        const updated = [newTkt, ...tickets];
-        setTickets(updated);
-        await persistHub({ tickets: updated });
-        setLastScannedReport(scanned.summaryAr || "تم مسح وحفظ قسيمة اللوتو الرياضي بنجاح.");
-        if (newTkt.status === "won") triggerTheatricalWin(newTkt, true);
-        else toast.success("تمت قراءة قسيمة اللوتو الرياضي وحفظها بنجاح! ⚽");
-      } else if (scanned.game === "sc500" || scanned.game === "sc1k") {
-        const spec = scanned.game === "sc500" ? SCRATCH_SPECS.SC500 : SCRATCH_SPECS.SC1K;
-        const winAmt = scanned.detectedWinAmount || 0;
-        const newTkt: UserLotoTicket = {
-          id: `scr-${Date.now()}`,
-          game: scanned.game,
-          title: `بطاقة ${spec.nameAr} (فحص بالكاميرا)`,
-          createdAt: new Date().toISOString(),
-          cost: spec.price,
-          status: winAmt > 0 ? "won" : "lost",
-          prizeWon: winAmt,
-          prizeLabel:
-            winAmt > 0
-              ? `مبروك! بطاقة رابحة بمبلغ ${fmt(winAmt)} د.ع 🎉`
-              : "لا يوجد تطابق رابح في هذه البطاقة",
-          scratchCells: scanned.scratchCells,
-          scratchWinningNums: scanned.scratchWinningNums,
-          scratchPlayerCells: scanned.scratchPlayerCells,
+    const newOfficialDraw: LotoDrawOfficial = {
+      id: `manual-${recordDrawGame}-${drawNum}-${Date.now()}`,
+      gameCode,
+      drawNumber: drawNum,
+      status: "finalized",
+      price: prevSelling?.price || defaultPrice,
+      jackpot: prevSelling?.jackpot || defaultJackpot,
+      miniJackpot: is42 ? (prevSelling?.miniJackpot ?? 16_839_884) : null,
+      winningNumbers: sortedNums,
+      extraNumber: is42 ? recordDrawExtra : null,
+      drawAt: Date.now(),
+    };
+
+    const nextDrawTs = getNextOfficialDrawTimestamp(recordDrawGame);
+    const parsedJackpot = Number(recordNextJackpot.replace(/[^\d]/g, ""));
+    const nextSelling: LotoDrawOfficial = {
+      id: `manual-selling-${recordDrawGame}-${drawNum + 1}`,
+      gameCode,
+      drawNumber: drawNum + 1,
+      status: "selling",
+      price: prevSelling?.price || defaultPrice,
+      jackpot: parsedJackpot > 0 ? parsedJackpot : prevSelling?.jackpot || defaultJackpot,
+      miniJackpot: is42 ? (prevSelling?.miniJackpot ?? 16_839_884) : null,
+      winningNumbers: null,
+      extraNumber: null,
+      drawAt: nextDrawTs,
+      salesCloseAt: nextDrawTs,
+    };
+
+    let next42Draws = loto42Draws;
+    let next29Draws = loto29Draws;
+    const patch: Record<string, any> = { lastSyncedAt: Date.now() };
+
+    if (is42) {
+      next42Draws = mergeDrawsDeduplicated([newOfficialDraw], loto42Draws, BASELINE_LOTO42_DRAWS);
+      setLoto42Draws(next42Draws);
+      patch.loto42Draws = next42Draws;
+
+      if (drawNum >= (loto42Current?.selling?.drawNumber || 0)) {
+        const nextCurrent: LotoCurrentState = {
+          selling: nextSelling,
+          awaiting: null,
         };
-        const updated = [newTkt, ...tickets];
-        setTickets(updated);
-        await persistHub({ tickets: updated });
-        setLastScannedReport(
-          `${newTkt.prizeLabel}${scanned.summaryAr ? ` — ${scanned.summaryAr}` : ""}`
-        );
-        if (recordExpenseOnSave && onAddExpenseLinked) {
-          onAddExpenseLinked(spec.price, `شراء بطاقة ${spec.nameAr}`, getTodayIso());
-        }
-        if (winAmt > 0) triggerTheatricalWin(newTkt, true);
-        else toast.info(newTkt.prizeLabel);
+        setLoto42Current(nextCurrent);
+        patch.loto42Current = nextCurrent;
       }
-    } catch (err: any) {
-      toast.error(err?.message || "تعذر قراءة الصورة حالياً");
-    } finally {
-      setIsScanningImage(false);
-      setScanStatusMsg("");
-      if (e.target) e.target.value = "";
+    } else {
+      next29Draws = mergeDrawsDeduplicated([newOfficialDraw], loto29Draws, BASELINE_LOTO29_DRAWS);
+      setLoto29Draws(next29Draws);
+      patch.loto29Draws = next29Draws;
+
+      if (drawNum >= (loto29Current?.selling?.drawNumber || 0)) {
+        const nextCurrent: LotoCurrentState = {
+          selling: nextSelling,
+          awaiting: null,
+        };
+        setLoto29Current(nextCurrent);
+        patch.loto29Current = nextCurrent;
+      }
+    }
+
+    const auditedTickets = runTicketsAudit(tickets, next42Draws, next29Draws, sportsRounds, true);
+    setTickets(auditedTickets);
+    patch.tickets = auditedTickets;
+
+    setLastSyncedAt(Date.now());
+    setSyncSource("تحديث يدوي موثّق");
+    await persistHub(patch);
+
+    setShowRecordDrawModal(false);
+    toast.success(
+      `تم تسجيل نتيجة ${recordDrawGame === "loto42" ? "لوتو 42" : "لوتو 29"} سحب #${drawNum} ومطابقة بطاقاتك فوراً ✅`
+    );
+  };
+
+  const handleSaveScratchManual = async (gameId: "sc500" | "sc1k") => {
+    const spec = gameId === "sc500" ? SCRATCH_SPECS.SC500 : SCRATCH_SPECS.SC1K;
+    const winAmt = Math.max(0, Number(scratchManualWinInput.replace(/[^\d]/g, "")) || 0);
+    const newTkt: UserLotoTicket = {
+      id: `scr-${Date.now()}`,
+      game: gameId,
+      title: `بطاقة ${spec.nameAr} (تسجيل يدوي)`,
+      createdAt: new Date().toISOString(),
+      cost: spec.price,
+      status: winAmt > 0 ? "won" : "lost",
+      prizeWon: winAmt,
+      prizeLabel:
+        winAmt > 0
+          ? `مبروك! بطاقة رابحة بمبلغ ${fmt(winAmt)} د.ع 🎉`
+          : "لم تربح هذه البطاقة",
+    };
+    const updated = [newTkt, ...tickets];
+    setTickets(updated);
+    await persistHub({ tickets: updated });
+
+    if (recordExpenseOnSave && onAddExpenseLinked) {
+      onAddExpenseLinked(spec.price, `شراء بطاقة ${spec.nameAr}`, getTodayIso());
+    }
+
+    setShowScratchManualBox(false);
+    setScratchManualWinInput("0");
+
+    if (winAmt > 0) {
+      triggerTheatricalWin(newTkt, true);
+    } else {
+      toast.info(`تم تسجيل بطاقة ${spec.nameAr} في سجلك.`);
     }
   };
 
@@ -1139,19 +1207,16 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isScanningImage}
-              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              {isScanningImage ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Camera className="w-3.5 h-3.5" />
-              )}
-              <span>{isScanningImage ? scanStatusMsg : "صوّر بطاقتك بالكاميرا 📸"}</span>
-            </button>
+            {isNumberGame && (
+              <button
+                type="button"
+                onClick={() => openRecordDrawModal(filterGame)}
+                className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <PenLine className="w-3.5 h-3.5" />
+                <span>تسجيل نتيجة السحب الرسمي يدوياً</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1195,6 +1260,26 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
               })}
             </div>
 
+            {filterGame === "loto42" && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-[11px] font-black text-indigo-800 dark:text-indigo-200">
+                  الرقم الإضافي (اختياري):
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={42}
+                  value={manualExtra ?? ""}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setManualExtra(v >= 1 && v <= 42 ? v : null);
+                  }}
+                  placeholder="1 - 42"
+                  className="bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-xl px-2.5 py-1 text-xs font-bold w-24"
+                />
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-2 pt-1">
               <label className="flex items-center gap-1.5 text-xs font-bold text-gray-600 dark:text-gray-300 cursor-pointer">
                 <input
@@ -1218,6 +1303,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                   );
                   setShowManualTicketBox(false);
                   setManualNumbers([]);
+                  setManualExtra(null);
                 }}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-black cursor-pointer"
               >
@@ -1227,19 +1313,13 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
           </div>
         )}
 
-        {lastScannedReport && (
-          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-black text-emerald-800 dark:text-emerald-200">
-            ✅ {lastScannedReport}
-          </div>
-        )}
-
         {list.length === 0 ? (
           <div className="p-8 text-center rounded-2xl bg-gray-50 dark:bg-zinc-800/40 border border-dashed border-gray-200 dark:border-zinc-700">
             <p className="text-sm font-black text-gray-600 dark:text-gray-300">
               لا توجد بطاقات مسجلة هنا بعد.
             </p>
             <p className="text-xs font-bold text-gray-400 mt-1">
-              اضغط «اعتماد وحفظ في بطاقاتي» من التنبؤ الذكي أو أضف بطاقتك يدوياً أو بالكاميرا ليطابقها النظام تلقائياً ويعلن الفوز بإشعار مسرحي!
+              اضغط «اعتماد وحفظ في بطاقاتي» من التنبؤ الذكي أو أضف بطاقتك يدوياً ليطابقها النظام تلقائياً ويعلن الفوز بإشعار مسرحي!
             </p>
           </div>
         ) : (
@@ -1478,6 +1558,15 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                   {formatCountdown(currentObj?.salesCloseAt || currentObj?.drawAt, nowMs)}
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => openRecordDrawModal(gameKey)}
+                className="px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 shadow-lg cursor-pointer transition"
+              >
+                <PenLine className="w-3.5 h-3.5" />
+                <span>سجّل نتيجة سحب #{currentObj?.drawNumber || (latestDraw?.drawNumber || 0) + 1} يدوياً</span>
+              </button>
 
               <a
                 href={is42 ? "https://loto.iq/play" : "https://loto.iq/29/play"}
@@ -1986,12 +2075,14 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
             <div className="flex flex-col gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isScanningImage}
+                onClick={() => {
+                  setScratchManualWinInput("0");
+                  setShowScratchManualBox((v) => !v);
+                }}
                 className="px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 shadow-lg cursor-pointer"
               >
-                <Camera className="w-4 h-4" />
-                <span>صوّر البطاقة لفحص الفوز فوراً 📸</span>
+                <PenLine className="w-4 h-4" />
+                <span>تسجيل نتيجة بطاقة كشط يدوياً</span>
               </button>
               <a
                 href={spec.url}
@@ -2004,6 +2095,56 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
               </a>
             </div>
           </div>
+
+          {showScratchManualBox && (
+            <div className="mt-4 p-4 rounded-2xl bg-black/35 border border-amber-300/40 space-y-3">
+              <div className="text-xs font-black text-amber-200">
+                ✍️ سجّل نتيجة بطاقة {spec.nameAr} التي كشطتها (0 في حال عدم الربح، أو مبلغ الجائزة بالدينار):
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[0, 500, 1000, 2000, 5000, 10000, 25000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setScratchManualWinInput(String(preset))}
+                    className={`px-2.5 py-1 rounded-xl text-[11px] font-black cursor-pointer transition ${
+                      Number(scratchManualWinInput) === preset
+                        ? "bg-amber-400 text-slate-950"
+                        : "bg-white/15 text-white hover:bg-white/25"
+                    }`}
+                  >
+                    {preset === 0 ? "0 (خسارة)" : `${fmt(preset)} د.ع`}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  value={scratchManualWinInput}
+                  onChange={(e) => setScratchManualWinInput(e.target.value)}
+                  placeholder="مبلغ الربح بالدينار العراقي"
+                  className="bg-white/95 text-slate-950 rounded-xl px-3 py-2 text-xs font-black w-52"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowScratchManualBox(false)}
+                    className="px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-black cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveScratchManual(spec.gameId)}
+                    className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black cursor-pointer"
+                  >
+                    حفظ النتيجة ✅
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-4">
@@ -2048,13 +2189,185 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200" dir="rtl">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleImageScan}
-      />
+      {/* ═══════════════════════════════════════════════════════════════════
+          MANUAL OFFICIAL DRAW RESULT MODAL (تسجيل نتيجة السحب الرسمي يدوياً ✍️)
+      ═══════════════════════════════════════════════════════════════════ */}
+      {showRecordDrawModal && (
+        <div className="fixed inset-0 z-[290] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-xl max-h-[92vh] overflow-y-auto bg-white dark:bg-zinc-900 rounded-3xl p-5 border-2 border-indigo-400 dark:border-indigo-700 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
+                  <PenLine className="w-5 h-5 text-indigo-600" />
+                  <span>تسجيل نتيجة السحب الرسمي يدوياً</span>
+                </h3>
+                <p className="text-xs font-bold text-gray-500 mt-0.5">
+                  أدخل الأرقام الفائزة فور انتهاء السحب ليتم تحديث الأرشيف ومطابقة بطاقاتك وإعلان الفوز تلقائياً.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRecordDrawModal(false)}
+                className="p-2 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Game Switcher */}
+            <div className="grid grid-cols-2 gap-2">
+              {(["loto29", "loto42"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => {
+                    const nextNum =
+                      g === "loto42"
+                        ? loto42Current?.selling?.drawNumber || (loto42Draws[0]?.drawNumber || 39) + 1
+                        : loto29Current?.selling?.drawNumber || (loto29Draws[0]?.drawNumber || 432) + 1;
+                    setRecordDrawGame(g);
+                    setRecordDrawNumber(String(nextNum));
+                    setRecordDrawNumbers([]);
+                    setRecordDrawExtra(null);
+                  }}
+                  className={`py-2.5 px-3 rounded-2xl text-xs font-black border-2 cursor-pointer transition ${
+                    recordDrawGame === g
+                      ? g === "loto42"
+                        ? "bg-purple-600 text-white border-purple-700"
+                        : "bg-rose-600 text-white border-rose-700"
+                      : "bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-zinc-700"
+                  }`}
+                >
+                  {g === "loto42" ? "🟣 لوتو 42 (1–42 + إضافي)" : "🔴 لوتو 29 (1–29)"}
+                </button>
+              ))}
+            </div>
+
+            {/* Draw Number + Optional Next Jackpot */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-[11px] font-black text-gray-600 dark:text-gray-300 block mb-1">
+                  رقم السحب المنتهي:
+                </label>
+                <input
+                  type="number"
+                  value={recordDrawNumber}
+                  onChange={(e) => setRecordDrawNumber(e.target.value)}
+                  className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-black"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-black text-gray-600 dark:text-gray-300 block mb-1">
+                  الجائزة الكبرى للسحب القادم (اختياري):
+                </label>
+                <input
+                  type="number"
+                  value={recordNextJackpot}
+                  onChange={(e) => setRecordNextJackpot(e.target.value)}
+                  placeholder="مثلاً 117500000"
+                  className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-black"
+                />
+              </div>
+            </div>
+
+            {/* 6 Winning Numbers Grid */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-gray-800 dark:text-white">
+                  اختر الـ 6 أرقام الفائزة ({recordDrawNumbers.length} / 6):
+                </span>
+                {recordDrawNumbers.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setRecordDrawNumbers([])}
+                    className="text-[11px] font-black text-rose-600 cursor-pointer"
+                  >
+                    مسح الأرقام
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-7 sm:grid-cols-10 gap-1.5" dir="ltr">
+                {Array.from({ length: recordDrawGame === "loto42" ? 42 : 29 }, (_, i) => i + 1).map((n) => {
+                  const picked = recordDrawNumbers.includes(n);
+                  const isExtra = recordDrawExtra === n;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => {
+                        if (picked) {
+                          setRecordDrawNumbers((p) => p.filter((x) => x !== n));
+                        } else if (recordDrawNumbers.length < 6) {
+                          if (isExtra) setRecordDrawExtra(null);
+                          setRecordDrawNumbers((p) => [...p, n].sort((a, b) => a - b));
+                        }
+                      }}
+                      className={`h-9 rounded-xl font-black text-xs border cursor-pointer transition ${
+                        picked
+                          ? "bg-emerald-600 text-white border-emerald-700 shadow"
+                          : "bg-gray-50 dark:bg-zinc-800 text-gray-800 dark:text-white border-gray-200 dark:border-zinc-700 hover:border-indigo-400"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Extra Number for Loto 42 */}
+            {recordDrawGame === "loto42" && (
+              <div className="space-y-2 pt-1 border-t border-gray-100 dark:border-zinc-800">
+                <span className="text-xs font-black text-purple-700 dark:text-purple-300 block">
+                  اختر الرقم الإضافي (Extra) للوتو 42 {recordDrawExtra ? `— المختار: ${recordDrawExtra}` : ""}:
+                </span>
+                <div className="grid grid-cols-7 sm:grid-cols-11 gap-1.5" dir="ltr">
+                  {Array.from({ length: 42 }, (_, i) => i + 1).map((n) => {
+                    const usedInMain = recordDrawNumbers.includes(n);
+                    const pickedExtra = recordDrawExtra === n;
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        disabled={usedInMain}
+                        onClick={() => setRecordDrawExtra(pickedExtra ? null : n)}
+                        className={`h-8 rounded-lg font-black text-[11px] border cursor-pointer transition disabled:opacity-25 ${
+                          pickedExtra
+                            ? "bg-amber-400 text-slate-950 border-amber-500 shadow"
+                            : "bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-zinc-700"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRecordDrawModal(false)}
+                className="px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-200 text-xs font-black cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={
+                  recordDrawNumbers.length !== 6 ||
+                  (recordDrawGame === "loto42" && !recordDrawExtra)
+                }
+                onClick={handleSaveOfficialDrawManual}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-black shadow cursor-pointer"
+              >
+                حفظ النتيجة ومطابقة بطاقاتي فوراً ✅
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════
           THEATRICAL WIN CELEBRATION MODAL (إشعار الفوز المسرحي 🎉👑)
@@ -2180,12 +2493,11 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
 
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isScanningImage}
+            onClick={() => openRecordDrawModal(activeGame === "loto42" ? "loto42" : "loto29")}
             className="px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-black flex items-center gap-1.5 cursor-pointer"
           >
-            <Camera className="w-3.5 h-3.5" />
-            <span>مسح بطاقة 📸</span>
+            <PenLine className="w-3.5 h-3.5" />
+            <span>تسجيل نتيجة سحب يدوياً</span>
           </button>
 
           <button
