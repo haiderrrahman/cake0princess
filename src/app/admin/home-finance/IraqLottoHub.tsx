@@ -318,13 +318,25 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
       async (snap) => {
         if (snap.exists()) {
           const data = snap.data();
-          if (data.loto42Current?.selling) setLoto42Current(data.loto42Current);
+          if (data.loto42Current?.selling) {
+            setLoto42Current((prev) =>
+              (data.loto42Current.selling.drawNumber || 0) >= (prev?.selling?.drawNumber || 0)
+                ? data.loto42Current
+                : prev
+            );
+          }
           if (Array.isArray(data.loto42Draws) && data.loto42Draws.length > 0) {
             setLoto42Draws((prev) =>
               mergeDrawsDeduplicated(data.loto42Draws, prev, BASELINE_LOTO42_DRAWS)
             );
           }
-          if (data.loto29Current?.selling) setLoto29Current(data.loto29Current);
+          if (data.loto29Current?.selling) {
+            setLoto29Current((prev) =>
+              (data.loto29Current.selling.drawNumber || 0) >= (prev?.selling?.drawNumber || 0)
+                ? data.loto29Current
+                : prev
+            );
+          }
           if (Array.isArray(data.loto29Draws) && data.loto29Draws.length > 0) {
             setLoto29Draws((prev) =>
               mergeDrawsDeduplicated(data.loto29Draws, prev, BASELINE_LOTO29_DRAWS)

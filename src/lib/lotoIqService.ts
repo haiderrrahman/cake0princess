@@ -325,7 +325,7 @@ export const BASELINE_LOTO29_DRAWS: LotoDrawOfficial[] = [
 export const BASELINE_SPORTS_ROUNDS: SportsRound[] = VERIFIED_SPORTS_ROUNDS;
 
 export const BASELINE_SNAPSHOT: LiveLotoSnapshot = {
-  fetchedAt: 1795710408000,
+  fetchedAt: 1795726051000,
   source: "loto.iq-verified",
   loto42Current: VERIFIED_LOTO42_CURRENT,
   loto42Draws: BASELINE_LOTO42_DRAWS,
