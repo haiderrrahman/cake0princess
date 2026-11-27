@@ -80,8 +80,14 @@ function formatCountdown(targetMs?: number | null, nowMs = Date.now()): string {
   const hours = Math.floor((diffSec % 86400) / 3600);
   const mins = Math.floor((diffSec % 3600) / 60);
   const secs = diffSec % 60;
-  if (days > 0) return `${days} يوم • ${hours} س • ${mins} د`;
-  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  if (days > 0) {
+    const dayLabel = days === 1 ? "يوم واحد" : days === 2 ? "يومان" : `${days} أيام`;
+    return `باقي ${dayLabel} و ${hours} ساعة و ${mins} د`;
+  }
+  if (hours > 0) {
+    return `باقي ${hours} ساعة و ${mins} دقيقة و ${secs} ث`;
+  }
+  return `باقي ${mins} دقيقة و ${secs} ثانية`;
 }
 
 function getTodayIso(): string {
@@ -1609,7 +1615,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                   <Clock className="w-3.5 h-3.5" />
                   <span>الوقت المتبقي لإغلاق السحب:</span>
                 </div>
-                <div className="text-xl font-black text-white font-mono mt-0.5" dir="ltr">
+                <div className="text-base sm:text-lg font-black text-white mt-0.5" dir="rtl">
                   {formatCountdown(currentObj?.salesCloseAt || currentObj?.drawAt, nowMs)}
                 </div>
               </div>
@@ -2698,7 +2704,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                   </div>
                   <div className="text-[11px] font-black text-amber-200 mt-0.5 flex items-center gap-1.5 flex-wrap">
                     <span>يغلق خلال:</span>
-                    <span dir="ltr" className="font-mono bg-black/30 px-1.5 rounded">
+                    <span dir="rtl" className="bg-black/30 px-2 py-0.5 rounded-lg">
                       {formatCountdown(al.closesAtMs, nowMs)}
                     </span>
                     <span className="text-white/90">• {fmt(al.jackpot)} د.ع</span>
@@ -2819,8 +2825,8 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
 
                 {urg && (
                   <div
-                    dir="ltr"
-                    className={`text-[10px] font-mono font-black px-2 py-1 rounded-lg text-center ${
+                    dir="rtl"
+                    className={`text-[11px] font-black px-2.5 py-1.5 rounded-xl text-center leading-snug ${
                       isSelected
                         ? "bg-black/25 text-amber-200"
                         : "bg-amber-500/15 text-rose-700 dark:text-amber-300"
@@ -2938,7 +2944,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                       </div>
                       <div className="flex items-center justify-between text-[11px] mt-1.5 opacity-90 font-bold">
                         <span>الجائزة: {fmt(r.jackpot)} د.ع</span>
-                        <span dir="ltr">
+                        <span dir="rtl">
                           {r.status === "open"
                             ? `⏳ ${formatCountdown(r.closesAt, nowMs)}`
                             : `جولة #${r.number}`}
