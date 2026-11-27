@@ -764,3 +764,131 @@ export function evaluateUserTicket(
 
   return ticket;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LIVE FOOTBALL INTELLIGENCE (Standings, Team Strength & Live Match Scores)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface LiveTeamIntel {
+  name: string;
+  normalizedKey: string;
+  leagueCode: string;
+  leagueAr: string;
+  rank: number;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  points: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDiff: number;
+  ppg: number;
+  powerScore: number;
+  formText?: string;
+}
+
+export interface LiveFinishedScore {
+  leagueCode: string;
+  homeName: string;
+  awayName: string;
+  homeScore: number;
+  awayScore: number;
+  status: "played" | "live" | "scheduled";
+  dateIso: string;
+}
+
+export interface LiveSportsIntelSnapshot {
+  fetchedAt: number;
+  source: string;
+  teamsCount: number;
+  scoresCount: number;
+  teamsByKey: Record<string, LiveTeamIntel>;
+  recentScores: LiveFinishedScore[];
+}
+
+export function normalizeClubKey(raw: string): string {
+  return (raw || "")
+    .toLowerCase()
+    .replace(/\bfc\b|\bcf\b|\bafc\b|\bsc\b|\bac\b|\bcd\b|\bud\b|\brcd\b|\brc\b/g, " ")
+    .replace(/[^a-z0-9\u0600-\u06FF]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function teamNamesMatch(a: string, b: string): boolean {
+  const ka = normalizeClubKey(a);
+  const kb = normalizeClubKey(b);
+  if (!ka || !kb) return false;
+  if (ka === kb) return true;
+  if (ka.length >= 4 && kb.length >= 4 && (ka.includes(kb) || kb.includes(ka))) return true;
+  const tokA = ka.split(" ").filter((t) => t.length >= 4);
+  const tokB = kb.split(" ").filter((t) => t.length >= 4);
+  if (tokA.length > 0 && tokB.length > 0 && tokA.some((t) => tokB.includes(t))) {
+    return true;
+  }
+  return false;
+}
+
+export async function fetchLiveSportsIntel(): Promise<LiveSportsIntelSnapshot | null> {
+  try {
+    const res = await fetch(`/api/sports-intel?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.ok) return null;
+    return {
+      fetchedAt: data.fetchedAt || Date.now(),
+      source: data.source || "espn-live-football",
+      teamsCount: Number(data.teamsCount) || 0,
+      scoresCount: Number(data.scoresCount) || 0,
+      teamsByKey: data.teamsByKey || {},
+      recentScores: Array.isArray(data.recentScores) ? data.recentScores : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function applyLiveScoresToRounds(
+  rounds: SportsRound[],
+  recentScores: LiveFinishedScore[]
+): { rounds: SportsRound[]; updatedMatchesCount: number } {
+  if (!Array.isArray(recentScores) || recentScores.length === 0) {
+    return { rounds, updatedMatchesCount: 0 };
+  }
+
+  let updatedMatchesCount = 0;
+  const nextRounds = rounds.map((r) => {
+    let roundChanged = false;
+    const nextMatches = r.matches.map((m) => {
+      if (getMatchActualOutcome(m)) return m; // Already settled
+      const found = recentScores.find(
+        (s) =>
+          s.status === "played" &&
+          teamNamesMatch(m.home.nameEn || m.home.nameAr, s.homeName) &&
+          teamNamesMatch(m.away.nameEn || m.away.nameAr, s.awayName)
+      );
+      if (!found) return m;
+      roundChanged = true;
+      updatedMatchesCount++;
+      return {
+        ...m,
+        status: "played",
+        phase: "finished",
+        score: { home: found.homeScore, away: found.awayScore },
+        homeScore: found.homeScore,
+        awayScore: found.awayScore,
+      };
+    });
+
+    if (!roundChanged) return r;
+    const allResolved = nextMatches.every((m) => Boolean(getMatchActualOutcome(m)));
+    return {
+      ...r,
+      status: allResolved ? "settled" : r.status,
+      matches: nextMatches,
+    };
+  });
+
+  return { rounds: nextRounds, updatedMatchesCount };
+}

@@ -22,6 +22,7 @@ import {
   RecentWinnerItem,
   UserLotoTicket,
   UrgencyLevel,
+  LiveTeamIntel,
   SCRATCH_SPECS,
   LOTO_42_PRIZE_TIERS,
   LOTO_29_PRIZE_TIERS,
@@ -32,6 +33,8 @@ import {
   mergeDrawsDeduplicated,
   mergeSportsRoundsDeduplicated,
   fetchLiveLotoIqSnapshot,
+  fetchLiveSportsIntel,
+  applyLiveScoresToRounds,
   resolveLogoUrl,
   evaluateUserTicket,
   getMatchActualOutcome,
@@ -188,7 +191,13 @@ function speakArabicAnnouncement(text: string) {
   }
 }
 
-const LIVE_POLL_SECONDS = 30;
+const LIVE_POLL_SECONDS = 1800; // Auto-sync every 30 minutes (كل نصف ساعة)
+
+function formatMinSec(totalSec: number): string {
+  const m = Math.floor(Math.max(0, totalSec) / 60);
+  const s = Math.max(0, totalSec) % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
 export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) {
   const [activeGame, setActiveGame] = useState<IraqLotoGameId>("loto29");
@@ -199,7 +208,9 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     "active" | "finished" | "tickets"
   >("active");
 
-  // Live loto.iq State — initialized with complete verified snapshot for 0ms instant display
+  // Live loto.iq & Sports Intelligence State
+  const [liveTeamsIntel, setLiveTeamsIntel] = useState<Record<string, LiveTeamIntel>>({});
+  const [liveIntelTeamsCount, setLiveIntelTeamsCount] = useState<number>(0);
   const [loto42Current, setLoto42Current] = useState<LotoCurrentState | null>(
     BASELINE_SNAPSHOT.loto42Current
   );
@@ -468,72 +479,111 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     [persistHub, triggerTheatricalWin]
   );
 
-  // Moment-by-Moment Live Sync from https://loto.iq/ (every 30s + on tab focus + manual button!)
+  // Automatic Sync every 30 minutes + on manual button click:
+  // 1) Fetches live football standings, team power & finished match scores (/api/sports-intel)
+  // 2) Fetches loto.iq draws & rounds (/api/loto-iq) when accessible
   const triggerLiveSync = useCallback(
     async (silent = false) => {
       setIsSyncingLive(true);
       setNextPollSec(LIVE_POLL_SECONDS);
       try {
-        const live = await fetchLiveLotoIqSnapshot();
-        if (!live) {
-          setSyncSource("بيانات موثقة محفوظة");
-          if (!silent) {
-            toast.info("يتم عرض أحدث سحوبات وجولات موثقة من loto.iq.");
-          }
-          return;
+        const [live, sportsIntel] = await Promise.all([
+          fetchLiveLotoIqSnapshot(),
+          fetchLiveSportsIntel(),
+        ]);
+
+        let merged42 = loto42Draws;
+        let merged29 = loto29Draws;
+        let mergedSports = sportsRounds;
+        let updatedScoresCount = 0;
+        let hasLiveLoto = false;
+        let hasLiveSports = false;
+
+        if (live) {
+          hasLiveLoto = true;
+          merged42 = mergeDrawsDeduplicated(live.loto42Draws, loto42Draws, BASELINE_LOTO42_DRAWS);
+          merged29 = mergeDrawsDeduplicated(live.loto29Draws, loto29Draws, BASELINE_LOTO29_DRAWS);
+          mergedSports = mergeSportsRoundsDeduplicated(
+            live.sportsRounds,
+            sportsRounds,
+            BASELINE_SPORTS_ROUNDS
+          );
+
+          if (live.loto42Current?.selling) setLoto42Current(live.loto42Current);
+          setLoto42Draws(merged42);
+
+          if (live.loto29Current?.selling) setLoto29Current(live.loto29Current);
+          setLoto29Draws(merged29);
+
+          if (live.scratchCards.length > 0) setScratchCards(live.scratchCards);
+          if (live.recentWinners.length > 0) setRecentWinners(live.recentWinners);
         }
 
-        const merged42 = mergeDrawsDeduplicated(
-          live.loto42Draws,
-          loto42Draws,
-          BASELINE_LOTO42_DRAWS
-        );
-        const merged29 = mergeDrawsDeduplicated(
-          live.loto29Draws,
-          loto29Draws,
-          BASELINE_LOTO29_DRAWS
-        );
-        const mergedSports = mergeSportsRoundsDeduplicated(
-          live.sportsRounds,
-          sportsRounds,
-          BASELINE_SPORTS_ROUNDS
-        );
+        if (sportsIntel && (sportsIntel.teamsCount > 0 || sportsIntel.scoresCount > 0)) {
+          hasLiveSports = true;
+          setLiveTeamsIntel(sportsIntel.teamsByKey);
+          setLiveIntelTeamsCount(sportsIntel.teamsCount);
 
-        if (live.loto42Current?.selling) setLoto42Current(live.loto42Current);
-        setLoto42Draws(merged42);
+          // Auto-fill finished European league scores into Sports Loto rounds!
+          const scoreApply = applyLiveScoresToRounds(mergedSports, sportsIntel.recentScores);
+          mergedSports = scoreApply.rounds;
+          updatedScoresCount = scoreApply.updatedMatchesCount;
+        }
 
-        if (live.loto29Current?.selling) setLoto29Current(live.loto29Current);
-        setLoto29Draws(merged29);
+        if (hasLiveLoto || updatedScoresCount > 0) {
+          setSportsRounds(mergedSports);
+        }
 
-        setSportsRounds(mergedSports);
-        if (live.scratchCards.length > 0) setScratchCards(live.scratchCards);
-        if (live.recentWinners.length > 0) setRecentWinners(live.recentWinners);
+        if (hasLiveLoto || hasLiveSports) {
+          const syncTs = Math.max(live?.fetchedAt || 0, sportsIntel?.fetchedAt || 0, Date.now());
+          setLastSyncedAt(syncTs);
+          setSyncSource(
+            hasLiveLoto && hasLiveSports
+              ? `تحديث حي كامل (loto.iq + ${sportsIntel?.teamsCount || 0} فريق)`
+              : hasLiveLoto
+              ? "مباشر من loto.iq"
+              : `تحديث حي للفرق والنتائج (${sportsIntel?.teamsCount || 0} فريق)`
+          );
 
-        setLastSyncedAt(live.fetchedAt);
-        setSyncSource("مباشر لحظة بلحظة من loto.iq");
+          // Auto-match every saved ticket against newly arrived official or live match results!
+          setTickets((prevTickets) => {
+            if (prevTickets.length === 0) return prevTickets;
+            return runTicketsAudit(prevTickets, merged42, merged29, mergedSports, false);
+          });
 
-        // Auto-match every saved ticket against newly arrived official results!
-        setTickets((prevTickets) => {
-          if (prevTickets.length === 0) return prevTickets;
-          return runTicketsAudit(prevTickets, merged42, merged29, mergedSports, false);
-        });
+          if (hasLiveLoto || updatedScoresCount > 0) {
+            await persistHub({
+              lastSyncedAt: syncTs,
+              ...(hasLiveLoto
+                ? {
+                    loto42Current: live?.loto42Current || loto42Current,
+                    loto42Draws: merged42.slice(0, 60),
+                    loto29Current: live?.loto29Current || loto29Current,
+                    loto29Draws: merged29.slice(0, 80),
+                    scratchCards:
+                      live && live.scratchCards.length > 0 ? live.scratchCards : scratchCards,
+                    recentWinners:
+                      live && live.recentWinners.length > 0
+                        ? live.recentWinners.slice(0, 15)
+                        : recentWinners,
+                  }
+                : {}),
+              sportsRounds: mergedSports,
+            });
+          }
 
-        await persistHub({
-          lastSyncedAt: live.fetchedAt,
-          loto42Current: live.loto42Current || loto42Current,
-          loto42Draws: merged42.slice(0, 60),
-          loto29Current: live.loto29Current || loto29Current,
-          loto29Draws: merged29.slice(0, 80),
-          sportsRounds: mergedSports,
-          scratchCards: live.scratchCards.length > 0 ? live.scratchCards : scratchCards,
-          recentWinners:
-            live.recentWinners.length > 0
-              ? live.recentWinners.slice(0, 15)
-              : recentWinners,
-        });
-
-        if (!silent) {
-          toast.success("تم التحديث اللحظي ومطابقة السحوبات مع بطاقاتك بنجاح! ✅");
+          if (!silent) {
+            const extraMsg =
+              updatedScoresCount > 0 ? ` وتم تحديث ${updatedScoresCount} نتيجة مباراة حية` : "";
+            toast.success(
+              `تم تحديث بيانات ${sportsIntel?.teamsCount || 0} فريق وترشيحات الذكاء${extraMsg} ✅`
+            );
+          }
+        } else {
+          setSyncSource("بيانات موثقة محفوظة");
+          if (!silent) {
+            toast.info("يتم عرض أحدث السحوبات والبيانات الموثقة المحفوظة.");
+          }
         }
       } finally {
         setIsSyncingLive(false);
@@ -724,8 +774,8 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     if (aiSportsOverrides[currentSportsRound.id]) {
       return aiSportsOverrides[currentSportsRound.id];
     }
-    return predictSportsRoundQuant(currentSportsRound, sportsRounds);
-  }, [currentSportsRound, sportsRounds, aiSportsOverrides]);
+    return predictSportsRoundQuant(currentSportsRound, sportsRounds, liveTeamsIntel);
+  }, [currentSportsRound, sportsRounds, aiSportsOverrides, liveTeamsIntel]);
 
   useEffect(() => {
     if (!currentSportsRound || !currentSportsAnalysis) return;
@@ -778,7 +828,7 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
     if (!currentSportsRound || !currentSportsAnalysis) return;
     setIsRunningGeminiSports(true);
     try {
-      const baseQuant = predictSportsRoundQuant(currentSportsRound, sportsRounds);
+      const baseQuant = predictSportsRoundQuant(currentSportsRound, sportsRounds, liveTeamsIntel);
       const aiRes = await generateGeminiSportsRoundPrediction(
         currentSportsRound,
         baseQuant
@@ -1030,6 +1080,11 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
 
     setLastSyncedAt(Date.now());
     setSyncSource("تحديث يدوي موثّق");
+    setAiLotoOverride((prev) => {
+      const next = { ...prev };
+      delete next[recordDrawGame];
+      return next;
+    });
     await persistHub(patch);
 
     setShowRecordDrawModal(false);
@@ -2464,16 +2519,18 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
               </span>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 font-bold mt-0.5">
-              يتحدث لحظة بلحظة كل {LIVE_POLL_SECONDS} ثانية (التحديث القادم خلال{" "}
-              <span className="font-mono text-indigo-600 dark:text-indigo-400">{nextPollSec}ث</span>)
+              يتحدث تلقائياً كل 30 دقيقة (التحديث القادم خلال{" "}
+              <span className="font-mono text-indigo-600 dark:text-indigo-400" dir="ltr">
+                {formatMinSec(nextPollSec)}
+              </span>
+              )
               {lastSyncedAt > 0 && (
                 <span>
                   {" "}
-                  • آخر سحب:{" "}
+                  • آخر تحديث:{" "}
                   {new Date(lastSyncedAt).toLocaleTimeString("ar-IQ", {
                     hour: "2-digit",
                     minute: "2-digit",
-                    second: "2-digit",
                   })}
                 </span>
               )}
@@ -2802,8 +2859,13 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                         ⚽ {currentSportsRound.nameAr} — الجائزة {fmt(currentSportsRound.jackpot)} د.ع
                       </h3>
                       <p className="text-xs text-gray-500 font-bold mt-0.5">
-                        الاختيار الملوّن بالأزرق هو توقعك المختار (والنجمة ⭐ هي توصية الذكاء). اضغط لتعديل أي مباراة.
+                        الترشيح مبني على الترتيب الحي وقوة الفرق والنتائج السابقة — الاختيار الأزرق هو توقعك والنجمة ⭐ هي توصية الذكاء.
                       </p>
+                      {liveIntelTeamsCount > 0 && (
+                        <span className="inline-flex items-center gap-1 mt-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-black">
+                          📡 متصل حياً بإحصائيات {liveIntelTeamsCount} فريق ونتائج الدوريات
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -2915,6 +2977,20 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
                                     </span>
                                   )}
                                 </div>
+                                {pred && (pred.homeInfoAr || pred.awayInfoAr) && (
+                                  <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px] font-bold">
+                                    {pred.homeInfoAr && (
+                                      <span className="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-200 border border-indigo-200/60 dark:border-indigo-800/50">
+                                        🏠 {m.home.nameAr}: {pred.homeInfoAr}
+                                      </span>
+                                    )}
+                                    {pred.awayInfoAr && (
+                                      <span className="px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200/60 dark:border-amber-800/50">
+                                        ✈️ {m.away.nameAr}: {pred.awayInfoAr}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
 

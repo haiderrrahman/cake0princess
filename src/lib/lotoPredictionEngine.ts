@@ -5,8 +5,10 @@ import {
   SportsMatch,
   SportsPickChoice,
   ScratchCardLive,
+  LiveTeamIntel,
   SCRATCH_SPECS,
   getMatchActualOutcome,
+  normalizeClubKey,
 } from "./lotoIqService";
 
 const GEMINI_MODELS = [
@@ -706,6 +708,11 @@ export interface MatchPredictionItem {
   confidence: "banker" | "solid" | "tight";
   confidenceLabelAr: string;
   reasonAr: string;
+  homeRating?: number;
+  awayRating?: number;
+  homeInfoAr?: string;
+  awayInfoAr?: string;
+  dataSourceAr?: string;
 }
 
 export interface SportsRoundAnalysis {
@@ -715,6 +722,7 @@ export interface SportsRoundAnalysis {
   historicalAwayRate: number;
   bankerCount: number;
   tightCount: number;
+  liveTeamsMatched?: number;
   matches: MatchPredictionItem[];
   aiSummaryAr?: string;
 }
@@ -787,11 +795,105 @@ function lookupTeamStrength(nameAr: string, nameEn: string, isBig?: boolean): nu
   return isBig ? 83 : 73;
 }
 
+function lookupLiveTeamIntel(
+  nameAr: string,
+  nameEn: string,
+  liveTeamsByKey?: Record<string, LiveTeamIntel>
+): LiveTeamIntel | null {
+  if (!liveTeamsByKey) return null;
+  const kEn = normalizeClubKey(nameEn);
+  if (kEn && liveTeamsByKey[kEn]) return liveTeamsByKey[kEn];
+
+  const entries = Object.values(liveTeamsByKey);
+  if (kEn.length >= 4) {
+    const partial = entries.find(
+      (t) =>
+        t.normalizedKey.includes(kEn) ||
+        kEn.includes(t.normalizedKey) ||
+        (kEn.split(" ")[0].length >= 5 && t.normalizedKey.includes(kEn.split(" ")[0]))
+    );
+    if (partial) return partial;
+  }
+  const kAr = normalizeClubKey(nameAr);
+  if (kAr && liveTeamsByKey[kAr]) return liveTeamsByKey[kAr];
+  return null;
+}
+
+interface PastRoundTeamRecord {
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  gf: number;
+  ga: number;
+  recentResultsAr: string[];
+}
+
+function buildPastRoundTeamRecords(allRounds: SportsRound[]): Map<string, PastRoundTeamRecord> {
+  const map = new Map<string, PastRoundTeamRecord>();
+  const ensure = (key: string): PastRoundTeamRecord => {
+    let rec = map.get(key);
+    if (!rec) {
+      rec = { played: 0, wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, recentResultsAr: [] };
+      map.set(key, rec);
+    }
+    return rec;
+  };
+
+  for (const r of allRounds) {
+    for (const m of r.matches || []) {
+      const actual = getMatchActualOutcome(m);
+      if (!actual) continue;
+      const hs = m.score?.home ?? 0;
+      const as = m.score?.away ?? 0;
+
+      const hKeys = [normalizeClubKey(m.home.nameAr), normalizeClubKey(m.home.nameEn)].filter(Boolean);
+      const aKeys = [normalizeClubKey(m.away.nameAr), normalizeClubKey(m.away.nameEn)].filter(Boolean);
+
+      for (const hk of hKeys) {
+        const rec = ensure(hk);
+        rec.played++;
+        rec.gf += hs;
+        rec.ga += as;
+        if (actual === "1") {
+          rec.wins++;
+          rec.recentResultsAr.push(`فوز ${hs}-${as}`);
+        } else if (actual === "X") {
+          rec.draws++;
+          rec.recentResultsAr.push(`تعادل ${hs}-${as}`);
+        } else {
+          rec.losses++;
+          rec.recentResultsAr.push(`خسارة ${hs}-${as}`);
+        }
+      }
+
+      for (const ak of aKeys) {
+        const rec = ensure(ak);
+        rec.played++;
+        rec.gf += as;
+        rec.ga += hs;
+        if (actual === "2") {
+          rec.wins++;
+          rec.recentResultsAr.push(`فوز ${as}-${hs}`);
+        } else if (actual === "X") {
+          rec.draws++;
+          rec.recentResultsAr.push(`تعادل ${as}-${hs}`);
+        } else {
+          rec.losses++;
+          rec.recentResultsAr.push(`خسارة ${as}-${hs}`);
+        }
+      }
+    }
+  }
+  return map;
+}
+
 export function predictSportsRoundQuant(
   round: SportsRound,
-  allRounds: SportsRound[]
+  allRounds: SportsRound[],
+  liveTeamsByKey?: Record<string, LiveTeamIntel>
 ): SportsRoundAnalysis {
-  // 1. Compute real historical 1 / X / 2 rates from finished matches on loto.iq
+  // 1. Compute real historical 1 / X / 2 rates AND per-team form from finished matches
   let hist1 = 0;
   let histX = 0;
   let hist2 = 0;
@@ -808,71 +910,142 @@ export function predictSportsRoundQuant(
   const historicalDrawRate = histTotal > 0 ? Math.round((histX / histTotal) * 100) : 30;
   const historicalAwayRate = histTotal > 0 ? 100 - historicalHomeRate - historicalDrawRate : 25;
 
+  const pastRecords = buildPastRoundTeamRecords(allRounds);
+  let liveTeamsMatched = 0;
+
   const predictions: MatchPredictionItem[] = round.matches.map((m: SportsMatch) => {
     const compName = `${m.competition?.nameAr || ""} ${m.competition?.nameEn || ""}`.toLowerCase();
     const isIraqiLeague =
       compName.includes("العراق") || compName.includes("iraq") || compName.includes("نجوم");
 
-    const homeRating = lookupTeamStrength(m.home.nameAr, m.home.nameEn, m.home.big);
-    const awayRating = lookupTeamStrength(m.away.nameAr, m.away.nameEn, m.away.big);
+    const homeLive = lookupLiveTeamIntel(m.home.nameAr, m.home.nameEn, liveTeamsByKey);
+    const awayLive = lookupLiveTeamIntel(m.away.nameAr, m.away.nameEn, liveTeamsByKey);
+    if (homeLive) liveTeamsMatched++;
+    if (awayLive) liveTeamsMatched++;
 
-    // Home field advantage (+4.5 Elo pts in Iraq Stars League, +3.8 in Europe)
-    const homeAdv = isIraqiLeague ? 4.5 : 3.8;
+    const homePast =
+      pastRecords.get(normalizeClubKey(m.home.nameAr)) ||
+      pastRecords.get(normalizeClubKey(m.home.nameEn));
+    const awayPast =
+      pastRecords.get(normalizeClubKey(m.away.nameAr)) ||
+      pastRecords.get(normalizeClubKey(m.away.nameEn));
+
+    const calcPastAdj = (rec?: PastRoundTeamRecord): number => {
+      if (!rec || rec.played === 0) return 0;
+      const gd = rec.gf - rec.ga;
+      const raw = (rec.wins * 2.4 - rec.losses * 2.2 + gd * 0.65) / Math.max(1, Math.sqrt(rec.played));
+      return Math.max(-6, Math.min(6, raw));
+    };
+
+    const homeBase = homeLive
+      ? homeLive.powerScore
+      : lookupTeamStrength(m.home.nameAr, m.home.nameEn, m.home.big);
+    const awayBase = awayLive
+      ? awayLive.powerScore
+      : lookupTeamStrength(m.away.nameAr, m.away.nameEn, m.away.big);
+
+    const homeRating = Math.round(
+      Math.max(58, Math.min(97, homeBase + (homeLive ? calcPastAdj(homePast) * 0.35 : calcPastAdj(homePast))))
+    );
+    const awayRating = Math.round(
+      Math.max(58, Math.min(97, awayBase + (awayLive ? calcPastAdj(awayPast) * 0.35 : calcPastAdj(awayPast))))
+    );
+
+    const formatTeamInfo = (
+      live: LiveTeamIntel | null,
+      past: PastRoundTeamRecord | undefined,
+      rating: number
+    ): string => {
+      if (live) {
+        const gdSign = live.goalDiff > 0 ? `+${live.goalDiff}` : `${live.goalDiff}`;
+        return `المركز #${live.rank} • ${live.points} ن (${live.wins}ف/${live.draws}ت/${live.losses}خ) • فارق ${gdSign} • قوة ${rating}`;
+      }
+      if (past && past.played > 0) {
+        return `قوة ${rating} • سجل الجولات: ${past.recentResultsAr.slice(-2).join("، ")}`;
+      }
+      return `تقييم القوة الفنية: ${rating}`;
+    };
+
+    const homeInfoAr = formatTeamInfo(homeLive, homePast, homeRating);
+    const awayInfoAr = formatTeamInfo(awayLive, awayPast, awayRating);
+    const dataSourceAr =
+      homeLive || awayLive
+        ? "ترتيب الدوري الحي + النتائج السابقة"
+        : homePast || awayPast
+        ? "نتائج الجولات السابقة + تصنيف الأندية"
+        : "تصنيف القوة الفنية وعامل الأرض";
+
+    // Home field advantage (+4.2 Elo pts in Iraq Stars League, +3.6 in Europe)
+    const homeAdv = isIraqiLeague ? 4.2 : 3.6;
     const diff = homeRating + homeAdv - awayRating;
 
-    // Base draw probability peaks when teams are evenly matched (diff near 0)
-    const baseDraw = isIraqiLeague ? 0.31 : 0.265;
-    const pDrawRaw = baseDraw * Math.exp(-Math.pow(diff / 13.5, 2));
+    // Draw probability peaks when teams are closely matched (diff near 0)
+    const baseDraw = isIraqiLeague ? 0.33 : 0.28;
+    const pDrawRaw = baseDraw * Math.exp(-Math.pow(diff / 13.0, 2));
     const winShare = 1 - pDrawRaw;
-    const logisticHome = 1 / (1 + Math.exp(-diff / 6.8));
+    const logisticHome = 1 / (1 + Math.exp(-diff / 6.6));
 
     let p1 = Math.round(winShare * logisticHome * 100);
     let p2 = Math.round(winShare * (1 - logisticHome) * 100);
     let pX = Math.max(12, 100 - p1 - p2);
-    // Normalize to 100
     const sumP = p1 + pX + p2;
     if (sumP !== 100) p1 += 100 - sumP;
 
+    // Ultra-tight dead-even clash calibration: boost draw slightly so probabilities match recommendation cleanly
+    const isDeadEven = Math.abs(diff) <= 1.2 && !m.home.big && !m.away.big;
+    if (isDeadEven && pX < Math.max(p1, p2) && Math.abs(p1 - p2) <= 4) {
+      pX = Math.max(p1, p2) + 2;
+      const rem = 100 - pX;
+      p1 = Math.round(rem * (p1 / Math.max(1, p1 + p2)));
+      p2 = rem - p1;
+    }
+
+    // ALWAYS recommend the outcome with the highest probability (never contradict percentages!)
     let recommendedPick: SportsPickChoice = "1";
     let hedgePick: SportsPickChoice | null = null;
     let confidence: MatchPredictionItem["confidence"] = "solid";
     let confidenceLabelAr = "ترجيح جيد ⚡";
     let reasonAr = "";
 
-    // Decision logic calibrated for 10-match Toto pools:
-    // Draws occur ~2.5-3 times per 10-match coupon; pick 'X' specifically on ultra-tight mid-table clashes!
-    if (Math.abs(diff) <= 1.8 && pX >= 29 && !m.home.big && !m.away.big) {
+    const rankSuffix =
+      homeLive && awayLive
+        ? ` (${m.home.nameAr} #${homeLive.rank} بـ${homeLive.points} نقطة مقابل ${m.away.nameAr} #${awayLive.rank} بـ${awayLive.points} نقطة).`
+        : homePast || awayPast
+        ? ` اعتماداً على قوة الفريقين (${homeRating} مقابل ${awayRating}) ونتائج الجولات السابقة.`
+        : ` (قوة ${m.home.nameAr} ${homeRating} + عامل الأرض مقابل ${awayRating} لـ ${m.away.nameAr}).`;
+
+    if (pX >= p1 && pX >= p2) {
       recommendedPick = "X";
-      hedgePick = diff >= 0 ? "1" : "2";
+      hedgePick = p1 >= p2 ? "1" : "2";
       confidence = "tight";
-      confidenceLabelAr = "مباراة متكافئة (مرشحة للتعادل) ⚖️";
-      reasonAr = `تقارب شديد في المستوى بين ${m.home.nameAr} و${m.away.nameAr} يرفع احتمالية التعادل التكتيكي (${pX}%).`;
+      confidenceLabelAr = "مباراة متكافئة (ترجيح تعادل) ⚖️";
+      reasonAr = `تقارب شديد في المستوى يرفع احتمالية التعادل إلى ${pX}%${rankSuffix}`;
     } else if (p1 >= p2) {
       recommendedPick = "1";
-      if (p1 >= 56) {
+      if (p1 >= 55) {
         confidence = "banker";
         confidenceLabelAr = "ركيزة قوية (Banker) 🔒";
-        reasonAr = `تفوق فني وعامل الأرض لصالح ${m.home.nameAr} بنسبة فوز متوقعة ${p1}%.`;
-      } else if (p1 - pX <= 12) {
+        reasonAr = `تفوق واضح وعامل الأرض لصالح ${m.home.nameAr} بنسبة فوز ${p1}%${rankSuffix}`;
+      } else if (p1 - Math.max(pX, p2) <= 11) {
         confidence = "tight";
-        hedgePick = "X";
-        confidenceLabelAr = "أفضلية نسبية (تقبل تغطية 1X) ⚖️";
-        reasonAr = `أفضلية الأرض تمنح ${m.home.nameAr} المبادرة (${p1}%) مع بقاء التعادل وارداً (${pX}%).`;
+        hedgePick = pX >= p2 ? "X" : "2";
+        confidenceLabelAr = "أفضلية نسبية (تغطية 1X) ⚖️";
+        reasonAr = `أفضلية الملعب تميل لـ ${m.home.nameAr} (${p1}%) مع بقاء التعادل وارداً (${pX}%)${rankSuffix}`;
       } else {
-        reasonAr = `أفضلية الملعب والاستقرار الفني ترجح كفة ${m.home.nameAr} (${p1}%).`;
+        reasonAr = `الأداء الفني وعامل الأرض يرجحان فوز ${m.home.nameAr} (${p1}%)${rankSuffix}`;
       }
     } else {
       recommendedPick = "2";
       if (p2 >= 55) {
         confidence = "banker";
         confidenceLabelAr = "ركيزة قوية للضيف 🔒";
-        reasonAr = `فارق الجودة واضح لصالح الضيف ${m.away.nameAr} بنسبة فوز ${p2}%.`;
+        reasonAr = `فارق القوة والترتيب واضح لصالح الضيف ${m.away.nameAr} بنسبة ${p2}%${rankSuffix}`;
       } else {
-        confidence = p2 - pX <= 11 ? "tight" : "solid";
-        hedgePick = "X";
+        confidence = p2 - Math.max(pX, p1) <= 11 ? "tight" : "solid";
+        hedgePick = pX >= p1 ? "X" : "1";
         confidenceLabelAr =
           confidence === "tight" ? "تميل للضيف (تغطية X2) ⚖️" : "ترجيح للضيف ⚡";
-        reasonAr = `تفوق نسبي لـ ${m.away.nameAr} خارج ملعبه (${p2}%) مقابل ${p1}% للمضيف.`;
+        reasonAr = `تفوق فني لـ ${m.away.nameAr} خارج أرضه (${p2}%) مقابل ${p1}% للمضيف${rankSuffix}`;
       }
     }
 
@@ -886,6 +1059,11 @@ export function predictSportsRoundQuant(
       confidence,
       confidenceLabelAr,
       reasonAr,
+      homeRating,
+      awayRating,
+      homeInfoAr,
+      awayInfoAr,
+      dataSourceAr,
     };
   });
 
@@ -896,6 +1074,7 @@ export function predictSportsRoundQuant(
     historicalAwayRate,
     bankerCount: predictions.filter((p) => p.confidence === "banker").length,
     tightCount: predictions.filter((p) => p.confidence === "tight").length,
+    liveTeamsMatched,
     matches: predictions,
   };
 }
@@ -904,37 +1083,44 @@ export async function generateGeminiSportsRoundPrediction(
   round: SportsRound,
   quantAnalysis: SportsRoundAnalysis
 ): Promise<SportsRoundAnalysis | null> {
-  const matchPayload = round.matches.map((m) => ({
-    pos: m.position,
-    league: m.competition?.nameAr || m.competition?.nameEn,
-    home: m.home.nameAr,
-    homeEn: m.home.nameEn,
-    away: m.away.nameAr,
-    awayEn: m.away.nameEn,
-    venue: m.venue,
-  }));
+  const matchPayload = round.matches.map((m) => {
+    const q = quantAnalysis.matches.find((x) => x.position === m.position);
+    return {
+      pos: m.position,
+      league: m.competition?.nameAr || m.competition?.nameEn,
+      home: m.home.nameAr,
+      homeEn: m.home.nameEn,
+      homeStats: q?.homeInfoAr || "",
+      away: m.away.nameAr,
+      awayEn: m.away.nameEn,
+      awayStats: q?.awayInfoAr || "",
+      quantProb: q ? { "1": q.probHome, X: q.probDraw, "2": q.probAway } : undefined,
+      venue: m.venue,
+    };
+  });
 
   const prompt = `أنت محلل كرة قدم محترف وخبير إحصائي في مسابقة "اللوتو الرياضي العراقي" (توقع نتائج 10 مباريات: "1" فوز المضيف، "X" تعادل، "2" فوز الضيف).
 اسم الجولة الحالية: ${round.nameAr} (${round.nameEn}).
-التوزيع التاريخي للجولات المنتهية في الموقع: فوز المضيف ${quantAnalysis.historicalHomeRate}%، التعادل ${quantAnalysis.historicalDrawRate}%، فوز الضيف ${quantAnalysis.historicalAwayRate}%.
-قائمة المباريات الـ 10:
+التوزيع التاريخي للجولات المنتهية: فوز المضيف ${quantAnalysis.historicalHomeRate}%، التعادل ${quantAnalysis.historicalDrawRate}%، فوز الضيف ${quantAnalysis.historicalAwayRate}%.
+قائمة المباريات الـ 10 مع بيانات الترتيب الحي، النقاط، فارق الأهداف، وقوة كل فريق:
 ${JSON.stringify(matchPayload, null, 2)}
 
-قم بتحليل كل مباراة بدقة عالية وفق القوة الفنية الحقيقية للفريقين، أفضلية الأرض والجمهور، وميل بعض المواجهات المتكافئة للتعادل (عادة تشهد كل جولة من 10 مباريات حوالي 2 إلى 3 تعادلات في المواجهات المتقاربة جداً).
-
-أرجع JSON فقط بهذا الشكل:
+المطلوب:
+- اعتمد على الترتيب الحي والنقاط وفارق الأهداف وقوة الفريقين ونتائجهم السابقة وأفضلية الأرض.
+- يجب أن يكون "recommendedPick" دائماً مطابقاً لأعلى نسبة احتمال بين probHome و probDraw و probAway (لا تناقض بين النسب والترشيح).
+- أرجع JSON فقط بهذا الشكل:
 {
-  "aiSummaryAr": "ملخص تحليلي ذكي للجولة في سطرين يوضح أقوى الركائز والمباريات الحرجة",
+  "aiSummaryAr": "ملخص تحليلي ذكي للجولة في سطرين يوضح أقوى الركائز والمباريات الحرجة استناداً إلى الترتيب والنتائج",
   "matches": [
     {
       "position": 1,
       "recommendedPick": "1",
       "hedgePick": "X",
-      "probHome": 52,
-      "probDraw": 28,
-      "probAway": 20,
-      "confidence": "solid",
-      "reasonAr": "سبب تكتيكي مختصر باللغة العربية"
+      "probHome": 58,
+      "probDraw": 24,
+      "probAway": 18,
+      "confidence": "banker",
+      "reasonAr": "سبب تكتيكي مختصر باللغة العربية يذكر قوة الفريقين والترتيب"
     }
   ]
 }`;
@@ -969,10 +1155,17 @@ ${JSON.stringify(matchPayload, null, 2)}
     const pD = Math.max(5, Math.min(80, Number(ai.probDraw) || base.probDraw));
     const pA = Math.max(5, 100 - pH - pD);
 
+    // Ensure recommended pick always agrees with highest probability
+    const maxProbPick: SportsPickChoice =
+      pH >= pD && pH >= pA ? "1" : pA >= pH && pA >= pD ? "2" : "X";
+    const consistentPick: SportsPickChoice =
+      validPick === maxProbPick ? validPick : maxProbPick;
+
     return {
+      ...base,
       position: base.position,
-      recommendedPick: validPick,
-      hedgePick: validHedge,
+      recommendedPick: consistentPick,
+      hedgePick: validHedge && validHedge !== consistentPick ? validHedge : base.hedgePick,
       probHome: pH,
       probDraw: pD,
       probAway: pA,
