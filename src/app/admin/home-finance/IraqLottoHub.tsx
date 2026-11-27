@@ -2202,10 +2202,78 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
           )}
         </div>
 
+        {/* Step-by-Step How to Play + Honest Credibility Warning */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-3">
+            <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <span>كيف تلعب وتربح في «{spec.nameAr}» خطوة بخطوة؟</span>
+            </h3>
+            <div className="space-y-2">
+              {spec.howToWinAr.map((step, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-2.5 p-2.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40"
+                >
+                  <span className="w-6 h-6 rounded-xl bg-amber-500 text-white text-xs font-black flex items-center justify-center shrink-0">
+                    {i + 1}
+                  </span>
+                  <span className="text-xs font-bold text-gray-800 dark:text-gray-200 leading-relaxed">
+                    {step}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border-2 border-amber-300/80 dark:border-amber-800/70 space-y-3">
+            <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-amber-500" />
+              <span>حكم المصداقية والانتباه لبطاقات الكشط</span>
+            </h3>
+            <div className="p-3 rounded-2xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60 text-xs font-bold text-rose-900 dark:text-rose-200 leading-relaxed">
+              ⚠️ <strong>بصراحة تامة:</strong> بطاقات الكشط الإلكترونية تعتمد على <strong>حظ فوري مشفر من خادم الموقع (RNG)</strong> وقت الشراء، ولا توجد فيها مهارة أو تنبؤ بالأرقام مثل اللوتو الرياضي.
+            </div>
+            <ul className="space-y-1.5 text-xs font-bold text-gray-700 dark:text-gray-300">
+              <li className="flex items-start gap-1.5">
+                <span className="text-emerald-600">✅</span>
+                <span>
+                  <strong>قاعدة التوقف الفوري:</strong> إذا وصل «المتبقي من الجائزة الكبرى» إلى <strong>0</strong> فتوقف عن شرائها نهائياً حتى تنزل طبعة جديدة.
+                </span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-indigo-600">📊</span>
+                <span>
+                  <strong>أيهما أفضل؟</strong> «جيب الكاس جيبه (1,000 د.ع)» تحتوي على <strong>2.6 ضعف</strong> عدد بطاقات الجوائز المتوسطة (10,000 د.ع فأعلى) مقارنةً بـ «طابق 3 (500 د.ع)».
+                </span>
+              </li>
+              {(() => {
+                const spent = gameTickets.reduce((s, t) => s + (t.cost || 0), 0);
+                const won = gameTickets.reduce((s, t) => s + (t.prizeWon || 0), 0);
+                const net = won - spent;
+                if (gameTickets.length === 0) return null;
+                return (
+                  <li
+                    className={`p-2.5 rounded-xl border mt-1 ${
+                      net < -5000
+                        ? "bg-rose-50 dark:bg-rose-950/40 border-rose-300 text-rose-800 dark:text-rose-200"
+                        : "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-800 dark:text-emerald-200"
+                    }`}
+                  >
+                    💰 <strong>سجلك في {spec.nameAr}:</strong> صرفت {fmt(spent)} د.ع • ربحت {fmt(won)} د.ع (الصافي:{" "}
+                    <span dir="ltr">{net >= 0 ? `+${fmt(net)}` : fmt(net)} د.ع</span>)
+                    {net < -5000 && " — تنبيه: يُنصح بالتوقف وعدم مطاردة الخسارة!"}
+                  </li>
+                );
+              })()}
+            </ul>
+          </div>
+        </div>
+
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-4">
           <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-500" />
-            <span>تحليل فرص الفوز ومقارنة الجدوى مع {otherReport.nameAr}</span>
+            <BarChart2 className="w-5 h-5 text-emerald-500" />
+            <span>تحليل فرص الفوز وجدول الجوائز الكامل ({spec.nameAr} مقابل {otherReport.nameAr})</span>
           </h3>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
@@ -2224,6 +2292,36 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
             <div className="p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30">
               <span className="text-[11px] text-amber-700 dark:text-amber-300 font-bold block">مضاعف الجائزة الكبرى</span>
               <span className="text-sm font-black text-amber-700 dark:text-amber-300">{fmt(report.maxMultiplier)} ضعف</span>
+            </div>
+          </div>
+
+          {/* Full Official Prize Tiers Breakdown */}
+          <div className="space-y-2">
+            <div className="text-xs font-black text-gray-700 dark:text-gray-300">
+              🏆 جدول جميع فئات جوائز «{spec.nameAr}» وعدد البطاقات الرابحة في الطبعة:
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {spec.tiers.map((t, idx) => (
+                <div
+                  key={idx}
+                  className={`p-2.5 rounded-2xl border flex flex-col justify-between ${
+                    idx === 0
+                      ? "bg-amber-50 dark:bg-amber-950/40 border-amber-400"
+                      : t.amount > spec.price
+                      ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/70 dark:border-emerald-800/50"
+                      : "bg-gray-50 dark:bg-zinc-800/50 border-gray-200/70 dark:border-zinc-700"
+                  }`}
+                >
+                  <span className="text-xs font-black text-gray-900 dark:text-white">
+                    {fmt(t.amount)} د.ع
+                  </span>
+                  <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5">
+                    {idx === 0
+                      ? `المتبقي حالياً: ${report.topRemaining} بطاقة`
+                      : `${fmt(t.winnersCount)} بطاقة رابحة`}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -3110,6 +3208,125 @@ export default function IraqLottoHub({ onAddExpenseLinked }: IraqLottoHubProps) 
       {activeGame === "loto29" && renderNumberGame("loto29")}
       {activeGame === "sc500" && renderScratchGame("SC500")}
       {activeGame === "sc1k" && renderScratchGame("SC1K")}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          TRANSPARENT CREDIBILITY & SMART ADVICE GUIDE FOR ALL 5 GAMES
+      ═══════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-zinc-800 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-sm sm:text-base font-black text-gray-900 dark:text-white flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              <span>دليل المصداقية والجدوى الذكية: أي مسابقة تستحق وأيها تحذير؟</span>
+            </h4>
+            <p className="text-xs font-bold text-gray-500 mt-0.5">
+              تقييم صريح ومبني على الرياضيات والواقع العملي لمساعدتك على اختيار المسابقة الأعلى مصداقية وفرصة.
+            </p>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[11px] font-black">
+            مرتّبة من الأعلى مصداقية وفرصة
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[
+            {
+              id: "sports" as const,
+              title: "1. ⚽ اللوتو الرياضي (5,000 د.ع)",
+              badge: "أعلى مصداقية ومهارة ★★★★★",
+              badgeCls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+              borderCls: "border-emerald-300 dark:border-emerald-800",
+              credibility:
+                "النتائج تعتمد على مباريات كرة قدم حقيقية تُبث مباشرة أمام العالم — يستحيل التلاعب بنتيجتها.",
+              advice:
+                "الأفضل على الإطلاق للعب الذكي: تحليل ترتيب الدوري وقوة الفرق يمنحك أفضلية حقيقية، والفوز يبدأ من 7 مباريات صحيحة من أصل 10.",
+            },
+            {
+              id: "loto29" as const,
+              title: "2. 🔴 لوتو 29 (1,500 د.ع)",
+              badge: "سحب علني • الأفضل بالأرقام ★★★★☆",
+              badgeCls: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300",
+              borderCls: "border-indigo-200 dark:border-indigo-800",
+              credibility:
+                "سحب رسمي علني منتظم (الإثنين والخميس 8:50 م) بأرشيف شفاف وموثق لكل سحبة.",
+              advice:
+                "احتمال الجائزة الكبرى (1 من 475,020) أسهل بـ 11 ضعفاً من لوتو 42، وتكرار ربح 3 أو 4 أرقام أعلى بكثير وبسعر 1,500 د.ع فقط.",
+            },
+            {
+              id: "loto42" as const,
+              title: "3. 🟣 لوتو 42 (2,000 د.ع)",
+              badge: "سحب علني • احتمال صعب ★★★☆☆",
+              badgeCls: "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300",
+              borderCls: "border-purple-200 dark:border-purple-800",
+              credibility:
+                "سحب رسمي علني منتظم (الأربعاء والسبت 8:50 م) مع رقم إضافي للجائزة الثانية.",
+              advice:
+                "الجائزة الكبرى ضخمة (+101 مليون) لكن احتمال الـ 6 أرقام صعب جداً (1 من 5.2 مليون). يُنصح بالمشاركة ببطاقة واحدة فقط عندما يتجاوز الجاكبوت 100 مليون.",
+            },
+            {
+              id: "sc1k" as const,
+              title: "4. 🏆 جيب الكاس جيبه (1,000 د.ع)",
+              badge: "حظ إلكتروني فوري • حذر ★★☆☆☆",
+              badgeCls: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300",
+              borderCls: "border-amber-200 dark:border-amber-800",
+              credibility:
+                "تعمل بنظام عشوائي مشفر على الخادم (RNG) لحظة الكشط — لا يمكن التنبؤ بها رياضياً.",
+              advice:
+                "أفضل من «طابق 3» في الجوائز المتوسطة (2.6× أكثر بطاقات بقيمة 10,000 د.ع فأعلى). راقب عداد المتبقي من الجائزة الكبرى وتوقف فوراً إذا أصبح 0.",
+            },
+            {
+              id: "sc500" as const,
+              title: "5. 🎫 طابق 3 (500 د.ع)",
+              badge: "حظ إلكتروني • ترفيهي فقط ★☆☆☆☆",
+              badgeCls: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300",
+              borderCls: "border-rose-200 dark:border-rose-800",
+              credibility:
+                "كشط فوري مشفر على الخادم (حظ بحت). أغلب البطاقات الرابحة تُعيد فقط سعر البطاقة (500 د.ع).",
+              advice:
+                "مناسبة للتجربة البسيطة فقط بسبب سعرها المنخفض (500 د.ع). لا تكرر الشراء لتعويض خسارة، والأذكى توجيه ميزانيتك للوتو الرياضي أو لوتو 29.",
+            },
+          ].map((item) => (
+            <div
+              key={item.id}
+              className={`p-3.5 rounded-2xl bg-gray-50/80 dark:bg-zinc-800/50 border ${item.borderCls} flex flex-col justify-between gap-2`}
+            >
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setActiveGame(item.id)}
+                    className="text-xs font-black text-gray-900 dark:text-white hover:text-indigo-600 cursor-pointer text-right"
+                  >
+                    {item.title}
+                  </button>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${item.badgeCls}`}>
+                    {item.badge}
+                  </span>
+                </div>
+                <p className="text-[11px] font-bold text-gray-700 dark:text-gray-300 leading-relaxed">
+                  <strong>المصداقية:</strong> {item.credibility}
+                </p>
+                <p className="text-[11px] font-bold text-gray-600 dark:text-gray-400 leading-relaxed">
+                  <strong>نصيحة الذكاء:</strong> {item.advice}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveGame(item.id)}
+                className="self-start text-[11px] font-black text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+              >
+                الانتقال إلى المسابقة ←
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white text-xs font-bold flex flex-wrap items-center justify-between gap-2">
+          <span>
+            💡 <strong>القاعدة الذهبية للانتباه المالي:</strong> خصّص ميزانية ترفيهية ثابتة لا تؤثر على مصاريف البيت، وسجّل بطاقاتك في هذا النظام ليحسب لك تلقائياً صافي الربح والخسارة ويربطها بمصاريفك بدقة.
+          </span>
+        </div>
+      </div>
 
       {/* Recent Official Winners Strip */}
       {recentWinners.length > 0 && (
